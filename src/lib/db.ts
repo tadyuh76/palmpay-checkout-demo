@@ -15,7 +15,7 @@ function resolveDbPath() {
   }
 
   if (process.env.VERCEL) {
-    return path.join("/tmp", "palmpay-demo.sqlite");
+    return path.join("/tmp", `palmpay-demo-${process.pid}.sqlite`);
   }
 
   return path.join(process.cwd(), "data", "palmpay-demo.sqlite");
@@ -31,7 +31,10 @@ export const db =
   });
 
 if (!globalForDb.palmpayDemoDb) {
-  db.pragma("journal_mode = WAL");
+  db.pragma("busy_timeout = 5000");
+  if (!process.env.VERCEL) {
+    db.pragma("journal_mode = WAL");
+  }
   db.pragma("foreign_keys = ON");
   globalForDb.palmpayDemoDb = db;
 }
