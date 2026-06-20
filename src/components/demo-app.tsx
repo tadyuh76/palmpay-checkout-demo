@@ -446,6 +446,19 @@ function LoadingScreen() {
   );
 }
 
+function authErrorMessage(
+  message: string | undefined,
+  mode: "signin" | "signup",
+) {
+  if (message?.trim()) {
+    return message;
+  }
+
+  return mode === "signin"
+    ? "Sign in failed. Check the password, create the account first, or make sure the local server is running."
+    : "Account could not be created. Make sure the local server is running, then try again.";
+}
+
 function AuthPanel({ onSignedIn }: { onSignedIn: () => void }) {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [name, setName] = useState("");
@@ -461,27 +474,33 @@ function AuthPanel({ onSignedIn }: { onSignedIn: () => void }) {
     setError("");
     setLoading(true);
 
-    const result =
-      mode === "signup"
-        ? await authClient.signUp.email({
-            name: name.trim() || email.split("@")[0],
-            email,
-            password,
-          })
-        : await authClient.signIn.email({
-            email,
-            password,
-            rememberMe: true,
-          });
+    try {
+      const result =
+        mode === "signup"
+          ? await authClient.signUp.email({
+              name: name.trim() || email.split("@")[0],
+              email,
+              password,
+            })
+          : await authClient.signIn.email({
+              email,
+              password,
+              rememberMe: true,
+            });
 
-    setLoading(false);
+      if (result.error) {
+        setError(authErrorMessage(result.error.message, mode));
+        return;
+      }
 
-    if (result.error) {
-      setError(result.error.message ?? "Could not continue");
-      return;
+      onSignedIn();
+    } catch {
+      setError(
+        "Could not reach the auth server. Make sure the local server is running, then try again.",
+      );
+    } finally {
+      setLoading(false);
     }
-
-    onSignedIn();
   };
 
   return (
