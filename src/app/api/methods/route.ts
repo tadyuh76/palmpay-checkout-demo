@@ -84,12 +84,12 @@ export async function DELETE(request: Request) {
 function defaultLabel(type: PaymentMethodType) {
   switch (type) {
     case "qr":
-      return "Wallet QR";
+      return "QR + PIN";
     case "nfc":
       return "NFC card";
     case "face":
-      return "Face ID";
+      return "Face recognition at POS";
     case "palm":
-      return "Palm vein";
+      return "PalmPay palm vein";
   }
 }

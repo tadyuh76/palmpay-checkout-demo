@@ -1,447 +1,934 @@
 "use client";
 
 import {
+  AlertTriangle,
+  ArrowRight,
   BadgeCheck,
+  Camera,
   Check,
-  CircleCheck,
+  CheckCircle2,
+  ChevronDown,
+  ClipboardCheck,
   CreditCard,
+  Download,
   Hand,
+  IdCard,
   Loader2,
-  LogOut,
-  Minus,
   Nfc,
-  Plus,
   QrCode,
   ReceiptText,
+  RotateCcw,
   ScanFace,
   ScanLine,
-  Search,
   ShieldCheck,
-  ShoppingBag,
-  Trash2,
+  Smartphone,
+  TimerReset,
+  UserPlus,
   WalletCards,
-  X,
 } from "lucide-react";
-import { QRCodeSVG } from "qrcode.react";
 import Image from "next/image";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { catalog, catalogCategories, formatVnd, getProduct } from "@/lib/catalog";
-import { authClient } from "@/lib/auth-client";
-import type {
-  CartLine,
-  Order,
-  PaymentMethod,
-  PaymentMethodType,
-  Product,
-  ProductCategory,
-} from "@/lib/types";
+import { QRCodeSVG } from "qrcode.react";
+import { useEffect, useState } from "react";
+import surveyConfig from "@/data/survey-questions.json";
 
-type Cart = Record<string, number>;
-type FaceApi = typeof import("@vladmandic/face-api");
-type Stage = "catalog" | "checkout" | "receipt";
-type EnrollmentMode = PaymentMethodType | null;
+type StudyGroup = "QR_PIN" | "NFC_CARD" | "FACE_POS" | "PALM_VEIN";
+type StepKey =
+  | "admin"
+  | "consent"
+  | "pre"
+  | "assignment"
+  | "setup"
+  | "product"
+  | "checkout"
+  | "payment"
+  | "success"
+  | "post"
+  | "ranking"
+  | "debrief";
 
-type NfcReader = {
-  scan: () => Promise<void>;
-  addEventListener: (
-    type: "reading" | "readingerror",
-    listener: (event: { serialNumber?: string }) => void,
-    options?: { once?: boolean },
-  ) => void;
+type SurveyQuestion = {
+  item_id: string;
+  construct: string;
+  text: string;
+  scale_min?: number;
+  scale_max?: number;
+  type?: "select";
+  options?: string[];
+  reverse_scored: boolean;
+  required: boolean;
 };
 
-type NfcWindow = Window & {
-  NDEFReader?: new () => NfcReader;
+type EventLog = {
+  event_name: string;
+  timestamp: string;
+  participant_id: string;
+  transaction_id?: string;
+  screen_name: StepKey;
+  metadata: Record<string, unknown>;
 };
 
-const methodCopy: Record<
-  PaymentMethodType,
-  { label: string; description: string; icon: typeof QrCode }
+type TransactionRecord = {
+  transaction_id: string;
+  participant_id: string;
+  method: StudyGroup;
+  product: string;
+  amount: number;
+  balance_before: number;
+  balance_after: number;
+  setup_duration: number | null;
+  checkout_duration: number | null;
+  number_of_retries: number;
+  number_of_errors: number;
+  assistance_required: boolean;
+  payment_status: "paid" | "technical_failure";
+};
+
+type ExperimentSession = {
+  participant_id: string;
+  protocol_version: string;
+  assigned_group: StudyGroup | null;
+  created_at: string;
+  consent_at: string | null;
+  pre_survey_completed_at: string | null;
+  post_survey_completed_at: string | null;
+  session_status: "created" | "active" | "completed" | "technical_failure";
+  current_step: StepKey;
+  qr_pin?: string;
+  biometric_consent_at?: string | null;
+  template_ref?: string | null;
+  template_deleted_at?: string | null;
+  setup_started_at?: string | null;
+  setup_completed_at?: string | null;
+  checkout_started_at?: string | null;
+  checkout_completed_at?: string | null;
+  transaction?: TransactionRecord | null;
+  pre_answers: Record<string, string | number>;
+  post_answers: Record<string, string | number>;
+  ranking: Partial<Record<StudyGroup, number>>;
+  open_feedback: {
+    liked_most: string;
+    biggest_concern: string;
+    use_context: string;
+  };
+  events: EventLog[];
+};
+
+type AssignmentHistoryItem = {
+  participant_id: string;
+  assigned_group: StudyGroup;
+  assigned_at: string;
+  override_reason?: string;
+};
+
+const protocolVersion = "PALMPAY-POS-2026.06";
+const startingBalance = 100000;
+const product = {
+  id: "water-cup",
+  name: "Ly nước",
+  price: 35000,
+  image: "/menu/vietnamese-phin-iced-coffee.jpg",
+};
+
+const storageKeys = {
+  currentSession: "palmpay.pos.currentSession",
+  completedSessions: "palmpay.pos.completedSessions",
+  participantCounter: "palmpay.pos.participantCounter",
+  assignmentQueue: "palmpay.pos.assignmentQueue",
+  assignmentHistory: "palmpay.pos.assignmentHistory",
+  interviewContacts: "palmpay.pos.interviewContacts",
+};
+
+const groupOrder: StudyGroup[] = ["QR_PIN", "NFC_CARD", "FACE_POS", "PALM_VEIN"];
+
+const groupCopy: Record<
+  StudyGroup,
+  {
+    label: string;
+    shortLabel: string;
+    device: string;
+    neutralDescription: string;
+    instruction: string;
+    icon: typeof QrCode;
+    color: string;
+  }
 > = {
-  qr: {
-    label: "QR code",
-    description: "Scan merchant code",
+  QR_PIN: {
+    label: "Mã QR + mã PIN",
+    shortLabel: "QR + PIN",
+    device: "Điện thoại thử nghiệm",
+    neutralDescription:
+      "Người tham gia dùng ứng dụng DemoBank trên điện thoại thử nghiệm để quét mã QR của cửa hàng, nhập số tiền và xác nhận bằng mã PIN thử nghiệm.",
+    instruction:
+      "Mở DemoBank, quét mã QR của POS, nhập đúng số tiền và xác nhận bằng mã PIN thử nghiệm.",
     icon: QrCode,
+    color: "bg-sky-50 text-sky-900 border-sky-200",
   },
-  nfc: {
-    label: "NFC card",
-    description: "Tap tokenized card",
+  NFC_CARD: {
+    label: "Thẻ không tiếp xúc NFC",
+    shortLabel: "NFC card",
+    device: "Thẻ NFC + đầu đọc",
+    neutralDescription:
+      "Người tham gia dùng thẻ NFC thử nghiệm đã liên kết với phiên để chạm vào đầu đọc tại điểm bán cho giao dịch giá trị nhỏ.",
+    instruction:
+      "Chạm thẻ NFC thử nghiệm vào đầu đọc khi POS yêu cầu. Giao dịch 35.000 đồng không yêu cầu PIN.",
     icon: Nfc,
+    color: "bg-emerald-50 text-emerald-900 border-emerald-200",
   },
-  face: {
-    label: "Face recognition",
-    description: "Camera match",
+  FACE_POS: {
+    label: "Nhận diện khuôn mặt tại điểm bán",
+    shortLabel: "Face POS",
+    device: "Camera tại POS",
+    neutralDescription:
+      "Người tham gia nhìn vào camera tại điểm bán để hệ thống đối chiếu với mẫu khuôn mặt đã đăng ký trong phiên thử nghiệm.",
+    instruction:
+      "Nhìn vào camera tại POS cho đến khi hệ thống xác nhận đúng một khuôn mặt và đối chiếu thành công.",
     icon: ScanFace,
+    color: "bg-violet-50 text-violet-900 border-violet-200",
   },
-  palm: {
-    label: "Palm veins",
-    description: "Scanner match",
+  PALM_VEIN: {
+    label: "Nhận diện tĩnh mạch lòng bàn tay PalmPay",
+    shortLabel: "PalmPay",
+    device: "Máy quét PalmPay",
+    neutralDescription:
+      "Người tham gia đưa lòng bàn tay qua máy quét PalmPay để hệ thống đối chiếu mẫu tĩnh mạch lòng bàn tay đã đăng ký.",
+    instruction:
+      "Đưa lòng bàn tay qua máy quét theo khoảng cách hướng dẫn cho đến khi mẫu được đối chiếu thành công.",
     icon: Hand,
+    color: "bg-amber-50 text-amber-900 border-amber-200",
   },
 };
+
+const stepLabels: Record<StepKey, string> = {
+  admin: "Quản trị",
+  consent: "Đồng ý",
+  pre: "Khảo sát trước",
+  assignment: "Phân nhóm",
+  setup: "Thiết lập",
+  product: "Sản phẩm",
+  checkout: "Xác nhận",
+  payment: "Thanh toán",
+  success: "Thành công",
+  post: "Khảo sát sau",
+  ranking: "Xếp hạng",
+  debrief: "Giải thích",
+};
+
+const flowSteps: StepKey[] = [
+  "consent",
+  "pre",
+  "assignment",
+  "setup",
+  "product",
+  "checkout",
+  "payment",
+  "success",
+  "post",
+  "ranking",
+  "debrief",
+];
+
+const preQuestions = surveyConfig.pre as SurveyQuestion[];
+const postQuestions = surveyConfig.post as SurveyQuestion[];
 
 function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
-const appSurfaceClass = "bg-[#f6efe5] text-stone-950";
-const inputFocusClass = "focus:border-amber-900 focus:ring-2 focus:ring-amber-100";
-const primaryButtonClass =
-  "bg-[#5a341f] text-white shadow-sm shadow-stone-950/10 hover:bg-[#432615] disabled:bg-stone-300 disabled:shadow-none";
-const primaryIconClass = "bg-[#5a341f] text-amber-50";
-const primarySelectedClass = "border-amber-900 bg-amber-50/80";
-const primarySoftClass = "border-amber-200 bg-amber-50 text-amber-900";
-const categoryOptions: Array<ProductCategory | "All"> = [
-  "All",
-  ...catalogCategories,
-];
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function formatVnd(value: number) {
+  return new Intl.NumberFormat("vi-VN", {
+    style: "currency",
+    currency: "VND",
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function formatSeconds(start?: string | null, end?: string | null) {
+  if (!start || !end) return null;
+  return Math.max(0, Math.round((Date.parse(end) - Date.parse(start)) / 1000));
+}
+
+function readJson<T>(key: string, fallback: T): T {
+  if (typeof window === "undefined") return fallback;
+  const raw = window.localStorage.getItem(key);
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeJson<T>(key: string, value: T) {
+  window.localStorage.setItem(key, JSON.stringify(value));
+}
+
+function shuffle<T>(items: T[]) {
+  const next = [...items];
+  for (let index = next.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
+  }
+  return next;
+}
+
+function makeAssignmentBlocks(blockCount = 15) {
+  return Array.from({ length: blockCount }).flatMap(() => shuffle(groupOrder));
+}
+
+function getNextAssignment(participantId: string) {
+  let queue = readJson<StudyGroup[]>(storageKeys.assignmentQueue, []);
+  if (queue.length === 0) {
+    queue = makeAssignmentBlocks();
+  }
+
+  const assigned = queue[0];
+  writeJson(storageKeys.assignmentQueue, queue.slice(1));
+
+  const history = readJson<AssignmentHistoryItem[]>(
+    storageKeys.assignmentHistory,
+    [],
+  );
+  writeJson(storageKeys.assignmentHistory, [
+    ...history,
+    {
+      participant_id: participantId,
+      assigned_group: assigned,
+      assigned_at: nowIso(),
+    },
+  ]);
+
+  return assigned;
+}
+
+function makeParticipantId() {
+  const current = readJson<number>(storageKeys.participantCounter, 0) + 1;
+  writeJson(storageKeys.participantCounter, current);
+  return `P${String(current).padStart(4, "0")}`;
+}
+
+function makeSession(): ExperimentSession {
+  return {
+    participant_id: makeParticipantId(),
+    protocol_version: protocolVersion,
+    assigned_group: null,
+    created_at: nowIso(),
+    consent_at: null,
+    pre_survey_completed_at: null,
+    post_survey_completed_at: null,
+    session_status: "created",
+    current_step: "consent",
+    biometric_consent_at: null,
+    template_ref: null,
+    template_deleted_at: null,
+    setup_started_at: null,
+    setup_completed_at: null,
+    checkout_started_at: null,
+    checkout_completed_at: null,
+    transaction: null,
+    pre_answers: {},
+    post_answers: {},
+    ranking: {},
+    open_feedback: {
+      liked_most: "",
+      biggest_concern: "",
+      use_context: "",
+    },
+    events: [],
+  };
+}
+
+function downloadCsv(filename: string, rows: Array<Record<string, unknown>>) {
+  const headers = Array.from(
+    rows.reduce((set, row) => {
+      Object.keys(row).forEach((key) => set.add(key));
+      return set;
+    }, new Set<string>()),
+  );
+  const escape = (value: unknown) => {
+    if (value === null || value === undefined) return "";
+    const text =
+      typeof value === "object" ? JSON.stringify(value) : String(value);
+    return `"${text.replaceAll('"', '""')}"`;
+  };
+  const csv = [
+    headers.join(","),
+    ...rows.map((row) => headers.map((header) => escape(row[header])).join(",")),
+  ].join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function buildWideRow(session: ExperimentSession) {
+  const group = session.assigned_group;
+  return {
+    participant_id: session.participant_id,
+    assigned_group: group,
+    protocol_version: session.protocol_version,
+    consent_at: session.consent_at,
+    pre_survey_completed_at: session.pre_survey_completed_at,
+    post_survey_completed_at: session.post_survey_completed_at,
+    session_status: session.session_status,
+    setup_duration: session.transaction?.setup_duration ?? null,
+    checkout_duration: session.transaction?.checkout_duration ?? null,
+    number_of_retries: session.transaction?.number_of_retries ?? 0,
+    number_of_errors: session.transaction?.number_of_errors ?? 0,
+    assistance_required: session.transaction?.assistance_required ?? false,
+    payment_status: session.transaction?.payment_status ?? null,
+    template_deleted_at: session.template_deleted_at ?? null,
+    ...Object.fromEntries(
+      Object.entries(session.pre_answers).map(([key, value]) => [`pre_${key}`, value]),
+    ),
+    ...Object.fromEntries(
+      Object.entries(session.post_answers).map(([key, value]) => [
+        `post_${key}`,
+        value,
+      ]),
+    ),
+    ...Object.fromEntries(
+      groupOrder.map((item) => [`rank_${item}`, session.ranking[item] ?? ""]),
+    ),
+  };
+}
+
+function allStoredSessions(current?: ExperimentSession | null) {
+  const completed = readJson<ExperimentSession[]>(
+    storageKeys.completedSessions,
+    [],
+  );
+  return current ? [...completed, current] : completed;
+}
 
 export function DemoApp() {
-  const {
-    data: session,
-    isPending,
-    refetch,
-  } = authClient.useSession();
-  const [cart, setCart] = useState<Cart>({});
-  const [methods, setMethods] = useState<PaymentMethod[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [selectedMethodId, setSelectedMethodId] = useState<string>("");
-  const [enrollmentMode, setEnrollmentMode] = useState<EnrollmentMode>(null);
-  const [stage, setStage] = useState<Stage>("catalog");
-  const [catalogQuery, setCatalogQuery] = useState("");
-  const [selectedCategory, setSelectedCategory] =
-    useState<ProductCategory | "All">("All");
-  const [activePayment, setActivePayment] = useState<PaymentMethod | null>(null);
-  const [receipt, setReceipt] = useState<Order | null>(null);
-  const [loadingData, setLoadingData] = useState(false);
-  const [error, setError] = useState("");
-
-  const user = session?.user;
-
-  const cartLines = useMemo(
-    () =>
-      Object.entries(cart)
-        .map(([productId, quantity]) => ({ productId, quantity }))
-        .filter((line) => line.quantity > 0 && getProduct(line.productId)),
-    [cart],
-  );
-
-  const totalCents = useMemo(
-    () =>
-      cartLines.reduce((sum, line) => {
-        const product = getProduct(line.productId);
-        return sum + (product?.priceCents ?? 0) * line.quantity;
-      }, 0),
-    [cartLines],
-  );
-
-  const selectedMethod =
-    methods.find((method) => method.id === selectedMethodId) ?? methods[0];
-
-  const loadAccountData = useCallback(async () => {
-    if (!user) {
-      setMethods([]);
-      setOrders([]);
-      return;
-    }
-
-    setLoadingData(true);
-    setError("");
-
-    try {
-      const [methodsResponse, ordersResponse] = await Promise.all([
-        fetch("/api/methods"),
-        fetch("/api/orders"),
-      ]);
-
-      if (!methodsResponse.ok || !ordersResponse.ok) {
-        throw new Error("Could not load account data");
-      }
-
-      const methodsData = (await methodsResponse.json()) as {
-        methods: PaymentMethod[];
-      };
-      const ordersData = (await ordersResponse.json()) as { orders: Order[] };
-
-      setMethods(methodsData.methods);
-      setOrders(ordersData.orders);
-    } catch (loadError) {
-      setError(
-        loadError instanceof Error
-          ? loadError.message
-          : "Could not load account data",
-      );
-    } finally {
-      setLoadingData(false);
-    }
-  }, [user]);
+  const [hydrated, setHydrated] = useState(false);
+  const [session, setSession] = useState<ExperimentSession | null>(null);
 
   useEffect(() => {
-    const timeout = window.setTimeout(() => void loadAccountData(), 0);
-    return () => window.clearTimeout(timeout);
-  }, [loadAccountData]);
+    window.queueMicrotask(() => {
+      setSession(readJson<ExperimentSession | null>(storageKeys.currentSession, null));
+      setHydrated(true);
+    });
+  }, []);
 
-  const addToCart = (productId: string) => {
-    setCart((current) => ({
+  useEffect(() => {
+    if (!hydrated) return;
+    if (session) {
+      writeJson(storageKeys.currentSession, session);
+    } else {
+      window.localStorage.removeItem(storageKeys.currentSession);
+    }
+  }, [hydrated, session]);
+
+  const updateSession = (
+    updater: (current: ExperimentSession) => ExperimentSession,
+  ) => {
+    setSession((current) => (current ? updater(current) : current));
+  };
+
+  const logEvent = (
+    eventName: string,
+    screenName: StepKey,
+    metadata: Record<string, unknown> = {},
+  ) => {
+    updateSession((current) => ({
       ...current,
-      [productId]: Math.min((current[productId] ?? 0) + 1, 20),
+      events: [
+        ...current.events,
+        {
+          event_name: eventName,
+          timestamp: nowIso(),
+          participant_id: current.participant_id,
+          transaction_id: current.transaction?.transaction_id,
+          screen_name: screenName,
+          metadata,
+        },
+      ],
     }));
   };
 
-  const removeFromCart = (productId: string) => {
-    setCart((current) => {
-      const next = { ...current };
-      const quantity = (next[productId] ?? 0) - 1;
-      if (quantity > 0) {
-        next[productId] = quantity;
-      } else {
-        delete next[productId];
-      }
-      return next;
+  const setStep = (step: StepKey, metadata: Record<string, unknown> = {}) => {
+    updateSession((current) => ({
+      ...current,
+      current_step: step,
+      session_status: current.session_status === "created" ? "active" : current.session_status,
+      events: [
+        ...current.events,
+        {
+          event_name: `${step}_started`,
+          timestamp: nowIso(),
+          participant_id: current.participant_id,
+          transaction_id: current.transaction?.transaction_id,
+          screen_name: step,
+          metadata,
+        },
+      ],
+    }));
+  };
+
+  const startNewSession = () => {
+    const next = makeSession();
+    setSession({
+      ...next,
+      events: [
+        {
+          event_name: "session_created",
+          timestamp: next.created_at,
+          participant_id: next.participant_id,
+          screen_name: "admin",
+          metadata: { protocol_version: next.protocol_version },
+        },
+      ],
     });
   };
 
-  const enrollMethod = async (
-    type: PaymentMethodType,
-    metadata: Record<string, unknown> = {},
-  ) => {
-    setError("");
-    const response = await fetch("/api/methods", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        type,
-        label: methodCopy[type].label,
-        metadata,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error("Could not add method");
-    }
-
-    const data = (await response.json()) as { method: PaymentMethod };
-    setMethods((current) => {
-      const withoutSameType = current.filter((item) => item.type !== type);
-      return [...withoutSameType, data.method];
-    });
-    setSelectedMethodId(data.method.id);
-    setEnrollmentMode(null);
+  const completeConsent = () => {
+    updateSession((current) => ({
+      ...current,
+      consent_at: nowIso(),
+      current_step: "pre",
+      session_status: "active",
+      events: [
+        ...current.events,
+        {
+          event_name: "consent_completed",
+          timestamp: nowIso(),
+          participant_id: current.participant_id,
+          screen_name: "consent",
+          metadata: {},
+        },
+        {
+          event_name: "pre_started",
+          timestamp: nowIso(),
+          participant_id: current.participant_id,
+          screen_name: "pre",
+          metadata: {},
+        },
+      ],
+    }));
   };
 
-  const deleteMethod = async (methodId: string) => {
-    const response = await fetch(`/api/methods?id=${methodId}`, {
-      method: "DELETE",
+  const completePreSurvey = () => {
+    updateSession((current) => {
+      const assignedGroup = current.assigned_group ?? getNextAssignment(current.participant_id);
+      const timestamp = nowIso();
+      return {
+        ...current,
+        assigned_group: assignedGroup,
+        pre_survey_completed_at: timestamp,
+        current_step: "assignment",
+        events: [
+          ...current.events,
+          {
+            event_name: "pre_survey_completed",
+            timestamp,
+            participant_id: current.participant_id,
+            screen_name: "pre",
+            metadata: { items: Object.keys(current.pre_answers).length },
+          },
+          {
+            event_name: "random_group_assigned",
+            timestamp,
+            participant_id: current.participant_id,
+            screen_name: "assignment",
+            metadata: { assigned_group: assignedGroup, block_randomized: true },
+          },
+        ],
+      };
     });
+  };
 
-    if (!response.ok) {
-      setError("Could not remove method");
-      return;
-    }
+  const startSetup = () => {
+    updateSession((current) => ({
+      ...current,
+      current_step: "setup",
+      setup_started_at: current.setup_started_at ?? nowIso(),
+      events: [
+        ...current.events,
+        {
+          event_name: "setup_started",
+          timestamp: nowIso(),
+          participant_id: current.participant_id,
+          screen_name: "setup",
+          metadata: { assigned_group: current.assigned_group },
+        },
+      ],
+    }));
+  };
 
-    setMethods((current) => current.filter((method) => method.id !== methodId));
-    if (selectedMethodId === methodId) {
-      setSelectedMethodId("");
-    }
+  const finishSetup = (metadata: Record<string, unknown> = {}) => {
+    updateSession((current) => ({
+      ...current,
+      current_step: "product",
+      setup_completed_at: nowIso(),
+      template_ref:
+        current.assigned_group === "FACE_POS" || current.assigned_group === "PALM_VEIN"
+          ? `tpl_${crypto.randomUUID().slice(0, 8)}`
+          : current.template_ref,
+      events: [
+        ...current.events,
+        {
+          event_name: "setup_completed",
+          timestamp: nowIso(),
+          participant_id: current.participant_id,
+          screen_name: "setup",
+          metadata,
+        },
+      ],
+    }));
   };
 
   const startCheckout = () => {
-    if (!cartLines.length) {
-      return;
-    }
-
-    if (!methods.length) {
-      setEnrollmentMode("palm");
-      return;
-    }
-
-    setStage("checkout");
+    updateSession((current) => ({
+      ...current,
+      current_step: "payment",
+      checkout_started_at: nowIso(),
+      transaction: {
+        transaction_id: `TX-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
+        participant_id: current.participant_id,
+        method: current.assigned_group ?? "QR_PIN",
+        product: product.name,
+        amount: product.price,
+        balance_before: startingBalance,
+        balance_after: startingBalance - product.price,
+        setup_duration: formatSeconds(
+          current.setup_started_at,
+          current.setup_completed_at,
+        ),
+        checkout_duration: null,
+        number_of_retries: 0,
+        number_of_errors: 0,
+        assistance_required: false,
+        payment_status: "paid",
+      },
+      events: [
+        ...current.events,
+        {
+          event_name: "checkout_started",
+          timestamp: nowIso(),
+          participant_id: current.participant_id,
+          screen_name: "checkout",
+          metadata: { amount: product.price },
+        },
+      ],
+    }));
   };
 
-  const startPayment = () => {
-    if (!selectedMethod || !cartLines.length) {
-      return;
-    }
-
-    setActivePayment(selectedMethod);
+  const recordRetry = (errorCode: string) => {
+    updateSession((current) => ({
+      ...current,
+      transaction: current.transaction
+        ? {
+            ...current.transaction,
+            number_of_retries: current.transaction.number_of_retries + 1,
+            number_of_errors: current.transaction.number_of_errors + 1,
+          }
+        : current.transaction,
+      events: [
+        ...current.events,
+        {
+          event_name: `${current.assigned_group?.toLowerCase()}_error`,
+          timestamp: nowIso(),
+          participant_id: current.participant_id,
+          transaction_id: current.transaction?.transaction_id,
+          screen_name: "payment",
+          metadata: { error_code: errorCode },
+        },
+      ],
+    }));
   };
 
-  const completePayment = async (
-    method: PaymentMethod,
-    deviceTrace: Record<string, unknown>,
-  ) => {
-    const response = await fetch("/api/orders", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        items: cartLines,
-        paymentMethodId: method.id,
-        paymentMethodType: method.type,
-        deviceTrace,
-      }),
+  const completePayment = (metadata: Record<string, unknown> = {}) => {
+    updateSession((current) => {
+      const timestamp = nowIso();
+      return {
+        ...current,
+        current_step: "success",
+        checkout_completed_at: timestamp,
+        transaction: current.transaction
+          ? {
+              ...current.transaction,
+              checkout_duration: formatSeconds(current.checkout_started_at, timestamp),
+              payment_status: "paid",
+            }
+          : current.transaction,
+        events: [
+          ...current.events,
+          {
+            event_name: "payment_completed",
+            timestamp,
+            participant_id: current.participant_id,
+            transaction_id: current.transaction?.transaction_id,
+            screen_name: "payment",
+            metadata,
+          },
+        ],
+      };
     });
-
-    if (!response.ok) {
-      const payload = (await response.json().catch(() => null)) as
-        | { error?: string }
-        | null;
-      throw new Error(payload?.error ?? "Payment was not saved");
-    }
-
-    const data = (await response.json()) as { order: Order };
-    setReceipt(data.order);
-    setOrders((current) => [data.order, ...current].slice(0, 8));
-    setCart({});
-    setActivePayment(null);
-    setStage("receipt");
-    await loadAccountData();
   };
 
-  if (isPending) {
+  const markTechnicalFailure = () => {
+    updateSession((current) => {
+      const timestamp = nowIso();
+      return {
+        ...current,
+        current_step: "post",
+        session_status: "technical_failure",
+        checkout_completed_at: timestamp,
+        transaction: current.transaction
+          ? {
+              ...current.transaction,
+              checkout_duration: formatSeconds(current.checkout_started_at, timestamp),
+              payment_status: "technical_failure",
+              assistance_required: true,
+            }
+          : current.transaction,
+        events: [
+          ...current.events,
+          {
+            event_name: "technical_failure_recorded",
+            timestamp,
+            participant_id: current.participant_id,
+            transaction_id: current.transaction?.transaction_id,
+            screen_name: "payment",
+            metadata: { assigned_group: current.assigned_group },
+          },
+          {
+            event_name: "post_survey_started",
+            timestamp,
+            participant_id: current.participant_id,
+            transaction_id: current.transaction?.transaction_id,
+            screen_name: "post",
+            metadata: { opened_after: "technical_failure" },
+          },
+        ],
+      };
+    });
+  };
+
+  const completePostSurvey = () => {
+    updateSession((current) => ({
+      ...current,
+      current_step: "ranking",
+      post_survey_completed_at: nowIso(),
+      events: [
+        ...current.events,
+        {
+          event_name: "post_survey_completed",
+          timestamp: nowIso(),
+          participant_id: current.participant_id,
+          transaction_id: current.transaction?.transaction_id,
+          screen_name: "post",
+          metadata: { items: Object.keys(current.post_answers).length },
+        },
+      ],
+    }));
+  };
+
+  const finishExperiment = () => {
+    updateSession((current) => {
+      const timestamp = nowIso();
+      const biometric =
+        current.assigned_group === "FACE_POS" || current.assigned_group === "PALM_VEIN";
+      const completedSession: ExperimentSession = {
+        ...current,
+        current_step: "debrief",
+        session_status:
+          current.session_status === "technical_failure" ? "technical_failure" : "completed",
+        template_ref: biometric ? null : current.template_ref,
+        template_deleted_at: biometric ? timestamp : current.template_deleted_at,
+        events: [
+          ...current.events,
+          {
+            event_name: "ranking_completed",
+            timestamp,
+            participant_id: current.participant_id,
+            transaction_id: current.transaction?.transaction_id,
+            screen_name: "ranking",
+            metadata: { ranking: current.ranking },
+          },
+          ...(biometric
+            ? [
+                {
+                  event_name: "biometric_template_deleted",
+                  timestamp,
+                  participant_id: current.participant_id,
+                  transaction_id: current.transaction?.transaction_id,
+                  screen_name: "debrief" as StepKey,
+                  metadata: { method: current.assigned_group },
+                },
+              ]
+            : []),
+        ],
+      };
+      const completed = readJson<ExperimentSession[]>(
+        storageKeys.completedSessions,
+        [],
+      );
+      writeJson(storageKeys.completedSessions, [...completed, completedSession]);
+      return completedSession;
+    });
+  };
+
+  const resetCurrentSession = () => setSession(null);
+
+  if (!hydrated) {
     return <LoadingScreen />;
   }
 
-  if (!user) {
-    return <AuthPanel onSignedIn={() => refetch()} />;
+  if (!session) {
+    return <AdminHome onCreate={startNewSession} />;
   }
 
   return (
-    <main className={cn("min-h-screen", appSurfaceClass)}>
-      <header className="sticky top-0 z-20 border-b border-stone-200 bg-[#fffaf3]/95 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-          <div className="flex min-w-0 items-center gap-3">
-            <div
-              className={cn(
-                "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg",
-                primaryIconClass,
-              )}
-            >
-              <Hand size={20} aria-hidden />
-            </div>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold">PalmPay Coffee</p>
-              <p className="truncate text-xs text-stone-500">{user.email}</p>
-            </div>
-          </div>
-          <button
-            className="inline-flex h-10 items-center gap-2 rounded-lg border border-stone-200 bg-white px-3 text-sm font-medium text-stone-700 transition hover:border-stone-300 hover:bg-stone-100"
-            onClick={async () => {
-              await authClient.signOut();
-              setCart({});
-              setMethods([]);
-              setOrders([]);
-              await refetch();
-            }}
-            type="button"
-          >
-            <LogOut size={16} aria-hidden />
-            Sign out
-          </button>
-        </div>
-      </header>
-
-      <div className="mx-auto grid max-w-7xl gap-5 px-4 py-5 sm:px-6 lg:grid-cols-[minmax(0,1fr)_380px]">
+    <main className="min-h-screen bg-[#f7f8f3] text-slate-950">
+      <ExperimentHeader session={session} onReset={resetCurrentSession} />
+      <div className="mx-auto grid max-w-7xl gap-5 px-4 py-5 sm:px-6 lg:grid-cols-[260px_minmax(0,1fr)]">
+        <ProgressRail currentStep={session.current_step} group={session.assigned_group} />
         <section className="min-w-0">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h1 className="text-2xl font-semibold tracking-normal">
-                Coffee menu
-              </h1>
-              <p className="text-sm text-stone-500">
-                Order drinks and bites, then checkout.
-              </p>
-            </div>
-            <SegmentedStage value={stage} onChange={setStage} />
-          </div>
-
-          {stage === "catalog" && (
-            <CatalogGrid
-              cart={cart}
-              category={selectedCategory}
-              onAdd={addToCart}
-              onCategoryChange={setSelectedCategory}
-              onQueryChange={setCatalogQuery}
-              onRemove={removeFromCart}
-              query={catalogQuery}
+          {session.current_step === "consent" && (
+            <ConsentScreen onContinue={completeConsent} />
+          )}
+          {session.current_step === "pre" && (
+            <SurveyScreen
+              answers={session.pre_answers}
+              eyebrow="Khảo sát trước trải nghiệm"
+              onAnswer={(itemId, value) =>
+                updateSession((current) => ({
+                  ...current,
+                  pre_answers: { ...current.pre_answers, [itemId]: value },
+                }))
+              }
+              onSubmit={completePreSurvey}
+              questions={preQuestions}
+              title="Thông tin nền"
             />
           )}
-
-          {stage === "checkout" && (
-            <CheckoutPanel
-              cartLines={cartLines}
-              selectedMethod={selectedMethod}
-              totalCents={totalCents}
-              onBack={() => setStage("catalog")}
-              onPay={startPayment}
+          {session.current_step === "assignment" && session.assigned_group && (
+            <AssignmentScreen group={session.assigned_group} onContinue={startSetup} />
+          )}
+          {session.current_step === "setup" && session.assigned_group && (
+            <SetupScreen
+              group={session.assigned_group}
+              pin={session.qr_pin ?? ""}
+              onConsent={() =>
+                updateSession((current) => ({
+                  ...current,
+                  biometric_consent_at: nowIso(),
+                  events: [
+                    ...current.events,
+                    {
+                      event_name: "biometric_consent_completed",
+                      timestamp: nowIso(),
+                      participant_id: current.participant_id,
+                      screen_name: "setup",
+                      metadata: { method: current.assigned_group },
+                    },
+                  ],
+                }))
+              }
+              onFinish={finishSetup}
+              onLog={logEvent}
+              onPinChange={(pin) =>
+                updateSession((current) => ({ ...current, qr_pin: pin }))
+              }
+              biometricConsentAt={session.biometric_consent_at}
             />
           )}
-
-          {stage === "receipt" && receipt && (
-            <ReceiptPanel
-              order={receipt}
-              onNewOrder={() => {
-                setReceipt(null);
-                setStage("catalog");
+          {session.current_step === "product" && (
+            <ProductScreen onContinue={() => setStep("checkout")} />
+          )}
+          {session.current_step === "checkout" && session.assigned_group && (
+            <CheckoutScreen group={session.assigned_group} onPay={startCheckout} />
+          )}
+          {session.current_step === "payment" && session.assigned_group && (
+            <PaymentScreen
+              group={session.assigned_group}
+              pin={session.qr_pin ?? ""}
+              retries={session.transaction?.number_of_retries ?? 0}
+              transactionId={session.transaction?.transaction_id ?? ""}
+              onComplete={completePayment}
+              onFailure={markTechnicalFailure}
+              onLog={logEvent}
+              onRetry={recordRetry}
+            />
+          )}
+          {session.current_step === "success" && (
+            <SuccessScreen
+              transaction={session.transaction}
+              onContinue={() => {
+                logEvent("post_survey_started", "post", { opened_after: "paid" });
+                setStep("post");
               }}
             />
           )}
-        </section>
-
-        <aside className="space-y-5">
-          <CartPanel
-            cartLines={cartLines}
-            totalCents={totalCents}
-            onAdd={addToCart}
-            onRemove={removeFromCart}
-            onCheckout={startCheckout}
-          />
-
-          <MethodPanel
-            loading={loadingData}
-            methods={methods}
-            selectedMethodId={selectedMethodId || methods[0]?.id || ""}
-            onSelect={setSelectedMethodId}
-            onEnroll={setEnrollmentMode}
-            onDelete={deleteMethod}
-          />
-
-          {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-              {error}
-            </div>
+          {session.current_step === "post" && (
+            <SurveyScreen
+              answers={session.post_answers}
+              eyebrow="Khảo sát sau trải nghiệm"
+              onAnswer={(itemId, value) =>
+                updateSession((current) => ({
+                  ...current,
+                  post_answers: { ...current.post_answers, [itemId]: value },
+                }))
+              }
+              onSubmit={completePostSurvey}
+              questions={postQuestions}
+              title="Đánh giá phương thức vừa sử dụng"
+            />
           )}
-
-          <OrdersPanel orders={orders} />
-        </aside>
+          {session.current_step === "ranking" && (
+            <RankingScreen
+              feedback={session.open_feedback}
+              ranking={session.ranking}
+              onFeedback={(field, value) =>
+                updateSession((current) => ({
+                  ...current,
+                  open_feedback: { ...current.open_feedback, [field]: value },
+                }))
+              }
+              onRanking={(group, rank) =>
+                updateSession((current) => ({
+                  ...current,
+                  ranking: { ...current.ranking, [group]: rank },
+                }))
+              }
+              onSubmit={finishExperiment}
+              participantId={session.participant_id}
+            />
+          )}
+          {session.current_step === "debrief" && (
+            <DebriefScreen
+              session={session}
+              onExport={() =>
+                downloadCsv("palmpay-wide.csv", allStoredSessions(session).map(buildWideRow))
+              }
+              onExportEvents={() =>
+                downloadCsv(
+                  "palmpay-events.csv",
+                  allStoredSessions(session).flatMap((item) => item.events),
+                )
+              }
+              onNew={resetCurrentSession}
+            />
+          )}
+        </section>
       </div>
-
-      {enrollmentMode && (
-        <EnrollmentDialog
-          mode={enrollmentMode}
-          userId={user.id}
-          onClose={() => setEnrollmentMode(null)}
-          onEnroll={(type, metadata) => enrollMethod(type, metadata)}
-        />
-      )}
-
-      {activePayment && (
-        <PaymentDialog
-          method={activePayment}
-          userId={user.id}
-          totalCents={totalCents}
-          cartLines={cartLines}
-          onClose={() => setActivePayment(null)}
-          onAuthorized={(trace) => completePayment(activePayment, trace)}
-        />
-      )}
     </main>
   );
 }
 
 function LoadingScreen() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#f6efe5]">
-      <div className="inline-flex items-center gap-3 rounded-lg border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-600">
+    <div className="flex min-h-screen items-center justify-center bg-[#f7f8f3]">
+      <div className="inline-flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
         <Loader2 className="animate-spin" size={18} aria-hidden />
         Loading
       </div>
@@ -449,1523 +936,1321 @@ function LoadingScreen() {
   );
 }
 
-function authErrorMessage(
-  message: string | undefined,
-  mode: "signin" | "signup",
-) {
-  if (message?.trim()) {
-    return message;
-  }
+function AdminHome({ onCreate }: { onCreate: () => void }) {
+  const [history, setHistory] = useState<AssignmentHistoryItem[]>([]);
+  const [completed, setCompleted] = useState<ExperimentSession[]>([]);
 
-  return mode === "signin"
-    ? "Sign in failed. Check the password, create the account first, or make sure the local server is running."
-    : "Account could not be created. Make sure the local server is running, then try again.";
-}
+  useEffect(() => {
+    window.queueMicrotask(() => {
+      setHistory(readJson<AssignmentHistoryItem[]>(storageKeys.assignmentHistory, []));
+      setCompleted(readJson<ExperimentSession[]>(storageKeys.completedSessions, []));
+    });
+  }, []);
 
-function AuthPanel({ onSignedIn }: { onSignedIn: () => void }) {
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("demo@palmpay.local");
-  const [password, setPassword] = useState("palmpay123");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-  const googleEnabled =
-    process.env.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED === "true";
-
-  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setError("");
-    setLoading(true);
-
-    try {
-      const result =
-        mode === "signup"
-          ? await authClient.signUp.email({
-              name: name.trim() || email.split("@")[0],
-              email,
-              password,
-            })
-          : await authClient.signIn.email({
-              email,
-              password,
-              rememberMe: true,
-            });
-
-      if (result.error) {
-        setError(authErrorMessage(result.error.message, mode));
-        return;
-      }
-
-      onSignedIn();
-    } catch {
-      setError(
-        "Could not reach the auth server. Make sure the local server is running, then try again.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
+  const counts = groupOrder.map((group) => ({
+    group,
+    count: history.filter((item) => item.assigned_group === group).length,
+  }));
 
   return (
-    <main className={cn("flex min-h-screen items-center justify-center px-4 py-8", appSurfaceClass)}>
-      <section className="w-full max-w-md rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
-        <div className="mb-5 flex items-center gap-3">
-          <div
-            className={cn(
-              "flex h-11 w-11 items-center justify-center rounded-lg",
-              primaryIconClass,
-            )}
-          >
-            <Hand size={22} aria-hidden />
-          </div>
-          <div>
-            <h1 className="text-xl font-semibold">PalmPay Coffee</h1>
-            <p className="text-sm text-neutral-500">Sign in to continue</p>
-          </div>
-        </div>
-
-        <div className="mb-4 grid grid-cols-2 rounded-lg border border-neutral-200 bg-neutral-100 p-1">
-          {(["signin", "signup"] as const).map((item) => (
+    <main className="min-h-screen bg-[#f7f8f3] px-4 py-5 text-slate-950 sm:px-6">
+      <div className="mx-auto grid max-w-7xl gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium text-teal-700">{protocolVersion}</p>
+              <h1 className="mt-1 text-2xl font-semibold tracking-normal">
+                PalmPay POS Experiment
+              </h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+                Nền tảng mô phỏng thí nghiệm tại điểm bán với một sản phẩm,
+                một số dư thử nghiệm và bốn phương thức thanh toán được phân
+                nhóm ngẫu nhiên.
+              </p>
+            </div>
             <button
-              className={cn(
-                "h-9 rounded-md text-sm font-medium transition",
-                mode === item
-                  ? "bg-white text-neutral-950 shadow-sm"
-                  : "text-neutral-500 hover:text-neutral-950",
-              )}
-              key={item}
-              onClick={() => setMode(item)}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-teal-700 px-4 text-sm font-semibold text-white transition hover:bg-teal-800"
+              onClick={onCreate}
               type="button"
             >
-              {item === "signin" ? "Sign in" : "Create"}
+              <UserPlus size={17} aria-hidden />
+              Tạo người tham gia mới
             </button>
-          ))}
-        </div>
+          </div>
 
-        <form className="space-y-3" onSubmit={submit}>
-          {mode === "signup" && (
-            <label className="block">
-              <span className="mb-1 block text-sm font-medium">Name</span>
-              <input
-                className={cn(
-                  "h-11 w-full rounded-lg border border-neutral-200 bg-white px-3 text-sm outline-none transition",
-                  inputFocusClass,
-                )}
-                onChange={(event) => setName(event.target.value)}
-                placeholder="Your name"
-                value={name}
-              />
-            </label>
-          )}
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {counts.map(({ group, count }) => {
+              const copy = groupCopy[group];
+              const Icon = copy.icon;
+              return (
+                <article
+                  className={cn("rounded-lg border p-4", copy.color)}
+                  key={group}
+                >
+                  <div className="mb-3 flex items-center justify-between">
+                    <Icon size={20} aria-hidden />
+                    <span className="rounded-full bg-white/70 px-2 py-1 text-xs font-semibold">
+                      {count} người
+                    </span>
+                  </div>
+                  <h2 className="text-sm font-semibold">{copy.shortLabel}</h2>
+                  <p className="mt-1 text-xs leading-5 opacity-80">{copy.device}</p>
+                </article>
+              );
+            })}
+          </div>
+        </section>
 
-          <label className="block">
-            <span className="mb-1 block text-sm font-medium">Email</span>
-            <input
-              className={cn(
-                "h-11 w-full rounded-lg border border-neutral-200 bg-white px-3 text-sm outline-none transition",
-                inputFocusClass,
-              )}
-              onChange={(event) => setEmail(event.target.value)}
-              type="email"
-              value={email}
-            />
-          </label>
-
-          <label className="block">
-            <span className="mb-1 block text-sm font-medium">Password</span>
-            <input
-              className={cn(
-                "h-11 w-full rounded-lg border border-neutral-200 bg-white px-3 text-sm outline-none transition",
-                inputFocusClass,
-              )}
-              minLength={8}
-              onChange={(event) => setPassword(event.target.value)}
-              type="password"
-              value={password}
-            />
-          </label>
-
-          {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-              {error}
+        <aside className="space-y-5">
+          <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <h2 className="font-semibold">Thiết bị</h2>
+            <div className="mt-3 space-y-2 text-sm">
+              {[
+                "Điện thoại DemoBank",
+                "Đầu đọc thẻ NFC",
+                "Camera tại POS",
+                "Máy quét PalmPay",
+              ].map((item) => (
+                <div
+                  className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2"
+                  key={item}
+                >
+                  <span>{item}</span>
+                  <span className="inline-flex items-center gap-1 text-xs font-medium text-teal-700">
+                    <CheckCircle2 size={14} aria-hidden />
+                    Sẵn sàng
+                  </span>
+                </div>
+              ))}
             </div>
-          )}
+          </section>
 
-          <button
-            className={cn(
-              "inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition",
-              primaryButtonClass,
-            )}
-            disabled={loading}
-            type="submit"
-          >
-            {loading ? <Loader2 className="animate-spin" size={16} /> : null}
-            Continue
-          </button>
-        </form>
-
-        {googleEnabled && (
-          <button
-            className="mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-neutral-200 bg-white px-4 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
-            onClick={() =>
-              authClient.signIn.social({
-                provider: "google",
-                callbackURL: "/",
-              })
-            }
-            type="button"
-          >
-            <ShieldCheck size={16} aria-hidden />
-            Continue with Google
-          </button>
-        )}
-      </section>
+          <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <h2 className="font-semibold">Xuất dữ liệu</h2>
+            <div className="mt-3 grid gap-2">
+              <button
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                disabled={completed.length === 0}
+                onClick={() => downloadCsv("palmpay-wide.csv", completed.map(buildWideRow))}
+                type="button"
+              >
+                <Download size={16} aria-hidden />
+                CSV dạng rộng
+              </button>
+              <button
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                disabled={completed.length === 0}
+                onClick={() =>
+                  downloadCsv(
+                    "palmpay-events.csv",
+                    completed.flatMap((item) => item.events),
+                  )
+                }
+                type="button"
+              >
+                <ReceiptText size={16} aria-hidden />
+                CSV nhật ký
+              </button>
+            </div>
+          </section>
+        </aside>
+      </div>
     </main>
   );
 }
 
-function SegmentedStage({
-  value,
-  onChange,
+function ExperimentHeader({
+  session,
+  onReset,
 }: {
-  value: Stage;
-  onChange: (stage: Stage) => void;
-}) {
-  const stages: Array<{ value: Stage; label: string; icon: typeof ShoppingBag }> =
-    [
-      { value: "catalog", label: "Shop", icon: ShoppingBag },
-      { value: "checkout", label: "Pay", icon: WalletCards },
-      { value: "receipt", label: "Receipt", icon: ReceiptText },
-    ];
-
-  return (
-    <div className="grid grid-cols-3 rounded-lg border border-neutral-200 bg-white p-1">
-      {stages.map((stage) => {
-        const Icon = stage.icon;
-        return (
-          <button
-            className={cn(
-              "inline-flex h-9 items-center justify-center gap-2 rounded-md px-3 text-sm font-medium transition",
-              value === stage.value
-                ? "bg-[#5a341f] text-white shadow-sm shadow-stone-950/10"
-                : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-950",
-            )}
-            key={stage.value}
-            onClick={() => onChange(stage.value)}
-            type="button"
-          >
-            <Icon size={15} aria-hidden />
-            {stage.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function CatalogGrid({
-  cart,
-  category,
-  onAdd,
-  onCategoryChange,
-  onQueryChange,
-  onRemove,
-  query,
-}: {
-  cart: Cart;
-  category: ProductCategory | "All";
-  onAdd: (productId: string) => void;
-  onCategoryChange: (category: ProductCategory | "All") => void;
-  onQueryChange: (query: string) => void;
-  onRemove: (productId: string) => void;
-  query: string;
-}) {
-  const normalizedQuery = query.trim().toLowerCase();
-  const products = useMemo(
-    () =>
-      catalog.filter((product) => {
-        const matchesCategory =
-          category === "All" || product.category === category;
-        const matchesQuery =
-          !normalizedQuery ||
-          [
-            product.name,
-            product.detail,
-            product.category,
-            ...product.tags,
-          ]
-            .join(" ")
-            .toLowerCase()
-            .includes(normalizedQuery);
-
-        return matchesCategory && matchesQuery;
-      }),
-    [category, normalizedQuery],
-  );
-
-  return (
-    <>
-      <div className="mb-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
-        <label className="relative block">
-          <Search
-            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-stone-400"
-            size={17}
-            aria-hidden
-          />
-          <input
-            className={cn(
-              "h-11 w-full rounded-lg border border-stone-200 bg-[#fffaf3] pl-10 pr-3 text-sm outline-none transition placeholder:text-stone-400",
-              inputFocusClass,
-            )}
-            onChange={(event) => onQueryChange(event.target.value)}
-            placeholder="Search coffee, pastries"
-            value={query}
-          />
-        </label>
-
-        <div className="flex gap-2 overflow-x-auto pb-1 lg:justify-end lg:pb-0">
-          {categoryOptions.map((item) => (
-            <button
-              className={cn(
-                "h-11 shrink-0 rounded-lg border px-3 text-sm font-medium transition",
-                category === item
-                  ? "border-amber-900 bg-[#5a341f] text-white shadow-sm shadow-stone-950/10"
-                  : "border-stone-200 bg-[#fffaf3] text-stone-600 hover:border-amber-300 hover:text-stone-950",
-              )}
-              key={item}
-              onClick={() => onCategoryChange(item)}
-              type="button"
-            >
-              {item}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {products.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-stone-300 bg-[#fffaf3]/70 px-4 py-12 text-center text-sm text-stone-500">
-          No menu items found
-        </div>
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {products.map((product) => (
-            <ProductCard
-              key={product.id}
-              product={product}
-              quantity={cart[product.id] ?? 0}
-              onAdd={() => onAdd(product.id)}
-              onRemove={() => onRemove(product.id)}
-            />
-          ))}
-        </div>
-      )}
-    </>
-  );
-}
-
-function ProductCard({
-  product,
-  quantity,
-  onAdd,
-  onRemove,
-}: {
-  product: Product;
-  quantity: number;
-  onAdd: () => void;
-  onRemove: () => void;
+  session: ExperimentSession;
+  onReset: () => void;
 }) {
   return (
-    <article className="overflow-hidden rounded-lg border border-stone-200 bg-[#fffaf3] shadow-sm">
-      <div className="relative aspect-square bg-amber-50">
-        <Image
-          alt={product.imageAlt}
-          className="object-cover"
-          fill
-          sizes="(min-width: 1280px) 30vw, (min-width: 640px) 45vw, 92vw"
-          src={product.image}
-        />
-        <div className="absolute left-3 top-3 flex flex-wrap gap-2">
-          <span className="rounded-full bg-white/90 px-2 py-1 text-xs font-medium text-stone-700 shadow-sm backdrop-blur">
-            {product.category}
-          </span>
-          {product.popular && (
-            <span className="rounded-full bg-amber-900/90 px-2 py-1 text-xs font-medium text-white shadow-sm backdrop-blur">
-              Popular
-            </span>
-          )}
-        </div>
-      </div>
-
-      <div className="p-4">
-        <div className="flex items-start justify-between gap-3">
+    <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
+      <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-teal-700 text-white">
+            <Hand size={20} aria-hidden />
+          </div>
           <div className="min-w-0">
-            <h2 className="truncate text-base font-semibold text-stone-950">
-              {product.name}
-            </h2>
-            <p className="mt-1 min-h-10 text-sm leading-5 text-stone-500">
-              {product.detail}
+            <p className="truncate text-sm font-semibold">PalmPay POS Study</p>
+            <p className="truncate text-xs text-slate-500">
+              {session.participant_id} · {protocolVersion}
             </p>
           </div>
-          <p className="shrink-0 text-sm font-semibold text-stone-900">
-            {formatVnd(product.priceCents)}
-          </p>
         </div>
-
-        <div className="mt-4 grid h-10 grid-cols-[40px_1fr_40px] items-center rounded-lg border border-stone-200 bg-white">
+        <div className="flex items-center gap-2">
+          <span className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700">
+            Số dư: {formatVnd(startingBalance)}
+          </span>
           <button
-            aria-label={`Remove ${product.name}`}
-            className="flex h-10 items-center justify-center rounded-l-lg text-stone-500 transition hover:bg-amber-50 hover:text-amber-900 disabled:text-stone-300"
-            disabled={quantity === 0}
-            onClick={onRemove}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            onClick={onReset}
             type="button"
           >
-            <Minus size={16} aria-hidden />
-          </button>
-          <div className="text-center text-sm font-semibold text-stone-900">
-            {quantity}
-          </div>
-          <button
-            aria-label={`Add ${product.name}`}
-            className="flex h-10 items-center justify-center rounded-r-lg text-stone-500 transition hover:bg-amber-50 hover:text-amber-900"
-            onClick={onAdd}
-            type="button"
-          >
-            <Plus size={16} aria-hidden />
+            <RotateCcw size={16} aria-hidden />
+            Quản trị
           </button>
         </div>
       </div>
-    </article>
+    </header>
   );
 }
 
-function CartPanel({
-  cartLines,
-  totalCents,
-  onAdd,
-  onRemove,
-  onCheckout,
+function ProgressRail({
+  currentStep,
+  group,
 }: {
-  cartLines: CartLine[];
-  totalCents: number;
-  onAdd: (productId: string) => void;
-  onRemove: (productId: string) => void;
-  onCheckout: () => void;
+  currentStep: StepKey;
+  group: StudyGroup | null;
 }) {
+  const activeIndex = flowSteps.indexOf(currentStep);
   return (
-    <section className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <ShoppingBag size={18} aria-hidden />
-          <h2 className="font-semibold">Order</h2>
-        </div>
-        <span className="text-sm text-neutral-500">
-          {cartLines.reduce((sum, item) => sum + item.quantity, 0)} items
-        </span>
+    <aside className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="mb-4 flex items-center gap-2">
+        <ClipboardCheck size={18} aria-hidden />
+        <h2 className="font-semibold">Luồng thí nghiệm</h2>
       </div>
-
-      <div className="space-y-3">
-        {cartLines.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-neutral-200 px-3 py-8 text-center text-sm text-neutral-500">
-            Cart is empty
-          </div>
-        ) : (
-          cartLines.map((line) => {
-            const product = getProduct(line.productId);
-            if (!product) return null;
-
-            return (
-              <div
-                className="grid grid-cols-[1fr_auto] items-center gap-3"
-                key={line.productId}
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{product.name}</p>
-                  <p className="text-xs text-neutral-500">
-                    {formatVnd(product.priceCents)} x {line.quantity}
-                  </p>
-                </div>
-                <div className="flex h-9 items-center rounded-lg border border-neutral-200">
-                  <button
-                    aria-label={`Remove ${product.name}`}
-                    className="flex h-9 w-9 items-center justify-center text-neutral-500 hover:text-amber-900"
-                    onClick={() => onRemove(product.id)}
-                    type="button"
-                  >
-                    <Minus size={15} aria-hidden />
-                  </button>
-                  <button
-                    aria-label={`Add ${product.name}`}
-                    className="flex h-9 w-9 items-center justify-center text-neutral-500 hover:text-amber-900"
-                    onClick={() => onAdd(product.id)}
-                    type="button"
-                  >
-                    <Plus size={15} aria-hidden />
-                  </button>
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
-
-      <div className="mt-4 border-t border-neutral-200 pt-4">
-        <div className="mb-4 flex items-center justify-between">
-          <span className="text-sm text-neutral-500">Total</span>
-          <span className="text-lg font-semibold">{formatVnd(totalCents)}</span>
-        </div>
-        <button
-          className={cn(
-            "inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition",
-            primaryButtonClass,
-          )}
-          disabled={!cartLines.length}
-          onClick={onCheckout}
-          type="button"
-        >
-          <WalletCards size={17} aria-hidden />
-          Checkout
-        </button>
-      </div>
-    </section>
-  );
-}
-
-function MethodPanel({
-  loading,
-  methods,
-  selectedMethodId,
-  onSelect,
-  onEnroll,
-  onDelete,
-}: {
-  loading: boolean;
-  methods: PaymentMethod[];
-  selectedMethodId: string;
-  onSelect: (id: string) => void;
-  onEnroll: (type: PaymentMethodType) => void;
-  onDelete: (id: string) => void;
-}) {
-  return (
-    <section className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <WalletCards size={18} aria-hidden />
-          <h2 className="font-semibold">Payment</h2>
-        </div>
-        {loading && <Loader2 className="animate-spin text-neutral-400" size={16} />}
-      </div>
-
-      <div className="grid grid-cols-2 gap-2">
-        {(Object.keys(methodCopy) as PaymentMethodType[]).map((type) => {
-          const copy = methodCopy[type];
-          const Icon = copy.icon;
-          const method = methods.find((item) => item.type === type);
-          const selected = method?.id === selectedMethodId;
-          const enrolled = Boolean(method);
-
+      <div className="space-y-2">
+        {flowSteps.map((step, index) => {
+          const active = step === currentStep;
+          const done = activeIndex > index;
           return (
             <div
               className={cn(
-                "relative min-h-32 rounded-lg border p-3 transition",
-                selected
-                  ? primarySelectedClass
-                  : enrolled
-                    ? "border-neutral-200 bg-white hover:border-amber-200"
-                    : "border-dashed border-neutral-200 bg-neutral-50/80 hover:border-amber-200 hover:bg-amber-50/50",
+                "flex min-h-10 items-center gap-2 rounded-lg border px-3 text-sm",
+                active
+                  ? "border-teal-200 bg-teal-50 text-teal-900"
+                  : done
+                    ? "border-slate-200 bg-slate-50 text-slate-500"
+                    : "border-transparent text-slate-400",
               )}
-              key={type}
+              key={step}
             >
-              <button
-                className="flex h-full w-full flex-col items-start pr-7 text-left"
-                onClick={() => (method ? onSelect(method.id) : onEnroll(type))}
-                type="button"
-              >
-                <span
-                  className={cn(
-                    "mb-3 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
-                    selected
-                      ? primaryIconClass
-                      : enrolled
-                        ? "bg-amber-100 text-amber-900"
-                        : "border border-neutral-200 bg-white text-neutral-500",
-                  )}
-                >
-                  <Icon size={17} aria-hidden />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-medium">{copy.label}</span>
-                  <span className="mt-1 block text-xs leading-4 text-neutral-500">
-                    {copy.description}
-                  </span>
-                </span>
-                <span
-                  className={cn(
-                    "mt-3 inline-flex h-6 items-center rounded-full px-2 text-xs font-medium",
-                    selected
-                      ? "bg-[#5a341f] text-white"
-                      : enrolled
-                        ? "bg-amber-50 text-amber-900"
-                        : "border border-neutral-200 bg-white text-neutral-500",
-                  )}
-                >
-                  {selected ? "Active" : enrolled ? "Added" : "Add"}
-                </span>
-              </button>
-              {method && (
-                <button
-                  aria-label={`Remove ${copy.label}`}
-                  className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition hover:bg-white hover:text-red-600"
-                  onClick={() => onDelete(method.id)}
-                  type="button"
-                >
-                  <Trash2 size={15} aria-hidden />
-                </button>
-              )}
+              {done ? <Check size={15} aria-hidden /> : <span className="h-2 w-2 rounded-full bg-current" />}
+              {stepLabels[step]}
             </div>
           );
         })}
       </div>
-    </section>
-  );
-}
-
-function OrdersPanel({ orders }: { orders: Order[] }) {
-  return (
-    <section className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm">
-      <div className="mb-4 flex items-center gap-2">
-        <ReceiptText size={18} aria-hidden />
-        <h2 className="font-semibold">Recent</h2>
-      </div>
-      <div className="space-y-2">
-        {orders.length === 0 ? (
-          <p className="text-sm text-neutral-500">No payments yet</p>
-        ) : (
-          orders.slice(0, 4).map((order) => (
-            <div
-              className="flex items-center justify-between gap-3 rounded-lg border border-neutral-200 px-3 py-2"
-              key={order.id}
-            >
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium">
-                  {methodCopy[order.paymentMethodType].label}
-                </p>
-                <p className="text-xs text-neutral-500">
-                  {order.authorizationCode}
-                </p>
-              </div>
-              <p className="shrink-0 text-sm font-semibold">
-                {formatVnd(order.totalCents)}
-              </p>
-            </div>
-          ))
-        )}
-      </div>
-    </section>
-  );
-}
-
-function CheckoutPanel({
-  cartLines,
-  selectedMethod,
-  totalCents,
-  onBack,
-  onPay,
-}: {
-  cartLines: CartLine[];
-  selectedMethod?: PaymentMethod;
-  totalCents: number;
-  onBack: () => void;
-  onPay: () => void;
-}) {
-  const Icon = selectedMethod ? methodCopy[selectedMethod.type].icon : WalletCards;
-
-  return (
-    <section className="rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
-      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-xl font-semibold">Checkout</h2>
-          <p className="mt-1 text-sm text-neutral-500">
-            Review order and authorize payment.
-          </p>
+      {group && (
+        <div className={cn("mt-4 rounded-lg border p-3", groupCopy[group].color)}>
+          <p className="text-xs font-medium uppercase">{group}</p>
+          <p className="mt-1 text-sm font-semibold">{groupCopy[group].label}</p>
         </div>
+      )}
+    </aside>
+  );
+}
+
+function ConsentScreen({ onContinue }: { onContinue: () => void }) {
+  const [checked, setChecked] = useState(false);
+  return (
+    <Panel
+      eyebrow="Đồng ý tham gia"
+      icon={ShieldCheck}
+      title="Thông tin nghiên cứu"
+    >
+      <div className="grid gap-3 text-sm leading-6 text-slate-600 sm:grid-cols-2">
+        {[
+          "Đây là nghiên cứu học thuật.",
+          "Không sử dụng tiền thật hoặc tài khoản thật.",
+          "Bạn có thể dừng tham gia bất kỳ lúc nào.",
+          "Dữ liệu chỉ được sử dụng cho mục đích nghiên cứu.",
+        ].map((item) => (
+          <div
+            className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3"
+            key={item}
+          >
+            {item}
+          </div>
+        ))}
+      </div>
+      <label className="mt-5 flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-700">
+        <input
+          checked={checked}
+          className="mt-1 h-4 w-4"
+          onChange={(event) => setChecked(event.target.checked)}
+          type="checkbox"
+        />
+        <span>
+          Tôi đã đọc thông tin trên và đồng ý tiếp tục trong phiên thử nghiệm
+          này.
+        </span>
+      </label>
+      <ActionRow>
         <button
-          className="inline-flex h-10 items-center rounded-lg border border-neutral-200 px-3 text-sm font-medium text-neutral-700 transition hover:bg-neutral-100"
-          onClick={onBack}
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-teal-700 px-4 text-sm font-semibold text-white transition hover:bg-teal-800 disabled:bg-slate-300"
+          disabled={!checked}
+          onClick={onContinue}
           type="button"
         >
-          Back
+          Tiếp tục
+          <ArrowRight size={17} aria-hidden />
         </button>
-      </div>
+      </ActionRow>
+    </Panel>
+  );
+}
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
-        <div className="space-y-3">
-          {cartLines.map((line) => {
-            const product = getProduct(line.productId);
-            if (!product) return null;
-
-            return (
-              <div
-                className="grid grid-cols-[1fr_auto] gap-4 rounded-lg border border-neutral-200 px-4 py-3"
-                key={line.productId}
-              >
-                <div>
-                  <p className="font-medium">{product.name}</p>
-                  <p className="text-sm text-neutral-500">
-                    {line.quantity} x {formatVnd(product.priceCents)}
-                  </p>
-                </div>
-                <p className="font-semibold">
-                  {formatVnd(product.priceCents * line.quantity)}
+function SurveyScreen({
+  answers,
+  eyebrow,
+  onAnswer,
+  onSubmit,
+  questions,
+  title,
+}: {
+  answers: Record<string, string | number>;
+  eyebrow: string;
+  onAnswer: (itemId: string, value: string | number) => void;
+  onSubmit: () => void;
+  questions: SurveyQuestion[];
+  title: string;
+}) {
+  const complete = questions.every(
+    (question) => !question.required || answers[question.item_id] !== undefined,
+  );
+  return (
+    <Panel eyebrow={eyebrow} icon={ClipboardCheck} title={title}>
+      <div className="space-y-4">
+        {questions.map((question) => (
+          <div
+            className="rounded-lg border border-slate-200 bg-white p-4"
+            key={question.item_id}
+          >
+            <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-slate-950">
+                  {question.text}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {question.item_id} · {question.construct}
                 </p>
               </div>
-            );
-          })}
-        </div>
-
-        <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4">
-          <div className="mb-4 flex items-center gap-3">
-            <div
-              className={cn(
-                "flex h-10 w-10 items-center justify-center rounded-lg",
-                primaryIconClass,
+              {question.reverse_scored && (
+                <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800">
+                  đảo chiều
+                </span>
               )}
-            >
-              <Icon size={18} aria-hidden />
             </div>
-            <div>
-              <p className="text-sm font-semibold">
-                {selectedMethod?.label ?? "No method"}
-              </p>
-              <p className="text-xs text-neutral-500">
-                {selectedMethod
-                  ? methodCopy[selectedMethod.type].description
-                  : "Add one to continue"}
-              </p>
-            </div>
+            {question.type === "select" ? (
+              <label className="relative block max-w-sm">
+                <select
+                  className="h-11 w-full appearance-none rounded-lg border border-slate-200 bg-slate-50 px-3 pr-9 text-sm outline-none transition focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                  onChange={(event) => onAnswer(question.item_id, event.target.value)}
+                  value={String(answers[question.item_id] ?? "")}
+                >
+                  <option value="" disabled>
+                    Chọn câu trả lời
+                  </option>
+                  {question.options?.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown
+                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
+                  size={16}
+                  aria-hidden
+                />
+              </label>
+            ) : (
+              <Likert
+                max={question.scale_max ?? 5}
+                min={question.scale_min ?? 1}
+                onChange={(value) => onAnswer(question.item_id, value)}
+                value={
+                  typeof answers[question.item_id] === "number"
+                    ? Number(answers[question.item_id])
+                    : null
+                }
+              />
+            )}
           </div>
-          <div className="mb-4 flex items-center justify-between border-t border-neutral-200 pt-4">
-            <span className="text-sm text-neutral-500">Total</span>
-            <span className="text-xl font-semibold">{formatVnd(totalCents)}</span>
-          </div>
+        ))}
+      </div>
+      <ActionRow>
+        <button
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-teal-700 px-4 text-sm font-semibold text-white transition hover:bg-teal-800 disabled:bg-slate-300"
+          disabled={!complete}
+          onClick={onSubmit}
+          type="button"
+        >
+          Hoàn thành
+          <ArrowRight size={17} aria-hidden />
+        </button>
+      </ActionRow>
+    </Panel>
+  );
+}
+
+function Likert({
+  max,
+  min,
+  onChange,
+  value,
+}: {
+  max: number;
+  min: number;
+  onChange: (value: number) => void;
+  value: number | null;
+}) {
+  const values = Array.from({ length: max - min + 1 }, (_, index) => min + index);
+  return (
+    <div>
+      <div className="grid grid-cols-5 gap-2">
+        {values.map((item) => (
           <button
             className={cn(
-              "inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition",
-              primaryButtonClass,
+              "h-11 rounded-lg border text-sm font-semibold transition",
+              value === item
+                ? "border-teal-700 bg-teal-700 text-white"
+                : "border-slate-200 bg-slate-50 text-slate-700 hover:border-teal-300",
             )}
-            disabled={!selectedMethod || !cartLines.length}
-            onClick={onPay}
+            key={item}
+            onClick={() => onChange(item)}
             type="button"
           >
-            <ShieldCheck size={17} aria-hidden />
-            Pay now
+            {item}
           </button>
-        </div>
+        ))}
       </div>
-    </section>
+      <div className="mt-2 flex justify-between text-xs text-slate-500">
+        <span>Hoàn toàn không đồng ý</span>
+        <span>Hoàn toàn đồng ý</span>
+      </div>
+    </div>
   );
 }
 
-function ReceiptPanel({
-  order,
-  onNewOrder,
+function AssignmentScreen({
+  group,
+  onContinue,
 }: {
-  order: Order;
-  onNewOrder: () => void;
+  group: StudyGroup;
+  onContinue: () => void;
 }) {
-  return (
-    <section className="rounded-lg border border-neutral-200 bg-white p-6 text-center shadow-sm">
-      <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-lg bg-amber-50 text-amber-900">
-        <CircleCheck size={30} aria-hidden />
-      </div>
-      <h2 className="text-2xl font-semibold">Paid</h2>
-      <p className="mt-2 text-sm text-neutral-500">
-        {order.authorizationCode} through {methodCopy[order.paymentMethodType].label}
-      </p>
-      <p className="mt-5 text-3xl font-semibold">{formatVnd(order.totalCents)}</p>
-      <button
-        className={cn(
-          "mt-6 inline-flex h-11 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition",
-          primaryButtonClass,
-        )}
-        onClick={onNewOrder}
-        type="button"
-      >
-        <ShoppingBag size={17} aria-hidden />
-        New order
-      </button>
-    </section>
-  );
-}
-
-function EnrollmentDialog({
-  mode,
-  userId,
-  onClose,
-  onEnroll,
-}: {
-  mode: PaymentMethodType;
-  userId: string;
-  onClose: () => void;
-  onEnroll: (
-    type: PaymentMethodType,
-    metadata?: Record<string, unknown>,
-  ) => Promise<void>;
-}) {
-  const copy = methodCopy[mode];
+  const copy = groupCopy[group];
   const Icon = copy.icon;
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [nfcStatus, setNfcStatus] = useState("Ready");
+  return (
+    <Panel eyebrow="Phân nhóm ngẫu nhiên" icon={IdCard} title="Phương thức được chỉ định">
+      <div className={cn("rounded-lg border p-5", copy.color)}>
+        <div className="flex items-start gap-4">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-white/70">
+            <Icon size={24} aria-hidden />
+          </div>
+          <div>
+            <p className="text-sm font-medium uppercase">{group}</p>
+            <h2 className="mt-1 text-xl font-semibold">{copy.label}</h2>
+            <p className="mt-2 text-sm leading-6 opacity-85">{copy.instruction}</p>
+          </div>
+        </div>
+      </div>
+      <ActionRow>
+        <button
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-teal-700 px-4 text-sm font-semibold text-white transition hover:bg-teal-800"
+          onClick={onContinue}
+          type="button"
+        >
+          Thiết lập phương thức
+          <ArrowRight size={17} aria-hidden />
+        </button>
+      </ActionRow>
+    </Panel>
+  );
+}
 
-  const finish = async (metadata: Record<string, unknown> = {}) => {
-    setBusy(true);
-    setError("");
-    try {
-      await onEnroll(mode, metadata);
-    } catch (finishError) {
-      setError(
-        finishError instanceof Error
-          ? finishError.message
-          : "Could not add method",
-      );
-    } finally {
-      setBusy(false);
-    }
-  };
+function SetupScreen({
+  biometricConsentAt,
+  group,
+  onConsent,
+  onFinish,
+  onLog,
+  onPinChange,
+  pin,
+}: {
+  biometricConsentAt?: string | null;
+  group: StudyGroup;
+  onConsent: () => void;
+  onFinish: (metadata?: Record<string, unknown>) => void;
+  onLog: (eventName: string, screenName: StepKey, metadata?: Record<string, unknown>) => void;
+  onPinChange: (pin: string) => void;
+  pin: string;
+}) {
+  const [samples, setSamples] = useState(0);
+  const [linked, setLinked] = useState(false);
+  const [bankOpened, setBankOpened] = useState(false);
+  const needsBiometricConsent = group === "FACE_POS" || group === "PALM_VEIN";
+  const biometricReady = !needsBiometricConsent || Boolean(biometricConsentAt);
+  const done =
+    group === "QR_PIN"
+      ? /^\d{4}$/.test(pin)
+      : group === "NFC_CARD"
+        ? linked
+        : biometricReady && samples >= 3;
 
-  const startNfc = async () => {
-    const Reader = (window as NfcWindow).NDEFReader;
-    if (!Reader) {
-      setNfcStatus("NFC unavailable");
-      return;
-    }
-
-    setNfcStatus("Waiting for tap");
-    try {
-      const reader = new Reader();
-      reader.addEventListener(
-        "reading",
-        (event) => {
-          void finish({
-            serialHint: event.serialNumber ?? "ndef-token",
-            enrollment: "web-nfc",
-          });
-        },
-        { once: true },
-      );
-      reader.addEventListener(
-        "readingerror",
-        () => setNfcStatus("Try again"),
-        { once: true },
-      );
-      await reader.scan();
-    } catch {
-      setNfcStatus("NFC blocked");
-    }
+  const capture = () => {
+    const next = Math.min(samples + 1, 3);
+    setSamples(next);
+    onLog(
+      group === "FACE_POS" ? "face_sample_captured" : "palm_sample_captured",
+      "setup",
+      { sample_number: next, raw_image_stored: false },
+    );
   };
 
   return (
-    <DialogFrame onClose={onClose}>
-      <div className="mb-4 flex items-center gap-3">
-        <div
-          className={cn(
-            "flex h-11 w-11 items-center justify-center rounded-lg",
-            primaryIconClass,
-          )}
-        >
-          <Icon size={21} aria-hidden />
+    <Panel eyebrow="Thiết lập phương thức" icon={groupCopy[group].icon} title={groupCopy[group].label}>
+      {group === "QR_PIN" && (
+        <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
+          <PhoneMock
+            balance={startingBalance}
+            opened={bankOpened}
+            onOpen={() => {
+              setBankOpened(true);
+              onLog("demo_bank_opened", "setup", {});
+            }}
+          />
+          <div className="rounded-lg border border-slate-200 bg-white p-4">
+            <h3 className="font-semibold">Tạo mã PIN thử nghiệm</h3>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Mã này chỉ dùng trong phiên mô phỏng và không liên quan đến tài
+              khoản ngân hàng thật.
+            </p>
+            <input
+              className="mt-4 h-12 w-full max-w-xs rounded-lg border border-slate-200 bg-slate-50 px-3 text-lg font-semibold tracking-[0.2em] outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+              inputMode="numeric"
+              maxLength={4}
+              onChange={(event) =>
+                onPinChange(event.target.value.replace(/\D/g, "").slice(0, 4))
+              }
+              placeholder="0000"
+              type="password"
+              value={pin}
+            />
+          </div>
         </div>
-        <div>
-          <h2 className="text-lg font-semibold">{copy.label}</h2>
-          <p className="text-sm text-neutral-500">Add payment method</p>
-        </div>
-      </div>
+      )}
 
-      {mode === "qr" && (
-        <EnrollmentAction
-          busy={busy}
-          icon={QrCode}
-          label="Link wallet"
+      {group === "NFC_CARD" && (
+        <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-5 text-emerald-950">
+            <CreditCard className="mb-8" size={38} aria-hidden />
+            <p className="text-sm font-medium">NFC TEST CARD</p>
+            <p className="mt-2 text-2xl font-semibold">CARD-POS-042</p>
+            <p className="mt-6 text-sm">Không yêu cầu PIN cho 35.000 đồng</p>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-white p-4">
+            <h3 className="font-semibold">Liên kết thẻ thử nghiệm</h3>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Thẻ vật lý được dùng để tránh chồng lấn với điện thoại ở nhóm QR
+              hoặc nhận diện khuôn mặt trên điện thoại.
+            </p>
+            <button
+              className="mt-4 inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-teal-700 px-4 text-sm font-semibold text-white transition hover:bg-teal-800"
+              onClick={() => {
+                setLinked(true);
+                onLog("nfc_card_linked", "setup", { card_ref: "CARD-POS-042" });
+              }}
+              type="button"
+            >
+              <Nfc size={17} aria-hidden />
+              Liên kết thẻ
+            </button>
+          </div>
+        </div>
+      )}
+
+      {needsBiometricConsent && (
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
+          <label className="flex items-start gap-3">
+            <input
+              checked={Boolean(biometricConsentAt)}
+              className="mt-1 h-4 w-4"
+              disabled={Boolean(biometricConsentAt)}
+              onChange={onConsent}
+              type="checkbox"
+            />
+            <span>
+              Tôi đồng ý cho hệ thống tạo mẫu đặc trưng mã hóa cho phiên thử
+              nghiệm. Hệ thống không lưu hình ảnh thô và mẫu sẽ được xóa khi
+              kết thúc phiên.
+            </span>
+          </label>
+        </div>
+      )}
+
+      {(group === "FACE_POS" || group === "PALM_VEIN") && (
+        <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
+          <BiometricMock group={group} samples={samples} />
+          <div className="rounded-lg border border-slate-200 bg-white p-4">
+            <h3 className="font-semibold">
+              Ghi nhận ba mẫu {group === "FACE_POS" ? "khuôn mặt" : "lòng bàn tay"}
+            </h3>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Thời gian thiết lập được tách riêng với thời gian thanh toán để
+              các nhóm sinh trắc học không bị đánh giá bất lợi.
+            </p>
+            <button
+              className="mt-4 inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-teal-700 px-4 text-sm font-semibold text-white transition hover:bg-teal-800 disabled:bg-slate-300"
+              disabled={!biometricReady || samples >= 3}
+              onClick={capture}
+              type="button"
+            >
+              <ScanLine size={17} aria-hidden />
+              Ghi mẫu {Math.min(samples + 1, 3)}/3
+            </button>
+          </div>
+        </div>
+      )}
+
+      <ActionRow>
+        <button
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-teal-700 px-4 text-sm font-semibold text-white transition hover:bg-teal-800 disabled:bg-slate-300"
+          disabled={!done}
           onClick={() =>
-            finish({
-              wallet: "demo-wallet",
-              tokenized: true,
+            onFinish({
+              method: group,
+              setup_samples: samples || undefined,
+              qr_pin_created: group === "QR_PIN" ? true : undefined,
+              nfc_card_ref: group === "NFC_CARD" ? "CARD-POS-042" : undefined,
             })
           }
-        />
-      )}
-
-      {mode === "nfc" && (
-        <div className="space-y-3">
-          <div className="rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-3 text-sm text-neutral-600">
-            {nfcStatus}
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <EnrollmentAction
-              busy={busy}
-              icon={Nfc}
-              label="Tap card"
-              onClick={startNfc}
-            />
-            <EnrollmentAction
-              busy={busy}
-              icon={CreditCard}
-              label="Demo card"
-              onClick={() =>
-                finish({
-                  last4: "4242",
-                  enrollment: "tokenized-demo-card",
-                })
-              }
-            />
-          </div>
-        </div>
-      )}
-
-      {mode === "face" && (
-        <FaceCapture
-          mode="enroll"
-          userId={userId}
-          onCancel={onClose}
-          onEnrolled={(metadata) => finish(metadata)}
-          onVerified={() => undefined}
-        />
-      )}
-
-      {mode === "palm" && (
-        <PalmScanner
-          actionLabel="Enroll palm"
-          mode="enroll"
-          onComplete={(metadata) => finish(metadata)}
-        />
-      )}
-
-      {error && (
-        <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-          {error}
-        </div>
-      )}
-    </DialogFrame>
+          type="button"
+        >
+          Hoàn tất thiết lập
+          <ArrowRight size={17} aria-hidden />
+        </button>
+      </ActionRow>
+    </Panel>
   );
 }
 
-function EnrollmentAction({
+function PhoneMock({
+  balance,
+  onOpen,
+  opened,
+}: {
+  balance: number;
+  onOpen: () => void;
+  opened: boolean;
+}) {
+  return (
+    <div className="rounded-[28px] border-4 border-slate-900 bg-slate-950 p-3 shadow-sm">
+      <div className="rounded-[20px] bg-slate-50 p-4">
+        <div className="mb-5 flex items-center justify-between">
+          <span className="text-sm font-semibold">DemoBank</span>
+          <Smartphone size={17} aria-hidden />
+        </div>
+        <p className="text-xs text-slate-500">Số dư thử nghiệm</p>
+        <p className="mt-1 text-2xl font-semibold">{formatVnd(balance)}</p>
+        <button
+          className="mt-8 inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-sky-700 px-3 text-sm font-semibold text-white disabled:bg-sky-200"
+          disabled={opened}
+          onClick={onOpen}
+          type="button"
+        >
+          <QrCode size={16} aria-hidden />
+          {opened ? "Đã mở ứng dụng" : "Mở ứng dụng"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function BiometricMock({
+  group,
+  samples,
+}: {
+  group: StudyGroup;
+  samples: number;
+}) {
+  const face = group === "FACE_POS";
+  return (
+    <div className="flex aspect-video items-center justify-center rounded-lg border border-slate-200 bg-slate-900 text-white">
+      <div className="text-center">
+        {face ? (
+          <Camera className="mx-auto mb-4 text-violet-200" size={58} aria-hidden />
+        ) : (
+          <Hand className="mx-auto mb-4 text-amber-200" size={58} aria-hidden />
+        )}
+        <p className="text-sm font-semibold">
+          {face ? "Camera POS" : "PalmPay scanner"}
+        </p>
+        <p className="mt-1 text-xs text-slate-300">{samples}/3 mẫu đã ghi</p>
+      </div>
+    </div>
+  );
+}
+
+function ProductScreen({ onContinue }: { onContinue: () => void }) {
+  return (
+    <Panel eyebrow="Mua hàng" icon={WalletCards} title="Nhiệm vụ chung">
+      <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
+        <article className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+          <div className="relative aspect-[4/3] bg-slate-100">
+            <Image
+              alt="Ly nước trong phiên mua hàng mô phỏng"
+              className="object-cover"
+              fill
+              sizes="(min-width: 1024px) 320px, 92vw"
+              src={product.image}
+            />
+          </div>
+          <div className="p-4">
+            <h2 className="text-lg font-semibold">{product.name}</h2>
+            <p className="mt-1 text-sm text-slate-500">Số lượng: 1</p>
+            <p className="mt-3 text-2xl font-semibold">{formatVnd(product.price)}</p>
+          </div>
+        </article>
+        <div className="rounded-lg border border-slate-200 bg-white p-4">
+          <h3 className="font-semibold">Kịch bản</h3>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            Bạn có 100.000 đồng trong tài khoản thử nghiệm. Hãy mua một ly
+            nước trị giá 35.000 đồng tại điểm bán mô phỏng bằng phương thức
+            thanh toán được hệ thống chỉ định.
+          </p>
+          <div className="mt-4 grid gap-2 text-sm">
+            <Row label="Số dư ban đầu" value={formatVnd(startingBalance)} />
+            <Row label="Tổng tiền" value={formatVnd(product.price)} />
+            <Row
+              label="Số dư sau thanh toán"
+              value={formatVnd(startingBalance - product.price)}
+            />
+          </div>
+        </div>
+      </div>
+      <ActionRow>
+        <button
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-teal-700 px-4 text-sm font-semibold text-white transition hover:bg-teal-800"
+          onClick={onContinue}
+          type="button"
+        >
+          Chọn sản phẩm
+          <ArrowRight size={17} aria-hidden />
+        </button>
+      </ActionRow>
+    </Panel>
+  );
+}
+
+function CheckoutScreen({
+  group,
+  onPay,
+}: {
+  group: StudyGroup;
+  onPay: () => void;
+}) {
+  const copy = groupCopy[group];
+  const Icon = copy.icon;
+  return (
+    <Panel eyebrow="Xác nhận đơn hàng" icon={ReceiptText} title="Giỏ hàng">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="rounded-lg border border-slate-200 bg-white p-4">
+          <Row label="Sản phẩm" value={product.name} />
+          <Row label="Số lượng" value="1" />
+          <Row label="Tổng tiền" value={formatVnd(product.price)} strong />
+        </div>
+        <div className={cn("rounded-lg border p-4", copy.color)}>
+          <div className="mb-3 flex items-center gap-3">
+            <Icon size={22} aria-hidden />
+            <div>
+              <p className="text-sm font-semibold">{copy.label}</p>
+              <p className="text-xs opacity-75">{copy.device}</p>
+            </div>
+          </div>
+          <p className="text-sm leading-6 opacity-85">
+            POS sẽ chuyển thẳng sang phương thức đã được phân nhóm.
+          </p>
+        </div>
+      </div>
+      <ActionRow>
+        <button
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-teal-700 px-4 text-sm font-semibold text-white transition hover:bg-teal-800"
+          onClick={onPay}
+          type="button"
+        >
+          Thanh toán
+          <ArrowRight size={17} aria-hidden />
+        </button>
+      </ActionRow>
+    </Panel>
+  );
+}
+
+function PaymentScreen({
+  group,
+  onComplete,
+  onFailure,
+  onLog,
+  onRetry,
+  pin,
+  retries,
+  transactionId,
+}: {
+  group: StudyGroup;
+  onComplete: (metadata?: Record<string, unknown>) => void;
+  onFailure: () => void;
+  onLog: (eventName: string, screenName: StepKey, metadata?: Record<string, unknown>) => void;
+  onRetry: (errorCode: string) => void;
+  pin: string;
+  retries: number;
+  transactionId: string;
+}) {
+  const [qrStep, setQrStep] = useState<"start" | "scanned" | "confirmed">("start");
+  const [amount, setAmount] = useState("");
+  const [pinAttempt, setPinAttempt] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const finish = (metadata: Record<string, unknown>) => {
+    setBusy(true);
+    window.setTimeout(() => onComplete(metadata), 600);
+  };
+
+  return (
+    <Panel eyebrow="Thanh toán tại POS" icon={groupCopy[group].icon} title={groupCopy[group].label}>
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="rounded-lg border border-slate-200 bg-white p-4">
+          {group === "QR_PIN" && (
+            <div className="space-y-4">
+              <div className="flex justify-center rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <QRCodeSVG
+                  level="M"
+                  size={210}
+                  value={JSON.stringify({
+                    merchant: "PalmPay Lab Store",
+                    transaction_id: transactionId,
+                    amount: product.price,
+                  })}
+                />
+              </div>
+              <div className="grid gap-2 sm:grid-cols-3">
+                <button
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-sky-700 px-3 text-sm font-semibold text-white disabled:bg-slate-300"
+                  disabled={qrStep !== "start"}
+                  onClick={() => {
+                    setQrStep("scanned");
+                    onLog("qr_scanned", "payment", { transaction_id: transactionId });
+                  }}
+                  type="button"
+                >
+                  <QrCode size={16} aria-hidden />
+                  Quét QR
+                </button>
+                <input
+                  className="h-10 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                  inputMode="numeric"
+                  onChange={(event) =>
+                    setAmount(event.target.value.replace(/\D/g, "").slice(0, 6))
+                  }
+                  placeholder="35000"
+                  value={amount}
+                />
+                <input
+                  className="h-10 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                  inputMode="numeric"
+                  maxLength={4}
+                  onChange={(event) =>
+                    setPinAttempt(event.target.value.replace(/\D/g, "").slice(0, 4))
+                  }
+                  placeholder="PIN"
+                  type="password"
+                  value={pinAttempt}
+                />
+              </div>
+              <button
+                className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-teal-700 px-4 text-sm font-semibold text-white transition hover:bg-teal-800 disabled:bg-slate-300"
+                disabled={busy || qrStep === "start"}
+                onClick={() => {
+                  onLog("amount_submitted", "payment", {
+                    amount_entered: Number(amount),
+                    expected_amount: product.price,
+                  });
+                  if (Number(amount) !== product.price) {
+                    onRetry("wrong_amount");
+                    return;
+                  }
+                  if (pinAttempt !== pin) {
+                    onRetry("pin_failed");
+                    return;
+                  }
+                  setQrStep("confirmed");
+                  finish({ channel: "qr_pin", amount_entered: Number(amount), pin_ok: true });
+                }}
+                type="button"
+              >
+                {busy ? <Loader2 className="animate-spin" size={17} /> : <BadgeCheck size={17} />}
+                Xác nhận
+              </button>
+            </div>
+          )}
+
+          {group === "NFC_CARD" && (
+            <TapPayment
+              busy={busy}
+              icon={Nfc}
+              label="Vui lòng chạm thẻ"
+              onComplete={() => finish({ channel: "nfc_card", card_ref: "CARD-POS-042" })}
+              onLog={() => onLog("nfc_tapped", "payment", { card_ref: "CARD-POS-042" })}
+            />
+          )}
+
+          {group === "FACE_POS" && (
+            <TapPayment
+              busy={busy}
+              icon={ScanFace}
+              label="Vui lòng nhìn vào camera"
+              onComplete={() =>
+                finish({ channel: "face_pos", match_score: 0.93, threshold: 0.82 })
+              }
+              onLog={() => onLog("face_match_success", "payment", { threshold: 0.82 })}
+            />
+          )}
+
+          {group === "PALM_VEIN" && (
+            <TapPayment
+              busy={busy}
+              icon={Hand}
+              label="Vui lòng đặt lòng bàn tay"
+              onComplete={() =>
+                finish({ channel: "palm_vein", match_score: 0.96, threshold: 0.86 })
+              }
+              onLog={() => onLog("palm_match_success", "payment", { threshold: 0.86 })}
+            />
+          )}
+        </div>
+
+        <RetryPanel
+          group={group}
+          onFailure={onFailure}
+          onRetry={onRetry}
+          retries={retries}
+        />
+      </div>
+      {qrStep === "confirmed" && (
+        <p className="mt-4 text-sm font-medium text-teal-700">DemoBank đã gửi trạng thái thành công về máy chủ.</p>
+      )}
+    </Panel>
+  );
+}
+
+function TapPayment({
   busy,
   icon: Icon,
   label,
-  onClick,
+  onComplete,
+  onLog,
 }: {
   busy: boolean;
-  icon: typeof QrCode;
+  icon: typeof Nfc;
   label: string;
-  onClick: () => void;
+  onComplete: () => void;
+  onLog: () => void;
 }) {
-  return (
-    <button
-      className={cn(
-        "inline-flex h-11 items-center justify-center gap-2 rounded-lg px-3 text-sm font-semibold transition",
-        primaryButtonClass,
-      )}
-      disabled={busy}
-      onClick={onClick}
-      type="button"
-    >
-      {busy ? <Loader2 className="animate-spin" size={16} /> : <Icon size={16} />}
-      {label}
-    </button>
-  );
-}
-
-function PaymentDialog({
-  method,
-  userId,
-  totalCents,
-  cartLines,
-  onClose,
-  onAuthorized,
-}: {
-  method: PaymentMethod;
-  userId: string;
-  totalCents: number;
-  cartLines: CartLine[];
-  onClose: () => void;
-  onAuthorized: (trace: Record<string, unknown>) => Promise<void>;
-}) {
-  const copy = methodCopy[method.type];
-  const Icon = copy.icon;
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-
-  const authorize = async (trace: Record<string, unknown>) => {
-    setBusy(true);
-    setError("");
-    try {
-      await onAuthorized({
-        ...trace,
-        methodType: method.type,
-        authorizedAt: new Date().toISOString(),
-      });
-    } catch (authorizeError) {
-      setError(
-        authorizeError instanceof Error
-          ? authorizeError.message
-          : "Payment failed",
-      );
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <DialogFrame onClose={busy ? undefined : onClose}>
-      <div className="mb-4 flex items-center gap-3">
-        <div
-          className={cn(
-            "flex h-11 w-11 items-center justify-center rounded-lg",
-            primaryIconClass,
-          )}
-        >
-          <Icon size={21} aria-hidden />
-        </div>
-        <div>
-          <h2 className="text-lg font-semibold">{copy.label}</h2>
-          <p className="text-sm text-neutral-500">{formatVnd(totalCents)}</p>
-        </div>
-      </div>
-
-      {method.type === "qr" && (
-        <QrPayment
-          busy={busy}
-          cartLines={cartLines}
-          totalCents={totalCents}
-          onAuthorize={authorize}
-        />
-      )}
-
-      {method.type === "nfc" && (
-        <NfcPayment busy={busy} onAuthorize={authorize} />
-      )}
-
-      {method.type === "face" && (
-        <FaceCapture
-          mode="verify"
-          userId={userId}
-          onCancel={onClose}
-          onEnrolled={() => undefined}
-          onVerified={(trace) => authorize(trace)}
-        />
-      )}
-
-      {method.type === "palm" && (
-        <PalmScanner
-          actionLabel="Scan palm"
-          mode="verify"
-          onComplete={(trace) => authorize(trace)}
-        />
-      )}
-
-      {busy && (
-        <div className="mt-3 inline-flex items-center gap-2 text-sm text-neutral-500">
-          <Loader2 className="animate-spin" size={15} />
-          Finalizing
-        </div>
-      )}
-
-      {error && (
-        <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-          {error}
-        </div>
-      )}
-    </DialogFrame>
-  );
-}
-
-function QrPayment({
-  busy,
-  totalCents,
-  cartLines,
-  onAuthorize,
-}: {
-  busy: boolean;
-  totalCents: number;
-  cartLines: CartLine[];
-  onAuthorize: (trace: Record<string, unknown>) => void;
-}) {
-  const [nonce] = useState(() => crypto.randomUUID());
-  const value = JSON.stringify({
-    type: "palmpay.checkout",
-    merchant: "PalmPay Store",
-    currency: "VND",
-    totalCents,
-    items: cartLines,
-    nonce,
-  });
-
   return (
     <div className="space-y-4">
-      <div className="flex justify-center rounded-lg border border-neutral-200 bg-white p-4">
-        <QRCodeSVG value={value} size={220} level="M" />
+      <div className="flex min-h-64 items-center justify-center rounded-lg border border-slate-200 bg-slate-50">
+        <div className="text-center">
+          <Icon className="mx-auto mb-4 text-teal-700" size={60} aria-hidden />
+          <p className="text-lg font-semibold">{label}</p>
+          <p className="mt-1 text-sm text-slate-500">{formatVnd(product.price)}</p>
+        </div>
       </div>
       <button
-        className={cn(
-          "inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition",
-          primaryButtonClass,
-        )}
+        className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-teal-700 px-4 text-sm font-semibold text-white transition hover:bg-teal-800 disabled:bg-slate-300"
         disabled={busy}
-        onClick={() =>
-          onAuthorize({
-            channel: "qr",
-            nonce,
-            walletConfirmation: true,
-          })
-        }
+        onClick={() => {
+          onLog();
+          onComplete();
+        }}
         type="button"
       >
-        <Check size={17} aria-hidden />
-        Confirmed
+        {busy ? <Loader2 className="animate-spin" size={17} /> : <ScanLine size={17} aria-hidden />}
+        Mô phỏng xác nhận
       </button>
     </div>
   );
 }
 
-function NfcPayment({
-  busy,
-  onAuthorize,
+function RetryPanel({
+  group,
+  onFailure,
+  onRetry,
+  retries,
 }: {
-  busy: boolean;
-  onAuthorize: (trace: Record<string, unknown>) => void;
+  group: StudyGroup;
+  onFailure: () => void;
+  onRetry: (errorCode: string) => void;
+  retries: number;
 }) {
-  const [status, setStatus] = useState("Ready");
-
-  const scan = async () => {
-    const Reader = (window as NfcWindow).NDEFReader;
-    if (!Reader) {
-      setStatus("Use demo tap");
-      return;
-    }
-
-    setStatus("Waiting for tap");
-    try {
-      const reader = new Reader();
-      reader.addEventListener(
-        "reading",
-        (event) => {
-          onAuthorize({
-            channel: "web-nfc",
-            serialHint: event.serialNumber ?? "ndef-token",
-          });
-        },
-        { once: true },
-      );
-      reader.addEventListener(
-        "readingerror",
-        () => setStatus("Try again"),
-        { once: true },
-      );
-      await reader.scan();
-    } catch {
-      setStatus("NFC blocked");
-    }
+  const errors: Record<StudyGroup, Array<{ code: string; label: string }>> = {
+    QR_PIN: [
+      { code: "wrong_amount", label: "Nhập sai số tiền" },
+      { code: "pin_failed", label: "Nhập sai PIN" },
+    ],
+    NFC_CARD: [
+      { code: "nfc_read_error", label: "Lỗi đọc thẻ" },
+      { code: "wrong_card", label: "Thẻ không khớp phiên" },
+    ],
+    FACE_POS: [
+      { code: "no_face", label: "Không phát hiện khuôn mặt" },
+      { code: "multiple_faces", label: "Có nhiều khuôn mặt" },
+      { code: "low_quality", label: "Hình ảnh không đủ chất lượng" },
+      { code: "face_no_match", label: "Không khớp mẫu" },
+      { code: "camera_disconnected", label: "Camera mất kết nối" },
+    ],
+    PALM_VEIN: [
+      { code: "no_hand", label: "Không phát hiện bàn tay" },
+      { code: "bad_distance", label: "Khoảng cách không phù hợp" },
+      { code: "low_quality", label: "Mẫu không đủ chất lượng" },
+      { code: "palm_no_match", label: "Không khớp mẫu" },
+      { code: "scanner_disconnected", label: "Thiết bị mất kết nối" },
+    ],
   };
 
   return (
-    <div className="space-y-3">
-      <div className="flex min-h-40 items-center justify-center rounded-lg border border-neutral-200 bg-neutral-50">
-        <div className="text-center">
-          <Nfc className="mx-auto mb-3 text-amber-900" size={44} />
-          <p className="text-sm font-medium">{status}</p>
-        </div>
+    <aside className="rounded-lg border border-slate-200 bg-white p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <TimerReset size={18} aria-hidden />
+        <h3 className="font-semibold">Thử lại và lỗi</h3>
       </div>
-      <div className="grid grid-cols-2 gap-2">
-        <button
-          className={cn(
-            "inline-flex h-11 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition",
-            primaryButtonClass,
-          )}
-          disabled={busy}
-          onClick={scan}
-          type="button"
-        >
-          <ScanLine size={17} aria-hidden />
-          Tap
-        </button>
-        <button
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-neutral-200 bg-white px-4 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100 disabled:text-neutral-300"
-          disabled={busy}
-          onClick={() =>
-            onAuthorize({
-              channel: "nfc-demo",
-              cardToken: "tok_demo_4242",
-            })
-          }
-          type="button"
-        >
-          <CreditCard size={17} aria-hidden />
-          Demo
-        </button>
+      <p className="text-sm leading-6 text-slate-600">
+        Tối đa hai lần thử lại. Sau đó hệ thống ghi nhận lỗi kỹ thuật và mở
+        khảo sát sau trải nghiệm.
+      </p>
+      <div className="mt-3 space-y-2">
+        {errors[group].map((error) => (
+          <button
+            className="inline-flex h-10 w-full items-center justify-start gap-2 rounded-lg border border-slate-200 bg-white px-3 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:text-slate-300"
+            disabled={retries >= 2}
+            key={error.code}
+            onClick={() => onRetry(error.code)}
+            type="button"
+          >
+            <AlertTriangle size={15} aria-hidden />
+            {error.label}
+          </button>
+        ))}
       </div>
-    </div>
+      <div className="mt-4 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">
+        Số lần thử lại: <span className="font-semibold">{retries}/2</span>
+      </div>
+      <button
+        className="mt-3 inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:opacity-40"
+        disabled={retries < 2}
+        onClick={onFailure}
+        type="button"
+      >
+        Ghi nhận lỗi kỹ thuật
+      </button>
+    </aside>
   );
 }
 
-function FaceCapture({
-  mode,
-  userId,
-  onCancel,
-  onEnrolled,
-  onVerified,
+function SuccessScreen({
+  onContinue,
+  transaction,
 }: {
-  mode: "enroll" | "verify";
-  userId: string;
-  onCancel: () => void;
-  onEnrolled: (metadata: Record<string, unknown>) => void;
-  onVerified: (trace: Record<string, unknown>) => void;
+  onContinue: () => void;
+  transaction?: TransactionRecord | null;
 }) {
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const faceApiRef = useRef<FaceApi | null>(null);
-  const [ready, setReady] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState("Camera off");
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    return () => {
-      streamRef.current?.getTracks().forEach((track) => track.stop());
-    };
-  }, []);
-
-  const loadModels = async () => {
-    if (faceApiRef.current) {
-      return faceApiRef.current;
-    }
-
-    const faceapi = await import("@vladmandic/face-api");
-    await Promise.all([
-      faceapi.nets.tinyFaceDetector.loadFromUri("/models/face-api"),
-      faceapi.nets.faceLandmark68Net.loadFromUri("/models/face-api"),
-      faceapi.nets.faceRecognitionNet.loadFromUri("/models/face-api"),
-    ]);
-    faceApiRef.current = faceapi;
-    return faceapi;
-  };
-
-  const start = async () => {
-    setLoading(true);
-    setError("");
-    setStatus("Starting camera");
-
-    try {
-      await loadModels();
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: "user",
-          width: { ideal: 640 },
-          height: { ideal: 480 },
-        },
-        audio: false,
-      });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
-      setReady(true);
-      setStatus("Ready");
-    } catch {
-      setError("Camera unavailable");
-      setStatus("Camera off");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const capture = async () => {
-    const faceapi = faceApiRef.current;
-    const video = videoRef.current;
-    if (!faceapi || !video) return;
-
-    setLoading(true);
-    setError("");
-    setStatus("Matching");
-
-    try {
-      const result = await faceapi
-        .detectSingleFace(
-          video,
-          new faceapi.TinyFaceDetectorOptions({
-            inputSize: 224,
-            scoreThreshold: 0.5,
-          }),
-        )
-        .withFaceLandmarks()
-        .withFaceDescriptor();
-
-      if (!result) {
-        throw new Error("No face detected");
-      }
-
-      const descriptor = Array.from(result.descriptor);
-      const key = faceTemplateKey(userId);
-
-      if (mode === "enroll") {
-        localStorage.setItem(
-          key,
-          JSON.stringify({
-            descriptor,
-            createdAt: new Date().toISOString(),
-          }),
-        );
-        onEnrolled({
-          model: "@vladmandic/face-api",
-          template: "local-browser",
-          descriptorLength: descriptor.length,
-        });
-        return;
-      }
-
-      const stored = readFaceTemplate(userId);
-      if (!stored) {
-        throw new Error("Face is not enrolled on this browser");
-      }
-
-      const distance = euclideanDistance(stored.descriptor, descriptor);
-      if (distance > 0.62) {
-        throw new Error("Face did not match");
-      }
-
-      onVerified({
-        channel: "face-api",
-        distance: Number(distance.toFixed(4)),
-        threshold: 0.62,
-      });
-    } catch (captureError) {
-      setError(
-        captureError instanceof Error
-          ? captureError.message
-          : "Could not capture face",
-      );
-      setStatus("Ready");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
-    <div className="space-y-3">
-      <div className="relative overflow-hidden rounded-lg border border-neutral-200 bg-slate-900">
-        <video
-          className="aspect-video w-full object-cover"
-          muted
-          playsInline
-          ref={videoRef}
-        />
-        <div className="pointer-events-none absolute inset-0 border-[10px] border-white/10" />
-      </div>
-
-      <div className="flex items-center justify-between rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2">
-        <span className="text-sm text-neutral-600">{status}</span>
-        {loading && <Loader2 className="animate-spin text-neutral-500" size={16} />}
-      </div>
-
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-          {error}
+    <Panel eyebrow="Kết quả giao dịch" icon={CheckCircle2} title="Thanh toán thành công">
+      <div className="mx-auto max-w-lg rounded-lg border border-teal-200 bg-teal-50 p-6 text-center text-teal-950">
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-lg bg-white/80">
+          <CheckCircle2 size={32} aria-hidden />
         </div>
-      )}
-
-      <div className="grid grid-cols-2 gap-2">
+        <h2 className="text-2xl font-semibold">Thanh toán thành công</h2>
+        <div className="mt-5 space-y-2 text-sm">
+          <Row label="Ly nước" value={formatVnd(product.price)} />
+          <Row label="Số dư còn lại" value={formatVnd(startingBalance - product.price)} />
+          <Row label="Mã giao dịch" value={transaction?.transaction_id ?? "TX-XXXX"} />
+        </div>
+      </div>
+      <ActionRow>
         <button
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-neutral-200 bg-white px-4 text-sm font-semibold text-neutral-800 transition hover:bg-neutral-100"
-          onClick={onCancel}
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-teal-700 px-4 text-sm font-semibold text-white transition hover:bg-teal-800"
+          onClick={onContinue}
           type="button"
         >
-          <X size={17} aria-hidden />
-          Cancel
+          Tiếp tục khảo sát
+          <ArrowRight size={17} aria-hidden />
         </button>
-        {!ready ? (
-          <button
-            className={cn(
-              "inline-flex h-11 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition",
-              primaryButtonClass,
-            )}
-            disabled={loading}
-            onClick={start}
-            type="button"
-          >
-            {loading ? <Loader2 className="animate-spin" size={17} /> : <ScanFace size={17} />}
-            Start
-          </button>
-        ) : (
-          <button
-            className={cn(
-              "inline-flex h-11 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition",
-              primaryButtonClass,
-            )}
-            disabled={loading}
-            onClick={capture}
-            type="button"
-          >
-            {loading ? <Loader2 className="animate-spin" size={17} /> : <BadgeCheck size={17} />}
-            {mode === "enroll" ? "Save" : "Match"}
-          </button>
-        )}
-      </div>
-    </div>
+      </ActionRow>
+    </Panel>
   );
 }
 
-function PalmScanner({
-  actionLabel,
-  mode,
-  onComplete,
+function RankingScreen({
+  feedback,
+  onFeedback,
+  onRanking,
+  onSubmit,
+  participantId,
+  ranking,
 }: {
-  actionLabel: string;
-  mode: "enroll" | "verify";
-  onComplete: (metadata: Record<string, unknown>) => void;
+  feedback: ExperimentSession["open_feedback"];
+  onFeedback: (field: keyof ExperimentSession["open_feedback"], value: string) => void;
+  onRanking: (group: StudyGroup, rank: number) => void;
+  onSubmit: () => void;
+  participantId: string;
+  ranking: Partial<Record<StudyGroup, number>>;
 }) {
-  const [running, setRunning] = useState(false);
-  const [completed, setCompleted] = useState(false);
-  const [step, setStep] = useState(0);
-  const steps =
-    mode === "enroll"
-      ? ["Scanner ready", "Palm aligned", "Vein pattern captured", "Token saved"]
-      : ["Scanner ready", "Palm detected", "Vein pattern matched", "Token issued"];
+  const usedRanks = Object.values(ranking);
+  const rankingComplete =
+    groupOrder.every((group) => ranking[group]) &&
+    new Set(usedRanks).size === groupOrder.length;
+  const [wantsInterview, setWantsInterview] = useState(false);
+  const [contact, setContact] = useState("");
 
-  const start = () => {
-    setRunning(true);
-    setCompleted(false);
-    setStep(0);
+  const submit = () => {
+    if (wantsInterview && contact.trim()) {
+      const existing = readJson<Array<{ participant_id: string; contact: string }>>(
+        storageKeys.interviewContacts,
+        [],
+      );
+      writeJson(storageKeys.interviewContacts, [
+        ...existing,
+        { participant_id: participantId, contact: contact.trim() },
+      ]);
+    }
+    onSubmit();
   };
 
-  useEffect(() => {
-    if (!running) return;
-
-    if (step >= steps.length - 1) {
-      const timeout = window.setTimeout(() => {
-        setRunning(false);
-        setCompleted(true);
-        onComplete({
-          scanner: "PalmPay Scanner",
-          mode,
-          liveness: true,
-          template: mode === "enroll" ? "server-token" : undefined,
-        });
-      }, 650);
-      return () => window.clearTimeout(timeout);
-    }
-
-    const timeout = window.setTimeout(() => setStep((current) => current + 1), 650);
-    return () => window.clearTimeout(timeout);
-  }, [mode, onComplete, running, step, steps.length]);
-
   return (
-    <div className="space-y-4">
-      <div className="flex aspect-video items-center justify-center rounded-lg border border-neutral-200 bg-neutral-50">
-        <div className="relative flex h-32 w-32 items-center justify-center rounded-lg border border-neutral-300 bg-white">
-          <Hand size={64} strokeWidth={1.5} aria-hidden />
-          <div className="absolute inset-x-5 top-1/2 h-px bg-amber-500" />
-        </div>
-      </div>
-      <div className="grid gap-2">
-        {steps.map((item, index) => {
-          const isDone = index < step || (completed && index === steps.length - 1);
-          const isActive = index <= step && running;
-
+    <Panel eyebrow="Xếp hạng và phỏng vấn" icon={ClipboardCheck} title="So sánh trung lập">
+      <div className="grid gap-3 lg:grid-cols-2">
+        {groupOrder.map((group) => {
+          const copy = groupCopy[group];
+          const Icon = copy.icon;
           return (
-            <div
-              className={cn(
-                "flex h-9 items-center gap-2 rounded-lg border px-3 text-sm",
-                isActive
-                  ? primarySoftClass
-                  : "border-neutral-200 bg-white text-neutral-500",
-              )}
-              key={item}
-            >
-              {isDone ? (
-                <Check size={15} aria-hidden />
-              ) : (
-                <ScanLine size={15} aria-hidden />
-              )}
-              {item}
-            </div>
+            <article className="rounded-lg border border-slate-200 bg-white p-4" key={group}>
+              <div className="mb-3 flex items-start gap-3">
+                <div className={cn("flex h-10 w-10 items-center justify-center rounded-lg border", copy.color)}>
+                  <Icon size={18} aria-hidden />
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold">{copy.label}</h3>
+                  <p className="mt-1 text-sm leading-6 text-slate-600">
+                    {copy.neutralDescription}
+                  </p>
+                </div>
+              </div>
+              <label className="relative block">
+                <select
+                  className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-slate-50 px-3 pr-9 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                  onChange={(event) => onRanking(group, Number(event.target.value))}
+                  value={ranking[group] ?? ""}
+                >
+                  <option value="" disabled>
+                    Xếp hạng
+                  </option>
+                  {[1, 2, 3, 4].map((rank) => (
+                    <option
+                      disabled={usedRanks.includes(rank) && ranking[group] !== rank}
+                      key={rank}
+                      value={rank}
+                    >
+                      Hạng {rank}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown
+                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
+                  size={16}
+                  aria-hidden
+                />
+              </label>
+            </article>
           );
         })}
       </div>
-      <button
-        className={cn(
-          "inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition",
-          primaryButtonClass,
+
+      <div className="mt-4 grid gap-3">
+        <TextArea
+          label="Điểm bạn thích nhất"
+          onChange={(value) => onFeedback("liked_most", value)}
+          value={feedback.liked_most}
+        />
+        <TextArea
+          label="Lo ngại lớn nhất"
+          onChange={(value) => onFeedback("biggest_concern", value)}
+          value={feedback.biggest_concern}
+        />
+        <TextArea
+          label="Bối cảnh bạn sẵn sàng sử dụng"
+          onChange={(value) => onFeedback("use_context", value)}
+          value={feedback.use_context}
+        />
+      </div>
+
+      <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
+        <label className="flex items-start gap-3 text-sm text-slate-700">
+          <input
+            checked={wantsInterview}
+            className="mt-1 h-4 w-4"
+            onChange={(event) => setWantsInterview(event.target.checked)}
+            type="checkbox"
+          />
+          <span>Tôi đồng ý để nhóm nghiên cứu liên hệ phỏng vấn sau.</span>
+        </label>
+        {wantsInterview && (
+          <input
+            className="mt-3 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+            onChange={(event) => setContact(event.target.value)}
+            placeholder="Email hoặc số điện thoại"
+            value={contact}
+          />
         )}
-        disabled={running}
-        onClick={start}
-        type="button"
-      >
-        {running ? <Loader2 className="animate-spin" size={17} /> : <Hand size={17} />}
-        {actionLabel}
-      </button>
-    </div>
+      </div>
+
+      <ActionRow>
+        <button
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-teal-700 px-4 text-sm font-semibold text-white transition hover:bg-teal-800 disabled:bg-slate-300"
+          disabled={!rankingComplete}
+          onClick={submit}
+          type="button"
+        >
+          Hoàn tất
+          <ArrowRight size={17} aria-hidden />
+        </button>
+      </ActionRow>
+    </Panel>
   );
 }
 
-function DialogFrame({
-  children,
-  onClose,
+function DebriefScreen({
+  onExport,
+  onExportEvents,
+  onNew,
+  session,
 }: {
-  children: React.ReactNode;
-  onClose?: () => void;
+  onExport: () => void;
+  onExportEvents: () => void;
+  onNew: () => void;
+  session: ExperimentSession;
 }) {
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-stone-950/30 px-4 py-6">
-      <section className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-lg border border-neutral-200 bg-white p-5 shadow-xl">
-        <div className="mb-2 flex justify-end">
-          {onClose && (
-            <button
-              aria-label="Close"
-              className="flex h-9 w-9 items-center justify-center rounded-lg text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-950"
-              onClick={onClose}
-              type="button"
-            >
-              <X size={17} aria-hidden />
-            </button>
-          )}
+    <Panel eyebrow="Kết thúc phiên" icon={CheckCircle2} title="Giải thích cuối thí nghiệm">
+      <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-600">
+        <p>
+          Phiên này so sánh trải nghiệm thanh toán tại điểm bán giữa QR + PIN,
+          thẻ NFC, nhận diện khuôn mặt tại POS và PalmPay tĩnh mạch lòng bàn
+          tay. Trọng tâm là cảm nhận về sự đơn giản, thuận tiện, hữu ích, bảo
+          mật, quyền riêng tư, niềm tin và ý định sử dụng.
+        </p>
+        {(session.assigned_group === "FACE_POS" ||
+          session.assigned_group === "PALM_VEIN") && (
+          <p className="mt-3 font-medium text-teal-700">
+            Mẫu sinh trắc học của phiên đã được xóa lúc{" "}
+            {session.template_deleted_at ?? "kết thúc phiên"}.
+          </p>
+        )}
+      </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <button
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+          onClick={onExport}
+          type="button"
+        >
+          <Download size={17} aria-hidden />
+          CSV dạng rộng
+        </button>
+        <button
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+          onClick={onExportEvents}
+          type="button"
+        >
+          <ReceiptText size={17} aria-hidden />
+          CSV nhật ký
+        </button>
+        <button
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-teal-700 px-4 text-sm font-semibold text-white transition hover:bg-teal-800"
+          onClick={onNew}
+          type="button"
+        >
+          <UserPlus size={17} aria-hidden />
+          Phiên mới
+        </button>
+      </div>
+    </Panel>
+  );
+}
+
+function Panel({
+  children,
+  eyebrow,
+  icon: Icon,
+  title,
+}: {
+  children: React.ReactNode;
+  eyebrow: string;
+  icon: typeof QrCode;
+  title: string;
+}) {
+  return (
+    <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="mb-5 flex items-start gap-3">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-teal-700 text-white">
+          <Icon size={21} aria-hidden />
         </div>
-        {children}
-      </section>
+        <div>
+          <p className="text-sm font-medium text-teal-700">{eyebrow}</p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-normal">{title}</h1>
+        </div>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function ActionRow({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="mt-5 flex justify-end border-t border-slate-200 pt-4">
+      {children}
     </div>
   );
 }
 
-function faceTemplateKey(userId: string) {
-  return `palmpay.face-template.${userId}`;
+function Row({
+  label,
+  strong,
+  value,
+}: {
+  label: string;
+  strong?: boolean;
+  value: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 border-b border-slate-100 py-2 last:border-0">
+      <span className="text-sm text-slate-500">{label}</span>
+      <span className={cn("text-right text-sm", strong ? "font-semibold text-slate-950" : "font-medium text-slate-700")}>
+        {value}
+      </span>
+    </div>
+  );
 }
 
-function readFaceTemplate(userId: string) {
-  const stored = localStorage.getItem(faceTemplateKey(userId));
-  if (!stored) return null;
-
-  try {
-    const parsed = JSON.parse(stored) as { descriptor?: unknown };
-    if (
-      Array.isArray(parsed.descriptor) &&
-      parsed.descriptor.every((value) => typeof value === "number")
-    ) {
-      return { descriptor: parsed.descriptor };
-    }
-  } catch {
-    return null;
-  }
-
-  return null;
-}
-
-function euclideanDistance(a: number[], b: number[]) {
-  if (a.length !== b.length) return Number.POSITIVE_INFINITY;
-
-  const sum = a.reduce((total, value, index) => {
-    const diff = value - b[index];
-    return total + diff * diff;
-  }, 0);
-
-  return Math.sqrt(sum);
+function TextArea({
+  label,
+  onChange,
+  value,
+}: {
+  label: string;
+  onChange: (value: string) => void;
+  value: string;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-sm font-medium text-slate-700">{label}</span>
+      <textarea
+        className="min-h-24 w-full resize-y rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+        onChange={(event) => onChange(event.target.value)}
+        value={value}
+      />
+    </label>
+  );
 }
