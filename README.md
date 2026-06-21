@@ -60,17 +60,29 @@ The production bridge flow is automated:
 On the Mac connected to the USB reader:
 
 ```bash
-nvm use 20
-npm install nfc-pcsc --save-optional
-PALMPAY_NFC_BRIDGE_TOKEN=local-reader-token npm run nfc:bridge
+brew install node@20
+cd "/Users/tadyuh/Documents/Coding Projects/ueh/research/palmpay/demo-experiment"
+PATH="/opt/homebrew/opt/node@20/bin:$PATH" npm install --no-save nfc-pcsc
+PATH="/opt/homebrew/opt/node@20/bin:$PATH" \
+  PALMPAY_NFC_BRIDGE_TOKEN=local-reader-token \
+  npm run nfc:bridge
 ```
 
-Run the web app with the same token:
+Run the web app with the same token in another terminal:
 
 ```bash
-nvm use 20
 PALMPAY_NFC_BRIDGE_TOKEN=local-reader-token npm run dev -- -p 7999
 ```
+
+To run the bridge as a background macOS launchd job for the reader station:
+
+```bash
+launchctl remove com.palmpay.nfc-bridge 2>/dev/null || true
+launchctl submit -l com.palmpay.nfc-bridge -- /bin/zsh -lc \
+  'cd "/Users/tadyuh/Documents/Coding Projects/ueh/research/palmpay/demo-experiment" && PALMPAY_APP_URL=http://localhost:7999 PALMPAY_NFC_BRIDGE_TOKEN=local-reader-token exec /opt/homebrew/opt/node@20/bin/node scripts/nfc-bridge.mjs >> /tmp/palmpay-nfc-bridge.log 2>&1'
+```
+
+Check the service with `launchctl list | grep palmpay` and `tail -f /tmp/palmpay-nfc-bridge.log`.
 
 For a real card UID mapping, set:
 
