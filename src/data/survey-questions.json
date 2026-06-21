@@ -1,0 +1,150 @@
+{
+  "pre": [
+    {
+      "item_id": "DIG1",
+      "construct": "DIGITAL_PAYMENT_USE",
+      "text": "Tôi thường xuyên sử dụng các phương thức thanh toán số.",
+      "scale_min": 1,
+      "scale_max": 5,
+      "reverse_scored": false,
+      "required": true
+    },
+    {
+      "item_id": "FAM_QR1",
+      "construct": "FAMILIARITY_QR",
+      "text": "Tôi quen thuộc với thanh toán bằng mã QR.",
+      "scale_min": 1,
+      "scale_max": 5,
+      "reverse_scored": false,
+      "required": true
+    },
+    {
+      "item_id": "FAM_NFC1",
+      "construct": "FAMILIARITY_NFC",
+      "text": "Tôi quen thuộc với thanh toán không tiếp xúc bằng thẻ NFC.",
+      "scale_min": 1,
+      "scale_max": 5,
+      "reverse_scored": false,
+      "required": true
+    },
+    {
+      "item_id": "FAM_FACE1",
+      "construct": "FAMILIARITY_FACE_POS",
+      "text": "Tôi quen thuộc với nhận diện khuôn mặt tại điểm bán.",
+      "scale_min": 1,
+      "scale_max": 5,
+      "reverse_scored": false,
+      "required": true
+    },
+    {
+      "item_id": "PRV0",
+      "construct": "INITIAL_PRIVACY_CONCERN",
+      "text": "Tôi lo ngại về việc dữ liệu cá nhân bị sử dụng sai mục đích trong thanh toán số.",
+      "scale_min": 1,
+      "scale_max": 5,
+      "reverse_scored": false,
+      "required": true
+    },
+    {
+      "item_id": "INN0",
+      "construct": "TECH_READINESS",
+      "text": "Tôi sẵn sàng thử các công nghệ thanh toán mới trong môi trường thử nghiệm.",
+      "scale_min": 1,
+      "scale_max": 5,
+      "reverse_scored": false,
+      "required": true
+    },
+    {
+      "item_id": "AGE_GROUP",
+      "construct": "DEMOGRAPHIC",
+      "text": "Nhóm tuổi",
+      "type": "select",
+      "options": ["18-20", "21-23", "24-26", "Trên 26"],
+      "reverse_scored": false,
+      "required": true
+    },
+    {
+      "item_id": "PRIOR_BIO",
+      "construct": "PRIOR_EXPERIENCE",
+      "text": "Bạn đã từng dùng sinh trắc học để đăng nhập hoặc thanh toán chưa?",
+      "type": "select",
+      "options": ["Chưa từng", "Đã từng đăng nhập", "Đã từng thanh toán"],
+      "reverse_scored": false,
+      "required": true
+    }
+  ],
+  "post": [
+    {
+      "item_id": "SIM1",
+      "construct": "SIMPLICITY",
+      "text": "Phương thức thanh toán vừa trải nghiệm dễ thực hiện.",
+      "scale_min": 1,
+      "scale_max": 5,
+      "reverse_scored": false,
+      "required": true
+    },
+    {
+      "item_id": "CON1",
+      "construct": "CONVENIENCE",
+      "text": "Phương thức thanh toán vừa trải nghiệm giúp tôi thanh toán nhanh chóng.",
+      "scale_min": 1,
+      "scale_max": 5,
+      "reverse_scored": false,
+      "required": true
+    },
+    {
+      "item_id": "USE1",
+      "construct": "PERCEIVED_USEFULNESS",
+      "text": "Phương thức thanh toán vừa trải nghiệm hữu ích trong tình huống mua hàng tại điểm bán.",
+      "scale_min": 1,
+      "scale_max": 5,
+      "reverse_scored": false,
+      "required": true
+    },
+    {
+      "item_id": "SEC1",
+      "construct": "PERCEIVED_SECURITY",
+      "text": "Phương thức thanh toán vừa trải nghiệm tạo cảm giác giao dịch được bảo vệ.",
+      "scale_min": 1,
+      "scale_max": 5,
+      "reverse_scored": false,
+      "required": true
+    },
+    {
+      "item_id": "PRV1",
+      "construct": "PRIVACY_CONCERN",
+      "text": "Tôi lo ngại về dữ liệu cá nhân khi dùng phương thức thanh toán vừa trải nghiệm.",
+      "scale_min": 1,
+      "scale_max": 5,
+      "reverse_scored": false,
+      "required": true
+    },
+    {
+      "item_id": "TRU1",
+      "construct": "TRUST",
+      "text": "Tôi tin tưởng quy trình xử lý của phương thức thanh toán vừa trải nghiệm.",
+      "scale_min": 1,
+      "scale_max": 5,
+      "reverse_scored": false,
+      "required": true
+    },
+    {
+      "item_id": "INT1",
+      "construct": "FUTURE_INTENTION",
+      "text": "Tôi sẵn sàng sử dụng phương thức thanh toán vừa trải nghiệm trong tương lai.",
+      "scale_min": 1,
+      "scale_max": 5,
+      "reverse_scored": false,
+      "required": true
+    },
+    {
+      "item_id": "ERR1",
+      "construct": "RECOVERY_EASE",
+      "text": "Nếu có lỗi xảy ra, tôi cảm thấy quy trình thử lại của phương thức này dễ hiểu.",
+      "scale_min": 1,
+      "scale_max": 5,
+      "reverse_scored": false,
+      "required": true
+    }
+  ]
+}

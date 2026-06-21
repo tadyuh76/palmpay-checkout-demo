@@ -1,50 +1,52 @@
-# Sample User Journeys
+# Prototype User Journeys
 
-Use a different account for each participant so every person has exactly one assigned payment method.
+All participants follow the same controlled purchase task. They do not create an account, choose products, or choose a payment method.
 
-## Person 1: QR Code
+## Shared Flow
 
-1. Create or sign in as `qr.person@palmpay.local`.
-2. Search `latte`.
-3. Add `Signature Latte` and `Almond Croissant`.
-4. In `Payment`, choose `QR code`, then `Link wallet`.
-5. Tap `Checkout`, then `Pay now`.
-6. Scan the merchant QR step, then tap `Confirm paid`.
-7. Stop at the receipt.
+1. Research staff opens the admin screen and clicks `Tạo người tham gia mới`.
+2. Participant confirms consent.
+3. Participant completes the pre-survey.
+4. System reveals the randomized group assignment.
+5. Participant completes setup for the assigned method.
+6. Participant selects `Ly nước` priced at 35.000 VND.
+7. Participant confirms the cart and starts payment.
+8. Participant completes the assigned payment flow or reaches a technical failure after two retries.
+9. Participant completes the post-survey.
+10. Participant ranks all four methods and reaches the debrief.
 
-## Person 2: NFC Card
+## QR_PIN
 
-1. Create or sign in as `nfc.person@palmpay.local`.
-2. Search `cold brew`.
-3. Add `Coconut Cold Brew` and `Blueberry Muffin`.
-4. In `Payment`, choose `NFC card`.
-5. On Android Chrome with NFC, tap `Tap card`; on desktop, tap `Demo card`.
-6. Tap `Checkout`, then `Pay now`.
-7. Tap the card or use `Demo`, then stop at the receipt.
+1. Open the DemoBank phone mock.
+2. Create a four-digit test PIN.
+3. At POS payment, scan the QR code.
+4. Enter `35000`.
+5. Enter the test PIN.
+6. Confirm payment.
 
-## Person 3: Face Recognition
+## NFC_CARD
 
-1. Create or sign in as `face.person@palmpay.local`.
-2. Search `mocha`.
-3. Add `Dark Mocha` and `Tiramisu Cup`.
-4. In `Payment`, choose `Face recognition`.
-5. Allow camera access and complete enrollment.
-6. Tap `Checkout`, then `Pay now`.
-7. Complete the face match, then stop at the receipt.
+1. Link the physical NFC test card.
+2. At POS payment, tap the NFC test card on the reader.
+3. No PIN is requested for the 35.000 VND transaction.
 
-## Person 4: Palm Veins
+## FACE_POS
 
-1. Create or sign in as `palm.person@palmpay.local`.
-2. Search `phin`.
-3. Add `Vietnamese Phin Iced Coffee` and `Cinnamon Roll`.
-4. In `Payment`, choose `Palm veins`.
-5. Complete the palm scan enrollment.
-6. Tap `Checkout`, then `Pay now`.
-7. Complete the palm scan authorization, then stop at the receipt.
+1. Confirm biometric data consent for the session.
+2. Capture three face samples.
+3. At POS payment, look at the POS camera.
+4. Complete the simulated face match.
 
-## Capture
+## PALM_VEIN
 
-- Time from sign-in to receipt.
-- Whether the participant understands the next action without help.
-- Any hesitation at enrollment, checkout, authorization, or receipt.
-- Whether the participant trusts the assigned payment method enough to continue.
+1. Confirm biometric data consent for the session.
+2. Capture three palm samples.
+3. At POS payment, place the palm over the PalmPay scanner.
+4. Complete the simulated palm-vein match.
+
+## Capture Checks
+
+- Setup duration and checkout duration are stored separately.
+- Retry count and error type are logged.
+- Post-survey opens only after success or recorded technical failure.
+- Interview contact information is saved separately from survey responses.

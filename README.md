@@ -1,59 +1,53 @@
-# PalmPay Coffee Checkout
+# PalmPay POS Experiment
 
-Coffee shop checkout demo for PalmPay. Users sign in, add at least one payment method, search a coffee menu, build an order, and pay with QR code, NFC card, face recognition, or palm-vein scan.
+Prototype for a controlled point-of-sale payment experiment. A research staff member creates an anonymous participant session, the system runs consent and pre-survey screens, assigns one of four groups by randomized blocks, guides setup, runs the same 35.000 VND purchase, collects post-survey/ranking data, and exports analysis-ready CSV files.
+
+## Experiment Groups
+
+- `QR_PIN`: DemoBank QR payment with a four-digit test PIN.
+- `NFC_CARD`: Physical contactless NFC test card with a POS reader.
+- `FACE_POS`: Face recognition at the point of sale using a POS camera.
+- `PALM_VEIN`: PalmPay palm-vein recognition using a palm scanner.
+
+The NFC condition is intentionally a physical card, not a phone, so it does not overlap with the QR phone flow or phone-based biometric payment.
 
 ## Stack
 
 - Next.js + React + TypeScript
-- Better Auth with email/password and optional Google OAuth
-- Neon/Postgres via `pg` when `DATABASE_URL` is set
-- SQLite via `better-sqlite3` as the local fallback
-- `@vladmandic/face-api` for browser face enrollment and matching
-- `qrcode.react` for QR payment payloads
-- Web NFC `NDEFReader` when the browser/device supports it
-- Generated product images stored in `public/menu`
+- `qrcode.react` for the QR payment payload
+- Local browser storage for prototype persistence and CSV export
+- Survey questions in `src/data/survey-questions.json`
+- Existing drink imagery in `public/menu` reused as the fixed product visual
 
 ## Run
 
 ```bash
 npm install
-npm run setup
 npm run dev -- -p 7999
 ```
 
 Open `http://localhost:7999`.
 
-The email form is prefilled for local testing. Create the user once, then sign in with the same credentials. Use `USER_JOURNEYS.md` for one participant flow per payment method.
+## Protocol Shape
 
-## Environment
+1. Research staff creates an anonymous participant, for example `P0001`.
+2. Participant confirms academic study consent.
+3. Participant completes the pre-survey from JSON config.
+4. System assigns `QR_PIN`, `NFC_CARD`, `FACE_POS`, or `PALM_VEIN` by shuffled four-person blocks.
+5. Participant completes method setup; setup timing is stored separately from checkout timing.
+6. Participant buys one `Ly nước` for 35.000 VND from a 100.000 VND test balance.
+7. POS routes directly to the assigned payment method.
+8. Success screen is identical for all groups.
+9. Participant completes post-survey, ranks the four methods, and reaches the debrief.
+10. Biometric template references are deleted at session end for face and palm groups.
 
-Copy `.env.example` to `.env.local` if you want to override defaults.
+## Data
 
-Set `DATABASE_URL` to a Neon connection string to use hosted Postgres:
+The prototype records:
 
-```text
-DATABASE_URL=postgresql://user:password@host/db?sslmode=require
-```
+- Participant-level fields: `participant_id`, `assigned_group`, consent/survey timestamps, `protocol_version`, and status.
+- Transaction fields: amount, balance before/after, setup duration, checkout duration, retry/error counts, assistance flag, and status.
+- Event logs: screen, timestamp, participant, transaction, event name, and metadata.
+- Raw survey item responses, including `reverse_scored` metadata in the question config.
 
-Then run:
-
-```bash
-npm run setup
-```
-
-If `DATABASE_URL` is not set, the app uses local SQLite at `PALMPAY_DB_PATH`.
-
-Google sign-in is optional. Set `NEXT_PUBLIC_GOOGLE_AUTH_ENABLED=true`, `GOOGLE_CLIENT_ID`, and `GOOGLE_CLIENT_SECRET`, then add this callback URL in Google Cloud:
-
-```text
-http://localhost:7999/api/auth/callback/google
-```
-
-On Vercel, set `BETTER_AUTH_URL` to the production URL and set `DATABASE_URL` to the Neon connection string so accounts, payment methods, and orders persist. Without `DATABASE_URL`, Vercel falls back to temporary SQLite in `/tmp`, which is only useful for short demo sessions.
-
-## Payment Notes
-
-- QR: displays a merchant checkout QR and records wallet confirmation.
-- NFC: uses Web NFC on supported Android Chromium browsers over a secure context; desktop browsers can use the demo tap fallback.
-- Face: stores the face descriptor in local browser storage and stores only method metadata on the server.
-- Palm: models a scanner/API payment token. The existing Flask palm-vein service can later replace this simulator behind the same UI step.
+Use the admin home or final debrief buttons to export `palmpay-wide.csv` and `palmpay-events.csv`.
