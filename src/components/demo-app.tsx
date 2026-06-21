@@ -164,7 +164,7 @@ const groupCopy: Record<
     instruction:
       "Mở DemoBank, quét mã QR của POS, nhập đúng số tiền và xác nhận bằng mã PIN thử nghiệm.",
     icon: QrCode,
-    color: "bg-[#f5eee7] text-[#5a341f] border-[#d9bfa8]",
+    color: "bg-[#ede8df] text-[#3f342c] border-[#beb09f]",
   },
   NFC_CARD: {
     label: "Thẻ không tiếp xúc NFC",
@@ -186,7 +186,7 @@ const groupCopy: Record<
     instruction:
       "Nhìn vào camera tại POS cho đến khi hệ thống xác nhận đúng một khuôn mặt và đối chiếu thành công.",
     icon: ScanFace,
-    color: "bg-[#f3e8e1] text-[#70412d] border-[#d8b5a5]",
+    color: "bg-[#f8e2d9] text-[#8a432f] border-[#dfa493]",
   },
   PALM_VEIN: {
     label: "Nhận diện tĩnh mạch lòng bàn tay PalmPay",
@@ -1268,7 +1268,7 @@ function ConsentScreen({ onContinue }: { onContinue: () => void }) {
       <label className="mt-5 flex items-start gap-3 rounded-lg border border-[#ead8bf] bg-white p-3 text-sm text-stone-700">
         <input
           checked={checked}
-          className="mt-1 h-4 w-4"
+          className="mt-0.5 h-4 w-4 shrink-0 accent-[#6f3f24]"
           onChange={(event) => setChecked(event.target.checked)}
           type="checkbox"
         />
@@ -1308,7 +1308,9 @@ function SurveyScreen({
   title: string;
 }) {
   const complete = questions.every(
-    (question) => !question.required || answers[question.item_id] !== undefined,
+    (question) =>
+      !question.required ||
+      (answers[question.item_id] !== undefined && answers[question.item_id] !== ""),
   );
   return (
     <Panel eyebrow={eyebrow} icon={ClipboardCheck} title={title}>
@@ -1326,27 +1328,17 @@ function SurveyScreen({
               </div>
             </div>
             {question.type === "select" ? (
-              <label className="relative block max-w-sm">
-                <select
-                  className="h-11 w-full appearance-none rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 pr-9 text-sm outline-none transition focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
-                  onChange={(event) => onAnswer(question.item_id, event.target.value)}
+              <div className="max-w-sm">
+                <CustomSelect
+                  onChange={(value) => onAnswer(question.item_id, value)}
+                  options={(question.options ?? []).map((option) => ({
+                    label: option,
+                    value: option,
+                  }))}
+                  placeholder="Chọn câu trả lời"
                   value={String(answers[question.item_id] ?? "")}
-                >
-                  <option value="" disabled>
-                    Chọn câu trả lời
-                  </option>
-                  {question.options?.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown
-                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-stone-400"
-                  size={16}
-                  aria-hidden
                 />
-              </label>
+              </div>
             ) : (
               <Likert
                 max={question.scale_max ?? 5}
@@ -1559,7 +1551,7 @@ function SetupScreen({
           <label className="flex items-start gap-3">
             <input
               checked={Boolean(biometricConsentAt)}
-              className="mt-1 h-4 w-4"
+              className="mt-0.5 h-4 w-4 shrink-0 accent-[#6f3f24]"
               disabled={Boolean(biometricConsentAt)}
               onChange={onConsent}
               type="checkbox"
@@ -2363,31 +2355,17 @@ function RankingScreen({
                   </p>
                 </div>
               </div>
-              <label className="relative block">
-                <select
-                  className="h-10 w-full appearance-none rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 pr-9 text-sm outline-none focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
-                  onChange={(event) => onRanking(group, Number(event.target.value))}
-                  value={ranking[group] ?? ""}
-                >
-                  <option value="" disabled>
-                    Xếp hạng
-                  </option>
-                  {[1, 2, 3, 4].map((rank) => (
-                    <option
-                      disabled={usedRanks.includes(rank) && ranking[group] !== rank}
-                      key={rank}
-                      value={rank}
-                    >
-                      Hạng {rank}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown
-                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-stone-400"
-                  size={16}
-                  aria-hidden
-                />
-              </label>
+              <CustomSelect
+                onChange={(value) => onRanking(group, Number(value))}
+                options={[1, 2, 3, 4].map((rank) => ({
+                  disabled: usedRanks.includes(rank) && ranking[group] !== rank,
+                  label: `Hạng ${rank}`,
+                  value: String(rank),
+                }))}
+                placeholder="Xếp hạng"
+                size="sm"
+                value={ranking[group] ? String(ranking[group]) : ""}
+              />
             </article>
           );
         })}
@@ -2415,7 +2393,7 @@ function RankingScreen({
         <label className="flex items-start gap-3 text-sm text-stone-700">
           <input
             checked={wantsInterview}
-            className="mt-1 h-4 w-4"
+            className="mt-0.5 h-4 w-4 shrink-0 accent-[#6f3f24]"
             onChange={(event) => setWantsInterview(event.target.checked)}
             type="checkbox"
           />
@@ -2535,6 +2513,107 @@ function ActionRow({ children }: { children: React.ReactNode }) {
   return (
     <div className="mt-5 flex justify-end border-t border-[#ead8bf] pt-4">
       {children}
+    </div>
+  );
+}
+
+type CustomSelectOption = {
+  disabled?: boolean;
+  label: string;
+  value: string;
+};
+
+function CustomSelect({
+  onChange,
+  options,
+  placeholder,
+  size = "md",
+  value,
+}: {
+  onChange: (value: string) => void;
+  options: CustomSelectOption[];
+  placeholder: string;
+  size?: "sm" | "md";
+  value: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = options.find((option) => option.value === value);
+
+  return (
+    <div
+      className="relative"
+      onBlur={(event) => {
+        const nextFocus = event.relatedTarget as Node | null;
+        if (!event.currentTarget.contains(nextFocus)) {
+          setOpen(false);
+        }
+      }}
+    >
+      <button
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        className={cn(
+          "flex w-full items-center justify-between gap-3 rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 text-left text-sm outline-none transition hover:border-[#c9955d] focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]",
+          size === "sm" ? "h-10" : "h-11",
+        )}
+        onClick={() => setOpen((current) => !current)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            setOpen(false);
+          }
+        }}
+        type="button"
+      >
+        <span className={cn(selected ? "text-stone-950" : "text-stone-500")}>
+          {selected?.label ?? placeholder}
+        </span>
+        <ChevronDown
+          className={cn(
+            "shrink-0 text-stone-400 transition",
+            open && "rotate-180 text-[#7a4a2a]",
+          )}
+          size={16}
+          aria-hidden
+        />
+      </button>
+
+      {open && (
+        <div
+          className="absolute left-0 right-0 z-30 mt-2 overflow-hidden rounded-lg border border-[#d6b896] bg-[#fffaf3] p-1 shadow-lg shadow-stone-900/10"
+          role="listbox"
+        >
+          {options.map((option) => {
+            const active = option.value === value;
+            return (
+              <button
+                aria-selected={active}
+                className={cn(
+                  "flex min-h-10 w-full items-center gap-2 rounded-md px-3 text-left text-sm transition",
+                  active
+                    ? "font-semibold text-[#6f3f24]"
+                    : "text-stone-700 hover:bg-[#fff3df]",
+                  option.disabled && "cursor-not-allowed text-[#b8a491] hover:bg-transparent",
+                )}
+                disabled={option.disabled}
+                key={option.value}
+                onClick={() => {
+                  onChange(option.value);
+                  setOpen(false);
+                }}
+                role="option"
+                type="button"
+              >
+                <Check
+                  className={cn("shrink-0", !active && "opacity-0")}
+                  size={15}
+                  aria-hidden
+                />
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
