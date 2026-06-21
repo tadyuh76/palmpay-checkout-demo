@@ -13,9 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PalmPay POS Experiment",
+  title: "PalmPay Coffee Experiment",
   description:
-    "Controlled POS experiment comparing QR + PIN, NFC card, face recognition, and PalmPay palm-vein payment.",
+    "Coffee checkout prototype for a POS payment experiment with QR + PIN, NFC card, face recognition, and PalmPay palm-vein payment.",
 };
 
 export default function RootLayout({
