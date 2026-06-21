@@ -126,8 +126,15 @@ type AssignmentHistoryItem = {
   override_reason?: string;
 };
 
+type InitialEnrollment = {
+  biometricConsentAt?: string | null;
+  faceDescriptor?: number[] | null;
+  qrPin?: string;
+};
+
 const protocolVersion = "PALMPAY-POS-2026.06";
 const startingBalance = 100000;
+const faceMatchThreshold = 0.55;
 
 const storageKeys = {
   currentSession: "palmpay.pos.currentSession",
@@ -168,20 +175,20 @@ const groupCopy: Record<
     shortLabel: "NFC card",
     device: "Thẻ NFC + đầu đọc",
     neutralDescription:
-      "Người tham gia dùng thẻ NFC thử nghiệm đã liên kết với phiên để chạm vào đầu đọc tại điểm bán cho giao dịch giá trị nhỏ.",
+      "Người tham gia dùng thẻ NFC thử nghiệm để chạm vào đầu đọc tại điểm bán cho giao dịch giá trị nhỏ.",
     instruction:
       "Chạm thẻ NFC thử nghiệm vào đầu đọc khi POS yêu cầu. Giao dịch trong phiên không yêu cầu PIN.",
     icon: Nfc,
     color: "bg-[#eef2e7] text-[#405438] border-[#c6d1b7]",
   },
   FACE_POS: {
-    label: "Face ID qua QR",
+    label: "Face ID tại POS",
     shortLabel: "Face ID",
-    device: "Điện thoại + camera",
+    device: "Camera POS",
     neutralDescription:
-      "Người tham gia đăng ký tên và khuôn mặt, sau đó quét mã QR của POS bằng điện thoại và xác nhận chuyển khoản bằng khuôn mặt.",
+      "Người tham gia đăng ký tên và khuôn mặt trước phiên, sau đó xác nhận thanh toán trực tiếp bằng camera tại POS.",
     instruction:
-      "Đăng ký tên Face ID, ghi mẫu khuôn mặt, rồi quét QR tại bước thanh toán và xác nhận bằng camera điện thoại.",
+      "Đăng ký tên Face ID và ghi mẫu khuôn mặt trên màn hình đầu, rồi xác nhận bằng camera POS ở bước thanh toán.",
     icon: ScanFace,
     color: "bg-[#f8e2d9] text-[#8a432f] border-[#dfa493]",
   },
@@ -348,6 +355,7 @@ function makeParticipantId() {
 function makeSession(
   participantName: string,
   selectedGroup: StudyGroup | null = null,
+  enrollment: InitialEnrollment = {},
 ): ExperimentSession {
   const trimmedName = participantName.trim() || "Khách thử nghiệm";
 
@@ -362,10 +370,13 @@ function makeSession(
     post_survey_completed_at: null,
     session_status: "created",
     current_step: "consent",
-    biometric_consent_at: null,
-    face_descriptor: null,
+    biometric_consent_at:
+      selectedGroup === "FACE_POS" ? enrollment.biometricConsentAt ?? null : null,
+    face_descriptor:
+      selectedGroup === "FACE_POS" ? enrollment.faceDescriptor ?? null : null,
     face_account_name: trimmedName,
     qr_account_name: trimmedName,
+    qr_pin: selectedGroup === "QR_PIN" ? enrollment.qrPin ?? "" : "",
     template_ref: null,
     template_deleted_at: null,
     setup_started_at: null,
@@ -717,8 +728,9 @@ export function DemoApp() {
   const startNewSession = (
     participantName: string,
     selectedGroup: StudyGroup,
+    enrollment: InitialEnrollment = {},
   ) => {
-    const next = makeSession(participantName, selectedGroup);
+    const next = makeSession(participantName, selectedGroup, enrollment);
     const history = readJson<AssignmentHistoryItem[]>(
       storageKeys.assignmentHistory,
       [],
@@ -743,8 +755,11 @@ export function DemoApp() {
           screen_name: "admin",
           metadata: {
             assigned_group: selectedGroup,
+            face_registered: selectedGroup === "FACE_POS" && Boolean(enrollment.faceDescriptor),
             participant_name: next.participant_name,
             protocol_version: next.protocol_version,
+            qr_pin_registered: selectedGroup === "QR_PIN" && /^\d{4}$/.test(enrollment.qrPin ?? ""),
+            registration_location: "start_screen",
           },
         },
       ],
@@ -1131,12 +1146,8 @@ export function DemoApp() {
               faceAccountName={session.face_account_name ?? session.participant_name}
               faceDescriptor={session.face_descriptor}
               group={session.assigned_group}
-              participantName={session.participant_name}
               pin={session.qr_pin ?? ""}
               qrAccountName={session.qr_account_name ?? session.participant_name}
-              onAccountNameChange={(name) =>
-                updateSession((current) => ({ ...current, qr_account_name: name }))
-              }
               onConsent={() =>
                 updateSession((current) => ({
                   ...current,
@@ -1153,30 +1164,8 @@ export function DemoApp() {
                   ],
                 }))
               }
-              onFaceEnroll={(descriptor, metadata) =>
-                updateSession((current) => ({
-                  ...current,
-                  face_descriptor: descriptor,
-                  events: [
-                    ...current.events,
-                    {
-                      event_name: "face_template_enrolled",
-                      timestamp: nowIso(),
-                      participant_id: current.participant_id,
-                      screen_name: "setup",
-                      metadata,
-                    },
-                  ],
-                }))
-              }
-              onFaceAccountNameChange={(name) =>
-                updateSession((current) => ({ ...current, face_account_name: name }))
-              }
               onFinish={finishSetup}
               onLog={logEvent}
-              onPinChange={(pin) =>
-                updateSession((current) => ({ ...current, qr_pin: pin }))
-              }
               biometricConsentAt={session.biometric_consent_at}
             />
           )}
@@ -1576,11 +1565,18 @@ function FaceMobileConfirmation({
 function AdminHome({
   onCreate,
 }: {
-  onCreate: (participantName: string, selectedGroup: StudyGroup) => void;
+  onCreate: (
+    participantName: string,
+    selectedGroup: StudyGroup,
+    enrollment?: InitialEnrollment,
+  ) => void;
 }) {
   const [history, setHistory] = useState<AssignmentHistoryItem[]>([]);
   const [completed, setCompleted] = useState<ExperimentSession[]>([]);
   const [participantName, setParticipantName] = useState("");
+  const [qrPin, setQrPin] = useState("");
+  const [faceConsentAt, setFaceConsentAt] = useState<string | null>(null);
+  const [faceDescriptor, setFaceDescriptor] = useState<number[] | null>(null);
   const [selectedGroup, setSelectedGroup] = useState<StudyGroup | null>(null);
 
   useEffect(() => {
@@ -1594,6 +1590,21 @@ function AdminHome({
     group,
     count: history.filter((item) => item.assigned_group === group).length,
   }));
+  const trimmedName = participantName.trim();
+  const chooseGroup = (group: StudyGroup) => {
+    if (group !== selectedGroup) {
+      setQrPin("");
+      setFaceConsentAt(null);
+      setFaceDescriptor(null);
+    }
+    setSelectedGroup(group);
+  };
+  const credentialReady =
+    selectedGroup === "QR_PIN"
+      ? /^\d{4}$/.test(qrPin)
+      : selectedGroup === "FACE_POS"
+        ? Boolean(faceDescriptor)
+        : Boolean(selectedGroup);
 
   return (
     <main className="min-h-screen bg-[#f6efe5] px-4 py-5 text-stone-950 sm:px-6">
@@ -1603,11 +1614,11 @@ function AdminHome({
             <div>
               <Image
                 alt="PalmPay"
-                className="mb-4 h-auto w-40"
-                height={80}
+                className="mb-3 h-auto w-40"
+                height={64}
                 priority
                 src="/brand/palmpay-logo.svg"
-                width={296}
+                width={264}
               />
               <p className="text-sm font-medium text-[#7a4a2a]">{protocolVersion}</p>
               <h1 className="mt-1 text-2xl font-semibold tracking-normal">
@@ -1623,8 +1634,12 @@ function AdminHome({
               className="grid w-full max-w-sm gap-2"
               onSubmit={(event) => {
                 event.preventDefault();
-                if (!participantName.trim() || !selectedGroup) return;
-                onCreate(participantName, selectedGroup);
+                if (!trimmedName || !selectedGroup || !credentialReady) return;
+                onCreate(trimmedName, selectedGroup, {
+                  biometricConsentAt: faceConsentAt,
+                  faceDescriptor,
+                  qrPin,
+                });
               }}
             >
               <label className="text-sm font-medium text-stone-700" htmlFor="participant-name">
@@ -1639,7 +1654,7 @@ function AdminHome({
               />
               <button
                 className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-[#d6c0aa]"
-                disabled={!participantName.trim() || !selectedGroup}
+                disabled={!trimmedName || !selectedGroup || !credentialReady}
                 type="submit"
               >
                 <UserPlus size={17} aria-hidden />
@@ -1677,7 +1692,7 @@ function AdminHome({
                     selected && "border-[#6f3f24] ring-2 ring-[#6f3f24]/25",
                   )}
                   key={group}
-                  onClick={() => setSelectedGroup(group)}
+                  onClick={() => chooseGroup(group)}
                   type="button"
                 >
                   <div className="mb-3 flex items-center justify-between">
@@ -1692,6 +1707,74 @@ function AdminHome({
               );
             })}
           </div>
+
+          {selectedGroup === "QR_PIN" && (
+            <div className="mt-4 rounded-lg border border-[#ead8bf] bg-[#fffaf3] p-4">
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px] lg:items-end">
+                <div>
+                  <h2 className="text-sm font-semibold text-stone-950">
+                    Đăng ký DemoBank QR
+                  </h2>
+                  <p className="mt-1 text-xs leading-5 text-stone-500">
+                    Tên người gửi sẽ dùng chính tên người tham gia đã nhập ở trên.
+                    PIN này dùng để xác nhận màn hình chuyển khoản sau khi quét QR.
+                  </p>
+                  <p className="mt-3 rounded-lg border border-[#ead8bf] bg-white px-3 py-2 text-sm font-medium text-[#6f3f24]">
+                    Người gửi: {trimmedName || "Nhập tên người tham gia"}
+                  </p>
+                </div>
+                <label className="block">
+                  <span className="mb-1 block text-sm font-medium text-stone-700">
+                    Mã PIN 4 số
+                  </span>
+                  <input
+                    className="h-11 w-full rounded-lg border border-[#ead8bf] bg-white px-3 text-center text-lg font-semibold tracking-[0.25em] outline-none transition focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
+                    inputMode="numeric"
+                    maxLength={4}
+                    onChange={(event) =>
+                      setQrPin(event.target.value.replace(/\D/g, "").slice(0, 4))
+                    }
+                    placeholder="0000"
+                    type="password"
+                    value={qrPin}
+                  />
+                </label>
+              </div>
+            </div>
+          )}
+
+          {selectedGroup === "FACE_POS" && (
+            <div className="mt-4 rounded-lg border border-[#ead8bf] bg-[#fffaf3] p-4">
+              <div className="mb-4">
+                <h2 className="text-sm font-semibold text-stone-950">
+                  Đăng ký Face ID
+                </h2>
+                <p className="mt-1 text-xs leading-5 text-stone-500">
+                  Nhập tên người tham gia trước, sau đó mở camera để ghi mẫu khuôn
+                  mặt. Face ID sẽ xác nhận thanh toán trực tiếp trên POS.
+                </p>
+              </div>
+              <label className="mb-4 flex items-start gap-3 rounded-lg border border-[#ead8bf] bg-white p-3 text-sm text-stone-700">
+                <input
+                  checked={Boolean(faceConsentAt)}
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-[#6f3f24]"
+                  disabled={!trimmedName || Boolean(faceConsentAt)}
+                  onChange={(event) => {
+                    if (event.target.checked) setFaceConsentAt(nowIso());
+                  }}
+                  type="checkbox"
+                />
+                <span>
+                  Tôi đồng ý tạo mẫu đặc trưng khuôn mặt mã hóa cho phiên thử nghiệm này.
+                </span>
+              </label>
+              <FaceEnrollment
+                consentReady={Boolean(trimmedName && faceConsentAt)}
+                enrolled={Boolean(faceDescriptor)}
+                onEnroll={(descriptor) => setFaceDescriptor(descriptor)}
+              />
+            </div>
+          )}
         </section>
 
         <aside className="space-y-5">
@@ -1701,7 +1784,7 @@ function AdminHome({
               {[
                 "Điện thoại DemoBank",
                 "Đầu đọc thẻ NFC",
-                "Camera điện thoại Face ID",
+                "Camera POS Face ID",
                 "Máy quét PalmPay",
               ].map((item) => (
                 <div
@@ -2059,14 +2142,9 @@ function SetupScreen({
   faceAccountName,
   faceDescriptor,
   group,
-  onAccountNameChange,
   onConsent,
-  onFaceAccountNameChange,
-  onFaceEnroll,
   onFinish,
   onLog,
-  onPinChange,
-  participantName,
   pin,
   qrAccountName,
 }: {
@@ -2074,27 +2152,20 @@ function SetupScreen({
   faceAccountName: string;
   faceDescriptor?: number[] | null;
   group: StudyGroup;
-  onAccountNameChange: (name: string) => void;
   onConsent: () => void;
-  onFaceAccountNameChange: (name: string) => void;
-  onFaceEnroll: (descriptor: number[], metadata: Record<string, unknown>) => void;
   onFinish: (metadata?: Record<string, unknown>) => void;
   onLog: (eventName: string, screenName: StepKey, metadata?: Record<string, unknown>) => void;
-  onPinChange: (pin: string) => void;
-  participantName: string;
   pin: string;
   qrAccountName: string;
 }) {
   const [samples, setSamples] = useState(0);
-  const [linked, setLinked] = useState(false);
-  const [bankOpened, setBankOpened] = useState(false);
   const needsBiometricConsent = group === "FACE_POS" || group === "PALM_VEIN";
   const biometricReady = !needsBiometricConsent || Boolean(biometricConsentAt);
   const done =
     group === "QR_PIN"
       ? /^\d{4}$/.test(pin) && qrAccountName.trim().length > 0
       : group === "NFC_CARD"
-        ? linked
+        ? true
         : group === "FACE_POS"
           ? biometricReady && Boolean(faceDescriptor) && faceAccountName.trim().length > 0
           : biometricReady && samples >= 3;
@@ -2113,81 +2184,51 @@ function SetupScreen({
     <Panel eyebrow="Thiết lập phương thức" icon={groupCopy[group].icon} title={groupCopy[group].label}>
       {group === "QR_PIN" && (
         <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-          <PhoneMock
-            balance={startingBalance}
-            opened={bankOpened}
-            onOpen={() => {
-              setBankOpened(true);
-              onLog("demo_bank_opened", "setup", {});
-            }}
-          />
+          <div className="rounded-lg border border-[#ead8bf] bg-[#fffaf3] p-5">
+            <Smartphone className="mb-8 text-[#7a4a2a]" size={38} aria-hidden />
+            <p className="text-sm font-medium text-stone-600">DemoBank QR</p>
+            <p className="mt-2 text-2xl font-semibold">{qrAccountName}</p>
+            <p className="mt-6 text-sm text-stone-600">PIN đã đăng ký trên màn hình đầu</p>
+          </div>
           <div className="rounded-lg border border-[#ead8bf] bg-white p-4">
-            <h3 className="font-semibold">Tạo tài khoản DemoBank</h3>
+            <h3 className="font-semibold">Tài khoản QR đã sẵn sàng</h3>
             <p className="mt-2 text-sm leading-6 text-stone-600">
-              Tên và PIN này chỉ dùng cho màn hình chuyển khoản mô phỏng sau
-              khi người tham gia quét QR bằng điện thoại.
+              Người tham gia sẽ quét QR ở bước thanh toán bằng điện thoại. Tên
+              người gửi trên màn hình chuyển khoản là tên đã đăng ký ban đầu.
             </p>
-            <label className="mt-4 block max-w-xs">
-              <span className="mb-1 block text-sm font-medium text-stone-700">
-                Tên người gửi
-              </span>
-              <input
-                className="h-11 w-full rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 text-sm outline-none focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
-                onChange={(event) => onAccountNameChange(event.target.value)}
-                placeholder={participantName || "Tên người gửi"}
-                value={qrAccountName}
-              />
-            </label>
-            <label className="mt-3 block max-w-xs">
-              <span className="mb-1 block text-sm font-medium text-stone-700">
-                Mã PIN 4 số
-              </span>
-              <input
-                className="h-12 w-full rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 text-lg font-semibold tracking-[0.2em] outline-none focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
-                inputMode="numeric"
-                maxLength={4}
-                onChange={(event) =>
-                  onPinChange(event.target.value.replace(/\D/g, "").slice(0, 4))
-                }
-                placeholder="0000"
-                type="password"
-                value={pin}
-              />
-            </label>
+            <div className="mt-4 space-y-2 rounded-lg border border-[#ead8bf] bg-[#fffaf3] p-3 text-sm">
+              <Row label="Người gửi" value={qrAccountName} />
+              <Row label="PIN" value={/^\d{4}$/.test(pin) ? "••••" : "Chưa có"} />
+            </div>
           </div>
         </div>
       )}
 
       {group === "FACE_POS" && (
         <div className="grid gap-4 lg:grid-cols-[360px_minmax(0,1fr)]">
-          <FaceEnrollment
-            consentReady={biometricReady}
-            enrolled={Boolean(faceDescriptor)}
-            onEnroll={onFaceEnroll}
-          />
+          <div className="flex aspect-video items-center justify-center rounded-lg border border-[#ead8bf] bg-stone-900 text-white">
+            <div className="text-center">
+              <ScanFace className="mx-auto mb-4 text-[#d8b5a5]" size={58} aria-hidden />
+              <p className="text-sm font-semibold">
+                {faceDescriptor ? "Face ID đã đăng ký" : "Chưa có mẫu Face ID"}
+              </p>
+              <p className="mt-1 text-xs text-stone-300">
+                Xác nhận thanh toán sẽ dùng camera POS
+              </p>
+            </div>
+          </div>
           <div className="rounded-lg border border-[#ead8bf] bg-white p-4">
-            <h3 className="font-semibold">Đăng ký Face ID DemoBank</h3>
+            <h3 className="font-semibold">Face ID đã sẵn sàng</h3>
             <p className="mt-2 text-sm leading-6 text-stone-600">
-              Tên này sẽ xuất hiện là người gửi trên màn hình chuyển khoản
-              sau khi người tham gia quét QR bằng điện thoại. Khuôn mặt được
-              dùng để xác nhận giao dịch thay cho PIN.
+              Khuôn mặt được đăng ký ngay trên màn hình đầu. Khi thanh toán,
+              POS sẽ mở camera tại website này để xác nhận giao dịch.
             </p>
-            <label className="mt-4 block max-w-xs">
-              <span className="mb-1 block text-sm font-medium text-stone-700">
-                Tên tài khoản Face ID
-              </span>
-              <input
-                className="h-11 w-full rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 text-sm outline-none focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
-                onChange={(event) => onFaceAccountNameChange(event.target.value)}
-                placeholder={participantName || "Tên người gửi"}
-                value={faceAccountName}
+            <div className="mt-4 space-y-2 rounded-lg border border-[#ead8bf] bg-[#fffaf3] p-3 text-sm">
+              <Row label="Tên Face ID" value={faceAccountName} />
+              <Row
+                label="Trạng thái"
+                value={faceDescriptor ? "Đã ghi mẫu khuôn mặt" : "Chưa ghi mẫu"}
               />
-            </label>
-            <div className="mt-4 rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 py-2 text-sm text-stone-600">
-              Trạng thái:{" "}
-              <span className="font-semibold text-[#6f3f24]">
-                {faceDescriptor ? "Đã ghi mẫu khuôn mặt" : "Chưa ghi mẫu"}
-              </span>
             </div>
           </div>
         </div>
@@ -2202,27 +2243,19 @@ function SetupScreen({
             <p className="mt-6 text-sm">Không yêu cầu PIN trong phiên mô phỏng</p>
           </div>
           <div className="rounded-lg border border-[#ead8bf] bg-white p-4">
-            <h3 className="font-semibold">Liên kết thẻ thử nghiệm</h3>
+            <h3 className="font-semibold">Thẻ NFC đã sẵn sàng</h3>
             <p className="mt-2 text-sm leading-6 text-stone-600">
-              Thẻ vật lý được dùng để tránh chồng lấn với điện thoại ở nhóm QR
-              hoặc nhận diện khuôn mặt trên điện thoại.
+              Không cần thiết lập thẻ trong website. Ở bước thanh toán, người
+              tham gia chỉ cần chạm thẻ vào đầu đọc NFC đang kết nối với POS.
             </p>
-            <button
-              className="mt-4 inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f]"
-              onClick={() => {
-                setLinked(true);
-                onLog("nfc_card_linked", "setup", { card_ref: "CARD-POS-042" });
-              }}
-              type="button"
-            >
-              <Nfc size={17} aria-hidden />
-              Liên kết thẻ
-            </button>
+            <div className="mt-4 rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 py-2 text-sm text-stone-600">
+              Card ref: <span className="font-semibold text-[#405438]">CARD-POS-042</span>
+            </div>
           </div>
         </div>
       )}
 
-      {needsBiometricConsent && (
+      {needsBiometricConsent && (group !== "FACE_POS" || !biometricConsentAt) && (
         <div className="mb-4 rounded-lg border border-[#dfbd7f] bg-[#fff3df] p-4 text-sm leading-6 text-[#7a4a2a]">
           <label className="flex items-start gap-3">
             <input
@@ -2288,38 +2321,6 @@ function SetupScreen({
         </button>
       </ActionRow>
     </Panel>
-  );
-}
-
-function PhoneMock({
-  balance,
-  onOpen,
-  opened,
-}: {
-  balance: number;
-  onOpen: () => void;
-  opened: boolean;
-}) {
-  return (
-    <div className="rounded-[28px] border-4 border-stone-900 bg-stone-950 p-3 shadow-sm">
-      <div className="rounded-[20px] bg-[#fffaf3] p-4">
-        <div className="mb-5 flex items-center justify-between">
-          <span className="text-sm font-semibold">DemoBank</span>
-          <Smartphone size={17} aria-hidden />
-        </div>
-        <p className="text-xs text-stone-500">Số dư thử nghiệm</p>
-        <p className="mt-1 text-2xl font-semibold">{formatVnd(balance)}</p>
-        <button
-          className="mt-8 inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-3 text-sm font-semibold text-white disabled:bg-[#d6c0aa]"
-          disabled={opened}
-          onClick={onOpen}
-          type="button"
-        >
-          <QrCode size={16} aria-hidden />
-          {opened ? "Đã mở ứng dụng" : "Mở ứng dụng"}
-        </button>
-      </div>
-    </div>
   );
 }
 
@@ -2952,24 +2953,19 @@ function PaymentScreen({
           )}
 
           {group === "FACE_POS" && (
-            <QrPosPayment
+            <FacePosPayment
               amount={totalCents}
-              authMethod="face"
+              busy={busy}
               faceDescriptor={faceDescriptor}
-              items={items}
-              onLog={onLog}
-              onPaid={(transfer) =>
+              onComplete={(metadata) =>
                 finish({
-                  authorization_code: transfer.authorizationCode,
-                  channel: "face_qr",
-                  match_distance: transfer.matchDistance,
-                  transfer_id: transfer.id,
+                  channel: "face_pos",
+                  ...metadata,
                 })
               }
-              pin={pin}
+              onLog={onLog}
               productSummary={productSummary}
               senderName={faceAccountName || accountName}
-              transactionId={transactionId}
             />
           )}
 
@@ -2995,6 +2991,183 @@ function PaymentScreen({
         />
       </div>
     </Panel>
+  );
+}
+
+function descriptorDistance(left: number[], right: ArrayLike<number>) {
+  if (left.length !== right.length) return Number.POSITIVE_INFINITY;
+  const squared = left.reduce((total, value, index) => {
+    const delta = value - right[index];
+    return total + delta * delta;
+  }, 0);
+  return Math.sqrt(squared);
+}
+
+function FacePosPayment({
+  amount,
+  busy,
+  faceDescriptor,
+  onComplete,
+  onLog,
+  productSummary,
+  senderName,
+}: {
+  amount: number;
+  busy: boolean;
+  faceDescriptor?: number[] | null;
+  onComplete: (metadata: Record<string, unknown>) => void;
+  onLog: (eventName: string, screenName: StepKey, metadata?: Record<string, unknown>) => void;
+  productSummary: string;
+  senderName: string;
+}) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [api, setApi] = useState<FaceApi | null>(null);
+  const [cameraActive, setCameraActive] = useState(false);
+  const [localBusy, setLocalBusy] = useState(false);
+  const [message, setMessage] = useState("Mở camera POS để xác nhận Face ID");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    return () => {
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+    };
+  }, []);
+
+  const startCamera = async () => {
+    setLocalBusy(true);
+    setError("");
+    try {
+      const loadedApi = api ?? (await loadFaceApiModels());
+      setApi(loadedApi);
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: { facingMode: "user" },
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+      setCameraActive(true);
+      setMessage("Camera POS đã sẵn sàng");
+      onLog("face_pos_camera_opened", "payment", {});
+    } catch {
+      setMessage("Không mở được camera POS");
+      setError("Không mở được camera để xác nhận Face ID.");
+    } finally {
+      setLocalBusy(false);
+    }
+  };
+
+  const confirmFace = async () => {
+    if (!faceDescriptor?.length) {
+      setError("Chưa có mẫu Face ID đã đăng ký.");
+      return;
+    }
+    if (!api || !videoRef.current) {
+      await startCamera();
+      return;
+    }
+
+    setLocalBusy(true);
+    setError("");
+    setMessage("Đang quét khuôn mặt...");
+    try {
+      const detection = await api
+        .detectSingleFace(
+          videoRef.current,
+          new api.TinyFaceDetectorOptions({
+            inputSize: 224,
+            scoreThreshold: 0.5,
+          }),
+        )
+        .withFaceLandmarks()
+        .withFaceDescriptor();
+
+      if (!detection) {
+        setMessage("Không phát hiện khuôn mặt rõ");
+        setError("Không phát hiện khuôn mặt rõ. Thử nhìn thẳng vào camera.");
+        onLog("face_pos_no_face", "payment", {});
+        return;
+      }
+
+      const matchDistance = descriptorDistance(faceDescriptor, detection.descriptor);
+      if (matchDistance > faceMatchThreshold) {
+        setMessage("Face ID không khớp");
+        setError(
+          `Khuôn mặt không khớp (${matchDistance.toFixed(2)} > ${faceMatchThreshold}).`,
+        );
+        onLog("face_pos_match_failed", "payment", {
+          match_distance: matchDistance,
+          threshold: faceMatchThreshold,
+        });
+        return;
+      }
+
+      setMessage("Face ID đã xác nhận");
+      onLog("face_pos_match_success", "payment", {
+        match_distance: matchDistance,
+        threshold: faceMatchThreshold,
+      });
+      onComplete({
+        match_distance: matchDistance,
+        threshold: faceMatchThreshold,
+      });
+    } catch {
+      setMessage("Không thể xác minh khuôn mặt");
+      setError("Không thể xác minh khuôn mặt.");
+    } finally {
+      setLocalBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="relative aspect-video overflow-hidden rounded-lg border border-[#ead8bf] bg-stone-900">
+        <video className="h-full w-full object-cover" muted playsInline ref={videoRef} />
+        {!cameraActive && (
+          <div className="absolute inset-0 flex items-center justify-center text-center text-sm text-white/80">
+            Camera POS Face ID
+          </div>
+        )}
+      </div>
+      <div className="rounded-lg border border-[#ead8bf] bg-white p-4 text-sm">
+        <Row label="Người gửi" value={senderName} />
+        <Row label="Người nhận" value="Palm Pay" />
+        <Row label="Sản phẩm" value={productSummary} />
+        <Row label="Số tiền" value={formatVnd(amount)} strong />
+        <Row label="Xác thực" value="Face ID tại POS" />
+      </div>
+      <p className="rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 py-2 text-sm font-medium text-[#6f3f24]">
+        {message}
+      </p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <button
+          className="inline-flex h-12 items-center justify-center gap-2 rounded-lg border border-[#ead8bf] bg-white px-4 text-sm font-semibold text-stone-700 transition hover:bg-[#fffaf3] disabled:text-[#b8a491]"
+          disabled={busy || localBusy}
+          onClick={startCamera}
+          type="button"
+        >
+          <Camera size={17} aria-hidden />
+          Mở camera POS
+        </button>
+        <button
+          className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-[#d6c0aa]"
+          disabled={busy || localBusy || !faceDescriptor?.length}
+          onClick={confirmFace}
+          type="button"
+        >
+          {localBusy ? <Loader2 className="animate-spin" size={17} /> : <ScanFace size={17} />}
+          Xác nhận Face ID
+        </button>
+      </div>
+      {error && (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {error}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -3337,11 +3510,11 @@ function RetryPanel({
       { code: "wrong_card", label: "Thẻ không khớp phiên" },
     ],
     FACE_POS: [
-      { code: "no_face", label: "Điện thoại không thấy khuôn mặt" },
+      { code: "no_face", label: "Camera POS không thấy khuôn mặt" },
       { code: "multiple_faces", label: "Có nhiều khuôn mặt" },
-      { code: "low_quality", label: "Hình ảnh điện thoại chưa đủ rõ" },
+      { code: "low_quality", label: "Hình ảnh camera POS chưa đủ rõ" },
       { code: "face_no_match", label: "Face ID không khớp mẫu" },
-      { code: "camera_disconnected", label: "Camera điện thoại mất kết nối" },
+      { code: "camera_disconnected", label: "Camera POS mất kết nối" },
     ],
     PALM_VEIN: [
       { code: "no_hand", label: "Không phát hiện bàn tay" },
@@ -3445,7 +3618,7 @@ function DebriefScreen({
       <div className="rounded-lg border border-[#ead8bf] bg-white p-4 text-sm leading-6 text-stone-600">
         <p>
           Phiên này so sánh trải nghiệm thanh toán tại điểm bán giữa QR + PIN,
-          thẻ NFC, Face ID qua QR và PalmPay tĩnh mạch lòng bàn tay. Trọng tâm
+          thẻ NFC, Face ID tại POS và PalmPay tĩnh mạch lòng bàn tay. Trọng tâm
           là cảm nhận về sự đơn giản, thuận tiện, hữu ích, bảo mật, quyền riêng
           tư, niềm tin và ý định sử dụng.
         </p>
