@@ -190,6 +190,12 @@ async function ensurePostgresTables() {
       details_json TEXT NOT NULL DEFAULT '{}',
       created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS experiment_state (
+      key TEXT PRIMARY KEY,
+      value_json TEXT NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 }
 
@@ -239,6 +245,12 @@ function ensureSqliteTables() {
       step TEXT NOT NULL,
       details_json TEXT NOT NULL DEFAULT '{}',
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS experiment_state (
+      key TEXT PRIMARY KEY,
+      value_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
   `);
 }

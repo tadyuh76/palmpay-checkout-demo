@@ -122,6 +122,14 @@ type AssignmentHistoryItem = {
   override_reason?: string;
 };
 
+type ExperimentStateSnapshot = {
+  assignmentHistory: AssignmentHistoryItem[];
+  assignmentQueue: StudyGroup[];
+  completedSessions: ExperimentSession[];
+  currentSession: ExperimentSession | null;
+  participantCounter: number;
+};
+
 type InitialEnrollment = {
   biometricConsentAt?: string | null;
   faceDescriptor?: number[] | null;
@@ -295,8 +303,103 @@ function readJson<T>(key: string, fallback: T): T {
   }
 }
 
+function storagePatch<T>(key: string, value: T) {
+  switch (key) {
+    case storageKeys.assignmentHistory:
+      return { assignmentHistory: value };
+    case storageKeys.assignmentQueue:
+      return { assignmentQueue: value };
+    case storageKeys.completedSessions:
+      return { completedSessions: value };
+    case storageKeys.currentSession:
+      return { currentSession: value };
+    case storageKeys.participantCounter:
+      return { participantCounter: value };
+    default:
+      return null;
+  }
+}
+
+function persistExperimentState(patch: Record<string, unknown>) {
+  if (typeof window === "undefined") return;
+  void fetch("/api/experiment-state", {
+    body: JSON.stringify(patch),
+    headers: { "Content-Type": "application/json" },
+    method: "PUT",
+  }).catch(() => {
+    // The local mirror still lets the active POS session continue offline.
+  });
+}
+
 function writeJson<T>(key: string, value: T) {
   window.localStorage.setItem(key, JSON.stringify(value));
+  const patch = storagePatch(key, value);
+  if (patch) persistExperimentState(patch);
+}
+
+function removeJson(key: string) {
+  window.localStorage.removeItem(key);
+  if (key === storageKeys.currentSession) {
+    persistExperimentState({ currentSession: null });
+  }
+}
+
+function normalizeStateSnapshot(value: unknown): ExperimentStateSnapshot {
+  const state =
+    value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Partial<ExperimentStateSnapshot>)
+      : {};
+
+  return {
+    assignmentHistory: Array.isArray(state.assignmentHistory)
+      ? state.assignmentHistory
+      : [],
+    assignmentQueue: Array.isArray(state.assignmentQueue)
+      ? state.assignmentQueue.filter((item): item is StudyGroup =>
+          groupOrder.includes(item as StudyGroup),
+        )
+      : [],
+    completedSessions: Array.isArray(state.completedSessions)
+      ? state.completedSessions.reduce<ExperimentSession[]>((sessions, item) => {
+          const normalized = normalizeSession(item as ExperimentSession | null);
+          if (normalized) sessions.push(normalized);
+          return sessions;
+        }, [])
+      : [],
+    currentSession: normalizeSession(
+      (state.currentSession as ExperimentSession | null | undefined) ?? null,
+    ),
+    participantCounter:
+      typeof state.participantCounter === "number" &&
+      Number.isFinite(state.participantCounter)
+        ? state.participantCounter
+        : 0,
+  };
+}
+
+function writeLocalJson<T>(key: string, value: T) {
+  window.localStorage.setItem(key, JSON.stringify(value));
+}
+
+function applyStateSnapshot(state: ExperimentStateSnapshot) {
+  writeLocalJson(storageKeys.assignmentHistory, state.assignmentHistory);
+  writeLocalJson(storageKeys.assignmentQueue, state.assignmentQueue);
+  writeLocalJson(storageKeys.completedSessions, state.completedSessions);
+  writeLocalJson(storageKeys.participantCounter, state.participantCounter);
+  if (state.currentSession) {
+    writeLocalJson(storageKeys.currentSession, state.currentSession);
+  } else {
+    window.localStorage.removeItem(storageKeys.currentSession);
+  }
+}
+
+async function loadExperimentState() {
+  const response = await fetch("/api/experiment-state", { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error("Could not load experiment state");
+  }
+  const data = (await response.json()) as { state?: unknown };
+  return normalizeStateSnapshot(data.state);
 }
 
 function shuffle<T>(items: T[]) {
@@ -661,14 +764,24 @@ export function DemoApp() {
   const totalCents = useMemo(() => cartTotal(cartLines), [cartLines]);
 
   useEffect(() => {
-    window.queueMicrotask(() => {
+    window.queueMicrotask(async () => {
       const paymentId = new URLSearchParams(window.location.search).get("qrPay");
       if (paymentId) {
         setQrPaymentId(paymentId);
         setHydrated(true);
         return;
       }
-      setSession(normalizeSession(readJson<ExperimentSession | null>(storageKeys.currentSession, null)));
+      try {
+        const state = await loadExperimentState();
+        applyStateSnapshot(state);
+        setSession(state.currentSession);
+      } catch {
+        setSession(
+          normalizeSession(
+            readJson<ExperimentSession | null>(storageKeys.currentSession, null),
+          ),
+        );
+      }
       setHydrated(true);
     });
   }, []);
@@ -678,7 +791,7 @@ export function DemoApp() {
     if (session) {
       writeJson(storageKeys.currentSession, session);
     } else {
-      window.localStorage.removeItem(storageKeys.currentSession);
+      removeJson(storageKeys.currentSession);
     }
   }, [hydrated, session]);
 
