@@ -1,6 +1,6 @@
 # PalmPay Coffee Experiment
 
-Coffee-themed point-of-sale prototype for the PalmPay experiment. The app keeps the full research sequence visible to the researcher and participant: consent, pre-survey, randomized method assignment, method setup, coffee catalog selection, checkout, assigned payment, receipt, post-survey, ranking, debrief, and CSV export.
+Coffee-themed point-of-sale prototype for the PalmPay experiment. The app keeps the full research sequence visible to the researcher and participant: consent, pre-survey, randomized method assignment, method setup, coffee catalog selection, checkout, assigned payment, receipt, post-survey, debrief, and CSV export.
 
 ## Experiment Groups
 
@@ -21,7 +21,7 @@ The NFC condition is intentionally a physical card, not a phone, so it stays sep
 6. Participant selects one or more coffee catalog items within the test balance.
 7. Participant reviews the cart and pays with only the assigned method.
 8. Receipt shows the selected order, paid amount, remaining test balance, and transaction id.
-9. Participant completes the post-survey, method ranking, debrief, and optional interview contact.
+9. Participant completes the post-survey and goes straight to the debrief/export screen.
 10. Biometric templates are marked deleted at the end of biometric sessions.
 
 ## Stack
@@ -43,4 +43,4 @@ Open `http://localhost:7999`.
 
 ## Data
 
-The prototype records participant id, assigned group, setup and checkout timing, selected cart items, transaction total, retries/errors, survey answers, ranking answers, biometric deletion timestamp, and event logs. Export `palmpay-wide.csv` and `palmpay-events.csv` from the final debrief screen or admin screen.
+The prototype records participant id, assigned group, setup and checkout timing, selected cart items, transaction total, retries/errors, survey answers, biometric deletion timestamp, and event logs. Export `palmpay-wide.csv` and `palmpay-events.csv` from the final debrief screen or admin screen.

@@ -49,7 +49,6 @@ type StepKey =
   | "payment"
   | "success"
   | "post"
-  | "ranking"
   | "debrief";
 
 type SurveyQuestion = {
@@ -112,12 +111,6 @@ type ExperimentSession = {
   transaction?: TransactionRecord | null;
   pre_answers: Record<string, string | number>;
   post_answers: Record<string, string | number>;
-  ranking: Partial<Record<StudyGroup, number>>;
-  open_feedback: {
-    liked_most: string;
-    biggest_concern: string;
-    use_context: string;
-  };
   events: EventLog[];
 };
 
@@ -137,7 +130,6 @@ const storageKeys = {
   participantCounter: "palmpay.pos.participantCounter",
   assignmentQueue: "palmpay.pos.assignmentQueue",
   assignmentHistory: "palmpay.pos.assignmentHistory",
-  interviewContacts: "palmpay.pos.interviewContacts",
 };
 
 const groupOrder: StudyGroup[] = ["QR_PIN", "NFC_CARD", "FACE_POS", "PALM_VEIN"];
@@ -212,7 +204,6 @@ const stepLabels: Record<StepKey, string> = {
   payment: "Thanh toán",
   success: "Thành công",
   post: "Khảo sát sau",
-  ranking: "Xếp hạng",
   debrief: "Giải thích",
 };
 
@@ -226,7 +217,6 @@ const flowSteps: StepKey[] = [
   "payment",
   "success",
   "post",
-  "ranking",
   "debrief",
 ];
 
@@ -354,14 +344,19 @@ function makeSession(): ExperimentSession {
     transaction: null,
     pre_answers: {},
     post_answers: {},
-    ranking: {},
-    open_feedback: {
-      liked_most: "",
-      biggest_concern: "",
-      use_context: "",
-    },
     events: [],
   };
+}
+
+function normalizeSession(session: ExperimentSession | null) {
+  if (!session) return null;
+  if ((session.current_step as string) === "ranking") {
+    return {
+      ...session,
+      current_step: "debrief" as StepKey,
+    };
+  }
+  return session;
 }
 
 function downloadCsv(filename: string, rows: Array<Record<string, unknown>>) {
@@ -421,9 +416,6 @@ function buildWideRow(session: ExperimentSession) {
         value,
       ]),
     ),
-    ...Object.fromEntries(
-      groupOrder.map((item) => [`rank_${item}`, session.ranking[item] ?? ""]),
-    ),
   };
 }
 
@@ -443,7 +435,7 @@ export function DemoApp() {
 
   useEffect(() => {
     window.queueMicrotask(() => {
-      setSession(readJson<ExperimentSession | null>(storageKeys.currentSession, null));
+      setSession(normalizeSession(readJson<ExperimentSession | null>(storageKeys.currentSession, null)));
       setHydrated(true);
     });
   }, []);
@@ -797,25 +789,6 @@ export function DemoApp() {
   };
 
   const completePostSurvey = () => {
-    updateSession((current) => ({
-      ...current,
-      current_step: "ranking",
-      post_survey_completed_at: nowIso(),
-      events: [
-        ...current.events,
-        {
-          event_name: "post_survey_completed",
-          timestamp: nowIso(),
-          participant_id: current.participant_id,
-          transaction_id: current.transaction?.transaction_id,
-          screen_name: "post",
-          metadata: { items: Object.keys(current.post_answers).length },
-        },
-      ],
-    }));
-  };
-
-  const finishExperiment = () => {
     updateSession((current) => {
       const timestamp = nowIso();
       const biometric =
@@ -823,6 +796,7 @@ export function DemoApp() {
       const completedSession: ExperimentSession = {
         ...current,
         current_step: "debrief",
+        post_survey_completed_at: timestamp,
         session_status:
           current.session_status === "technical_failure" ? "technical_failure" : "completed",
         template_ref: biometric ? null : current.template_ref,
@@ -830,12 +804,12 @@ export function DemoApp() {
         events: [
           ...current.events,
           {
-            event_name: "ranking_completed",
+            event_name: "post_survey_completed",
             timestamp,
             participant_id: current.participant_id,
             transaction_id: current.transaction?.transaction_id,
-            screen_name: "ranking",
-            metadata: { ranking: current.ranking },
+            screen_name: "post",
+            metadata: { items: Object.keys(current.post_answers).length },
           },
           ...(biometric
             ? [
@@ -980,26 +954,6 @@ export function DemoApp() {
               onSubmit={completePostSurvey}
               questions={postQuestions}
               title="Đánh giá phương thức vừa sử dụng"
-            />
-          )}
-          {session.current_step === "ranking" && (
-            <RankingScreen
-              feedback={session.open_feedback}
-              ranking={session.ranking}
-              onFeedback={(field, value) =>
-                updateSession((current) => ({
-                  ...current,
-                  open_feedback: { ...current.open_feedback, [field]: value },
-                }))
-              }
-              onRanking={(group, rank) =>
-                updateSession((current) => ({
-                  ...current,
-                  ranking: { ...current.ranking, [group]: rank },
-                }))
-              }
-              onSubmit={finishExperiment}
-              participantId={session.participant_id}
             />
           )}
           {session.current_step === "debrief" && (
@@ -2300,130 +2254,6 @@ function SuccessScreen({
   );
 }
 
-function RankingScreen({
-  feedback,
-  onFeedback,
-  onRanking,
-  onSubmit,
-  participantId,
-  ranking,
-}: {
-  feedback: ExperimentSession["open_feedback"];
-  onFeedback: (field: keyof ExperimentSession["open_feedback"], value: string) => void;
-  onRanking: (group: StudyGroup, rank: number) => void;
-  onSubmit: () => void;
-  participantId: string;
-  ranking: Partial<Record<StudyGroup, number>>;
-}) {
-  const usedRanks = Object.values(ranking);
-  const rankingComplete =
-    groupOrder.every((group) => ranking[group]) &&
-    new Set(usedRanks).size === groupOrder.length;
-  const [wantsInterview, setWantsInterview] = useState(false);
-  const [contact, setContact] = useState("");
-
-  const submit = () => {
-    if (wantsInterview && contact.trim()) {
-      const existing = readJson<Array<{ participant_id: string; contact: string }>>(
-        storageKeys.interviewContacts,
-        [],
-      );
-      writeJson(storageKeys.interviewContacts, [
-        ...existing,
-        { participant_id: participantId, contact: contact.trim() },
-      ]);
-    }
-    onSubmit();
-  };
-
-  return (
-    <Panel eyebrow="Xếp hạng và phỏng vấn" icon={ClipboardCheck} title="So sánh trung lập">
-      <div className="grid gap-3 lg:grid-cols-2">
-        {groupOrder.map((group) => {
-          const copy = groupCopy[group];
-          const Icon = copy.icon;
-          return (
-            <article className="rounded-lg border border-[#ead8bf] bg-white p-4" key={group}>
-              <div className="mb-3 flex items-start gap-3">
-                <div className={cn("flex h-10 w-10 items-center justify-center rounded-lg border", copy.color)}>
-                  <Icon size={18} aria-hidden />
-                </div>
-                <div>
-                  <h3 className="text-sm font-semibold">{copy.label}</h3>
-                  <p className="mt-1 text-sm leading-6 text-stone-600">
-                    {copy.neutralDescription}
-                  </p>
-                </div>
-              </div>
-              <CustomSelect
-                onChange={(value) => onRanking(group, Number(value))}
-                options={[1, 2, 3, 4].map((rank) => ({
-                  disabled: usedRanks.includes(rank) && ranking[group] !== rank,
-                  label: `Hạng ${rank}`,
-                  value: String(rank),
-                }))}
-                placeholder="Xếp hạng"
-                size="sm"
-                value={ranking[group] ? String(ranking[group]) : ""}
-              />
-            </article>
-          );
-        })}
-      </div>
-
-      <div className="mt-4 grid gap-3">
-        <TextArea
-          label="Điểm bạn thích nhất"
-          onChange={(value) => onFeedback("liked_most", value)}
-          value={feedback.liked_most}
-        />
-        <TextArea
-          label="Lo ngại lớn nhất"
-          onChange={(value) => onFeedback("biggest_concern", value)}
-          value={feedback.biggest_concern}
-        />
-        <TextArea
-          label="Bối cảnh bạn sẵn sàng sử dụng"
-          onChange={(value) => onFeedback("use_context", value)}
-          value={feedback.use_context}
-        />
-      </div>
-
-      <div className="mt-4 rounded-lg border border-[#ead8bf] bg-white p-4">
-        <label className="flex items-start gap-3 text-sm text-stone-700">
-          <input
-            checked={wantsInterview}
-            className="mt-0.5 h-4 w-4 shrink-0 accent-[#6f3f24]"
-            onChange={(event) => setWantsInterview(event.target.checked)}
-            type="checkbox"
-          />
-          <span>Tôi đồng ý để nhóm nghiên cứu liên hệ phỏng vấn sau.</span>
-        </label>
-        {wantsInterview && (
-          <input
-            className="mt-3 h-10 w-full rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 text-sm outline-none focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
-            onChange={(event) => setContact(event.target.value)}
-            placeholder="Email hoặc số điện thoại"
-            value={contact}
-          />
-        )}
-      </div>
-
-      <ActionRow>
-        <button
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-[#d6c0aa]"
-          disabled={!rankingComplete}
-          onClick={submit}
-          type="button"
-        >
-          Hoàn tất
-          <ArrowRight size={17} aria-hidden />
-        </button>
-      </ActionRow>
-    </Panel>
-  );
-}
-
 function DebriefScreen({
   onExport,
   onExportEvents,
@@ -2634,26 +2464,5 @@ function Row({
         {value}
       </span>
     </div>
-  );
-}
-
-function TextArea({
-  label,
-  onChange,
-  value,
-}: {
-  label: string;
-  onChange: (value: string) => void;
-  value: string;
-}) {
-  return (
-    <label className="block">
-      <span className="mb-1 block text-sm font-medium text-stone-700">{label}</span>
-      <textarea
-        className="min-h-24 w-full resize-y rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 py-2 text-sm outline-none focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
-        onChange={(event) => onChange(event.target.value)}
-        value={value}
-      />
-    </label>
   );
 }

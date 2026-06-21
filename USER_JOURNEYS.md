@@ -13,7 +13,7 @@ The prototype is a full experiment walkthrough wrapped in a coffee shop checkout
 7. Participant reviews the cart total and remaining test balance.
 8. POS opens only the assigned payment method.
 9. Receipt confirms the selected order and transaction id.
-10. Participant completes the post-survey, ranks all four methods, sees the debrief, and exports data if needed.
+10. Participant completes the post-survey, sees the debrief, and exports data if needed.
 
 ## QR_PIN
 
