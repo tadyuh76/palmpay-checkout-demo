@@ -1808,10 +1808,10 @@ function ExperimentHeader({
           </div>
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold">
-              {session.participant_name || "PalmPay Coffee Study"}
+              PalmPay Coffee Study
             </p>
             <p className="truncate text-xs text-stone-500">
-              {session.participant_id} · PalmPay Coffee Study
+              {session.participant_id} · {session.participant_name || "Người tham gia"}
             </p>
           </div>
         </div>
@@ -1842,7 +1842,7 @@ function ProgressRail({
 }) {
   const activeIndex = flowSteps.indexOf(currentStep);
   return (
-    <aside className="self-start rounded-lg border border-[#ead8bf] bg-white p-4 shadow-sm lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto">
+    <aside className="self-start rounded-lg border border-[#ead8bf] bg-white p-4 shadow-sm lg:sticky lg:top-20 lg:-mt-4 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
       <div className="mb-4 flex items-center gap-2">
         <ClipboardCheck size={18} aria-hidden />
         <h2 className="font-semibold">Luồng thí nghiệm</h2>
