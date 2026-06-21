@@ -1,12 +1,6 @@
 <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
   <title>PalmPay mark</title>
-  <rect x="4" y="4" width="56" height="56" rx="14" fill="#6F3F24"/>
-  <path d="M22 33.5V20.8C22 18.9 23.5 17.4 25.4 17.4C27.3 17.4 28.8 18.9 28.8 20.8V32.4" stroke="#FFF7EC" stroke-width="4.2" stroke-linecap="round"/>
-  <path d="M28.8 31.8V17.8C28.8 15.9 30.3 14.4 32.2 14.4C34.1 14.4 35.6 15.9 35.6 17.8V32.3" stroke="#FFF7EC" stroke-width="4.2" stroke-linecap="round"/>
-  <path d="M35.6 31.5V20.5C35.6 18.6 37.1 17.1 39 17.1C40.9 17.1 42.4 18.6 42.4 20.5V35.4" stroke="#FFF7EC" stroke-width="4.2" stroke-linecap="round"/>
-  <path d="M22.1 33.5L19 29.9C17.8 28.5 15.8 28.3 14.4 29.4C13 30.6 12.8 32.7 14 34.1L25.5 47.2C27.2 49.1 29.6 50.2 32.1 50.2H35.8C41.2 50.2 45.5 45.8 45.5 40.5V26.2C45.5 24.4 44.1 22.9 42.3 22.9" stroke="#FFF7EC" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M29 39.4C31 37.2 34 35.8 37.2 35.8" stroke="#91D2BD" stroke-width="2.7" stroke-linecap="round"/>
-  <path d="M32.6 43.1C33.9 41.8 35.8 41 37.9 41" stroke="#91D2BD" stroke-width="2.7" stroke-linecap="round"/>
-  <path d="M48 15.5C51.1 17.6 53.2 21.1 53.2 25.1" stroke="#F6C15A" stroke-width="3" stroke-linecap="round"/>
-  <path d="M47.6 22.5C48.5 23.3 49.1 24.5 49.1 25.9" stroke="#F6C15A" stroke-width="3" stroke-linecap="round"/>
+  <rect x="6" y="6" width="52" height="52" rx="14" fill="#6F3F24"/>
+  <path d="M25 48V18H37C44 18 49 22.5 49 29C49 35.5 44 40 37 40H25" stroke="#FFF7EC" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="43" cy="47" r="4" fill="#91D2BD"/>
 </svg>
