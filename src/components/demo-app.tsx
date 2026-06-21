@@ -202,7 +202,7 @@ const stepLabels: Record<StepKey, string> = {
   admin: "Quản trị",
   consent: "Đồng ý",
   pre: "Khảo sát trước",
-  assignment: "Phân nhóm",
+  assignment: "Phương thức",
   setup: "Thiết lập",
   product: "Sản phẩm",
   checkout: "Xác nhận",
@@ -345,14 +345,17 @@ function makeParticipantId() {
   return `P${String(current).padStart(4, "0")}`;
 }
 
-function makeSession(participantName: string): ExperimentSession {
+function makeSession(
+  participantName: string,
+  selectedGroup: StudyGroup | null = null,
+): ExperimentSession {
   const trimmedName = participantName.trim() || "Khách thử nghiệm";
 
   return {
     participant_id: makeParticipantId(),
     participant_name: trimmedName,
     protocol_version: protocolVersion,
-    assigned_group: null,
+    assigned_group: selectedGroup,
     created_at: nowIso(),
     consent_at: null,
     pre_survey_completed_at: null,
@@ -400,6 +403,15 @@ function normalizeSession(session: ExperimentSession | null) {
   };
 }
 
+function downloadBlob(filename: string, blob: Blob) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 function downloadCsv(filename: string, rows: Array<Record<string, unknown>>) {
   const headers = Array.from(
     rows.reduce((set, row) => {
@@ -417,49 +429,199 @@ function downloadCsv(filename: string, rows: Array<Record<string, unknown>>) {
     headers.join(","),
     ...rows.map((row) => headers.map((header) => escape(row[header])).join(",")),
   ].join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(url);
+  downloadBlob(filename, new Blob([csv], { type: "text/csv;charset=utf-8" }));
 }
 
-function buildWideRow(session: ExperimentSession) {
+function normalizeSurveyAnswer(question: SurveyQuestion, value: unknown) {
+  if (value === null || value === undefined || value === "") return "";
+  if (question.type === "select") {
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value === "string" && /^\d+$/.test(value)) return Number(value);
+    const index = (question.options ?? []).findIndex((option) => option === value);
+    return index >= 0 ? index + 1 : "";
+  }
+
+  const numericValue = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(numericValue) ? numericValue : "";
+}
+
+function selectAnswerValue(question: SurveyQuestion, value: unknown) {
+  const normalized = normalizeSurveyAnswer(question, value);
+  return typeof normalized === "number" ? String(normalized) : "";
+}
+
+function methodCode(group?: StudyGroup | null) {
+  if (!group) return "";
+  const index = groupOrder.indexOf(group);
+  return index >= 0 ? index + 1 : "";
+}
+
+function paymentStatusCode(status?: TransactionRecord["payment_status"] | null) {
+  if (!status) return "";
+  return status === "paid" ? 1 : 2;
+}
+
+type ExportColumn = {
+  key: string;
+  label: string;
+};
+
+const methodWorkbookColumns: ExportColumn[] = [
+  { key: "timestamp", label: "Dấu thời gian" },
+  { key: "participant_id", label: "Mã người tham gia" },
+  { key: "participant_name", label: "Tên người tham gia" },
+  { key: "qr_account_name", label: "Tên tài khoản QR" },
+  { key: "face_account_name", label: "Tên đăng ký Face ID" },
+  { key: "method_code", label: "Mã phương thức" },
+  { key: "method", label: "Phương thức" },
+  { key: "method_label", label: "Tên phương thức" },
+  { key: "protocol_version", label: "Phiên bản protocol" },
+  { key: "created_at", label: "Thời điểm tạo phiên" },
+  { key: "consent_at", label: "Thời điểm đồng ý" },
+  { key: "setup_completed_at", label: "Thời điểm hoàn tất đăng ký" },
+  { key: "checkout_completed_at", label: "Thời điểm hoàn tất thanh toán" },
+  { key: "session_status", label: "Trạng thái phiên" },
+  { key: "payment_status_code", label: "Mã trạng thái thanh toán" },
+  { key: "payment_status", label: "Trạng thái thanh toán" },
+  { key: "transaction_id", label: "Mã giao dịch" },
+  { key: "product_summary", label: "Sản phẩm đã chọn" },
+  { key: "cart_total", label: "Tổng tiền" },
+  { key: "cart_items", label: "Chi tiết giỏ hàng" },
+  { key: "setup_duration", label: "Thời lượng đăng ký (giây)" },
+  { key: "checkout_duration", label: "Thời lượng thanh toán (giây)" },
+  { key: "number_of_retries", label: "Số lần thử lại" },
+  { key: "number_of_errors", label: "Số lỗi" },
+  { key: "assistance_required", label: "Cần hỗ trợ" },
+  { key: "template_deleted_at", label: "Thời điểm xóa mẫu sinh trắc" },
+  ...preQuestions.map((question) => ({
+    key: `pre_${question.item_id}`,
+    label: `PRE ${question.item_id}: ${question.text}`,
+  })),
+  ...postQuestions.map((question) => ({
+    key: `post_${question.item_id}`,
+    label: `POST ${question.item_id}: ${question.text}`,
+  })),
+];
+
+function buildMethodWorkbookRow(session: ExperimentSession) {
   const group = session.assigned_group;
-  return {
+  const row: Record<string, unknown> = {
+    timestamp:
+      session.post_survey_completed_at ??
+      session.checkout_completed_at ??
+      session.created_at,
     participant_id: session.participant_id,
     participant_name: session.participant_name,
-    assigned_group: group,
-    face_account_name: session.face_account_name ?? null,
+    qr_account_name: session.qr_account_name ?? "",
+    face_account_name: session.face_account_name ?? "",
+    method_code: methodCode(group),
+    method: group ?? "",
+    method_label: group ? groupCopy[group].label : "",
     protocol_version: session.protocol_version,
-    consent_at: session.consent_at,
-    pre_survey_completed_at: session.pre_survey_completed_at,
-    post_survey_completed_at: session.post_survey_completed_at,
+    created_at: session.created_at,
+    consent_at: session.consent_at ?? "",
+    setup_completed_at: session.setup_completed_at ?? "",
+    checkout_completed_at: session.checkout_completed_at ?? "",
     session_status: session.session_status,
-    setup_duration: session.transaction?.setup_duration ?? null,
-    checkout_duration: session.transaction?.checkout_duration ?? null,
-    number_of_retries: session.transaction?.number_of_retries ?? 0,
-    number_of_errors: session.transaction?.number_of_errors ?? 0,
-    assistance_required: session.transaction?.assistance_required ?? false,
-    payment_status: session.transaction?.payment_status ?? null,
-    product_summary: session.transaction?.product ?? null,
+    payment_status_code: paymentStatusCode(session.transaction?.payment_status),
+    payment_status: session.transaction?.payment_status ?? "",
+    transaction_id: session.transaction?.transaction_id ?? "",
+    product_summary: session.transaction?.product ?? "",
+    cart_total: session.transaction?.amount ?? "",
     cart_items: session.transaction?.items
       ? JSON.stringify(session.transaction.items)
-      : null,
-    cart_total: session.transaction?.amount ?? null,
-    template_deleted_at: session.template_deleted_at ?? null,
-    ...Object.fromEntries(
-      Object.entries(session.pre_answers).map(([key, value]) => [`pre_${key}`, value]),
-    ),
-    ...Object.fromEntries(
-      Object.entries(session.post_answers).map(([key, value]) => [
-        `post_${key}`,
-        value,
-      ]),
-    ),
+      : "",
+    setup_duration: session.transaction?.setup_duration ?? "",
+    checkout_duration: session.transaction?.checkout_duration ?? "",
+    number_of_retries: session.transaction?.number_of_retries ?? 0,
+    number_of_errors: session.transaction?.number_of_errors ?? 0,
+    assistance_required: session.transaction?.assistance_required ? 1 : 0,
+    template_deleted_at: session.template_deleted_at ?? "",
   };
+
+  preQuestions.forEach((question) => {
+    row[`pre_${question.item_id}`] = normalizeSurveyAnswer(
+      question,
+      session.pre_answers[question.item_id],
+    );
+  });
+  postQuestions.forEach((question) => {
+    row[`post_${question.item_id}`] = normalizeSurveyAnswer(
+      question,
+      session.post_answers[question.item_id],
+    );
+  });
+
+  return row;
+}
+
+function escapeXml(value: unknown) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function xmlCell(value: unknown) {
+  if (value === null || value === undefined || value === "") {
+    return "<Cell><Data ss:Type=\"String\"></Data></Cell>";
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return `<Cell><Data ss:Type="Number">${value}</Data></Cell>`;
+  }
+  return `<Cell><Data ss:Type="String">${escapeXml(value)}</Data></Cell>`;
+}
+
+function xmlRow(values: unknown[]) {
+  return `<Row>${values.map(xmlCell).join("")}</Row>`;
+}
+
+function downloadMethodWorkbook(
+  filename: string,
+  sessions: ExperimentSession[],
+) {
+  const headerValues = methodWorkbookColumns.map((column) => column.label);
+  const sheets = groupOrder
+    .map((group) => {
+      const rows = sessions
+        .filter((session) => session.assigned_group === group)
+        .map(buildMethodWorkbookRow);
+      const tableRows = [
+        xmlRow(headerValues),
+        ...rows.map((row) =>
+          xmlRow(methodWorkbookColumns.map((column) => row[column.key])),
+        ),
+      ].join("");
+
+      return [
+        `<Worksheet ss:Name="${escapeXml(group)}">`,
+        "<Table>",
+        tableRows,
+        "</Table>",
+        "</Worksheet>",
+      ].join("");
+    })
+    .join("");
+
+  const workbook = [
+    '<?xml version="1.0"?>',
+    '<?mso-application progid="Excel.Sheet"?>',
+    '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"',
+    ' xmlns:o="urn:schemas-microsoft-com:office:office"',
+    ' xmlns:x="urn:schemas-microsoft-com:office:excel"',
+    ' xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"',
+    ' xmlns:html="http://www.w3.org/TR/REC-html40">',
+    sheets,
+    "</Workbook>",
+  ].join("");
+
+  downloadBlob(
+    filename,
+    new Blob([workbook], {
+      type: "application/vnd.ms-excel;charset=utf-8",
+    }),
+  );
 }
 
 function allStoredSessions(current?: ExperimentSession | null) {
@@ -467,7 +629,14 @@ function allStoredSessions(current?: ExperimentSession | null) {
     storageKeys.completedSessions,
     [],
   );
-  return current ? [...completed, current] : completed;
+  if (!current) return completed;
+  const currentIndex = completed.findIndex(
+    (item) => item.participant_id === current.participant_id,
+  );
+  if (currentIndex === -1) return [...completed, current];
+  return completed.map((item, index) =>
+    index === currentIndex ? current : item,
+  );
 }
 
 export function DemoApp() {
@@ -545,8 +714,25 @@ export function DemoApp() {
     }));
   };
 
-  const startNewSession = (participantName: string) => {
-    const next = makeSession(participantName);
+  const startNewSession = (
+    participantName: string,
+    selectedGroup: StudyGroup,
+  ) => {
+    const next = makeSession(participantName, selectedGroup);
+    const history = readJson<AssignmentHistoryItem[]>(
+      storageKeys.assignmentHistory,
+      [],
+    );
+    writeJson(storageKeys.assignmentHistory, [
+      ...history,
+      {
+        participant_id: next.participant_id,
+        participant_name: next.participant_name,
+        assigned_group: selectedGroup,
+        assigned_at: next.created_at,
+        override_reason: "selected_on_start_screen",
+      },
+    ]);
     setSession({
       ...next,
       events: [
@@ -556,6 +742,7 @@ export function DemoApp() {
           participant_id: next.participant_id,
           screen_name: "admin",
           metadata: {
+            assigned_group: selectedGroup,
             participant_name: next.participant_name,
             protocol_version: next.protocol_version,
           },
@@ -632,6 +819,7 @@ export function DemoApp() {
 
   const completePreSurvey = () => {
     updateSession((current) => {
+      const hasSelectedGroup = Boolean(current.assigned_group);
       const assignedGroup =
         current.assigned_group ??
         getNextAssignment(current.participant_id, current.participant_name);
@@ -651,11 +839,16 @@ export function DemoApp() {
             metadata: { items: Object.keys(current.pre_answers).length },
           },
           {
-            event_name: "random_group_assigned",
+            event_name: hasSelectedGroup
+              ? "selected_group_confirmed"
+              : "random_group_assigned",
             timestamp,
             participant_id: current.participant_id,
             screen_name: "assignment",
-            metadata: { assigned_group: assignedGroup, block_randomized: true },
+            metadata: {
+              assigned_group: assignedGroup,
+              block_randomized: !hasSelectedGroup,
+            },
           },
         ],
       };
@@ -1056,7 +1249,10 @@ export function DemoApp() {
             <DebriefScreen
               session={session}
               onExport={() =>
-                downloadCsv("palmpay-wide.csv", allStoredSessions(session).map(buildWideRow))
+                downloadMethodWorkbook(
+                  "palmpay-method-sheets.xls",
+                  allStoredSessions(session),
+                )
               }
               onExportEvents={() =>
                 downloadCsv(
@@ -1377,10 +1573,15 @@ function FaceMobileConfirmation({
   );
 }
 
-function AdminHome({ onCreate }: { onCreate: (participantName: string) => void }) {
+function AdminHome({
+  onCreate,
+}: {
+  onCreate: (participantName: string, selectedGroup: StudyGroup) => void;
+}) {
   const [history, setHistory] = useState<AssignmentHistoryItem[]>([]);
   const [completed, setCompleted] = useState<ExperimentSession[]>([]);
   const [participantName, setParticipantName] = useState("");
+  const [selectedGroup, setSelectedGroup] = useState<StudyGroup | null>(null);
 
   useEffect(() => {
     window.queueMicrotask(() => {
@@ -1400,6 +1601,14 @@ function AdminHome({ onCreate }: { onCreate: (participantName: string) => void }
         <section className="rounded-lg border border-[#ead8bf] bg-white p-5 shadow-sm">
           <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
             <div>
+              <Image
+                alt="PalmPay"
+                className="mb-4 h-auto w-40"
+                height={80}
+                priority
+                src="/brand/palmpay-logo.svg"
+                width={296}
+              />
               <p className="text-sm font-medium text-[#7a4a2a]">{protocolVersion}</p>
               <h1 className="mt-1 text-2xl font-semibold tracking-normal">
                 PalmPay Coffee Experiment
@@ -1407,15 +1616,15 @@ function AdminHome({ onCreate }: { onCreate: (participantName: string) => void }
               <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-600">
                 Nền tảng mô phỏng thí nghiệm tại quầy cafe: người tham gia
                 đi theo luồng nghiên cứu đầy đủ, chọn món từ catalog, rồi
-                thanh toán bằng phương thức được phân nhóm ngẫu nhiên.
+                thanh toán bằng phương thức được chọn cho phiên thử nghiệm.
               </p>
             </div>
             <form
               className="grid w-full max-w-sm gap-2"
               onSubmit={(event) => {
                 event.preventDefault();
-                if (!participantName.trim()) return;
-                onCreate(participantName);
+                if (!participantName.trim() || !selectedGroup) return;
+                onCreate(participantName, selectedGroup);
               }}
             >
               <label className="text-sm font-medium text-stone-700" htmlFor="participant-name">
@@ -1430,7 +1639,7 @@ function AdminHome({ onCreate }: { onCreate: (participantName: string) => void }
               />
               <button
                 className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-[#d6c0aa]"
-                disabled={!participantName.trim()}
+                disabled={!participantName.trim() || !selectedGroup}
                 type="submit"
               >
                 <UserPlus size={17} aria-hidden />
@@ -1439,14 +1648,37 @@ function AdminHome({ onCreate }: { onCreate: (participantName: string) => void }
             </form>
           </div>
 
+          <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <h2 className="text-sm font-semibold text-stone-950">
+                Chọn phương thức cho phiên
+              </h2>
+              <p className="mt-1 text-xs text-stone-500">
+                Mỗi phương thức sẽ mở đúng luồng đăng ký và thanh toán tương ứng.
+              </p>
+            </div>
+            {selectedGroup && (
+              <span className="rounded-full border border-[#ead8bf] bg-[#fffaf3] px-3 py-1 text-xs font-semibold text-[#6f3f24]">
+                Đã chọn {groupCopy[selectedGroup].shortLabel}
+              </span>
+            )}
+          </div>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {counts.map(({ group, count }) => {
               const copy = groupCopy[group];
               const Icon = copy.icon;
+              const selected = selectedGroup === group;
               return (
-                <article
-                  className={cn("rounded-lg border p-4", copy.color)}
+                <button
+                  aria-pressed={selected}
+                  className={cn(
+                    "rounded-lg border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-[#b78352]",
+                    copy.color,
+                    selected && "border-[#6f3f24] ring-2 ring-[#6f3f24]/25",
+                  )}
                   key={group}
+                  onClick={() => setSelectedGroup(group)}
+                  type="button"
                 >
                   <div className="mb-3 flex items-center justify-between">
                     <Icon size={20} aria-hidden />
@@ -1456,7 +1688,7 @@ function AdminHome({ onCreate }: { onCreate: (participantName: string) => void }
                   </div>
                   <h2 className="text-sm font-semibold">{copy.shortLabel}</h2>
                   <p className="mt-1 text-xs leading-5 opacity-80">{copy.device}</p>
-                </article>
+                </button>
               );
             })}
           </div>
@@ -1492,11 +1724,13 @@ function AdminHome({ onCreate }: { onCreate: (participantName: string) => void }
               <button
                 className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#ead8bf] bg-white px-3 text-sm font-semibold text-stone-700 transition hover:bg-[#fffaf3]"
                 disabled={completed.length === 0}
-                onClick={() => downloadCsv("palmpay-wide.csv", completed.map(buildWideRow))}
+                onClick={() =>
+                  downloadMethodWorkbook("palmpay-method-sheets.xls", completed)
+                }
                 type="button"
               >
                 <Download size={16} aria-hidden />
-                CSV dạng rộng
+                Bảng 4 sheet
               </button>
               <button
                 className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#ead8bf] bg-white px-3 text-sm font-semibold text-stone-700 transition hover:bg-[#fffaf3]"
@@ -1531,8 +1765,15 @@ function ExperimentHeader({
     <header className="sticky top-0 z-20 border-b border-[#ead8bf] bg-[#fffaf3]/95 backdrop-blur">
       <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#6f3f24] text-white">
-            <Hand size={20} aria-hidden />
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center">
+            <Image
+              alt=""
+              aria-hidden
+              height={40}
+              priority
+              src="/brand/palmpay-mark.svg"
+              width={40}
+            />
           </div>
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold">
@@ -1680,44 +1921,44 @@ function SurveyScreen({
   return (
     <Panel eyebrow={eyebrow} icon={ClipboardCheck} title={title}>
       <div className="space-y-4">
-        {questions.map((question) => (
-          <div
-            className="rounded-lg border border-[#ead8bf] bg-white p-4"
-            key={question.item_id}
-          >
-            <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-stone-950">
-                  {question.text}
-                </p>
+        {questions.map((question) => {
+          const answerValue = answers[question.item_id];
+          const normalizedValue = normalizeSurveyAnswer(question, answerValue);
+          return (
+            <div
+              className="rounded-lg border border-[#ead8bf] bg-white p-4"
+              key={question.item_id}
+            >
+              <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-stone-950">
+                    {question.text}
+                  </p>
+                </div>
               </div>
-            </div>
-            {question.type === "select" ? (
-              <div className="max-w-sm">
-                <CustomSelect
+              {question.type === "select" ? (
+                <div className="max-w-sm">
+                  <CustomSelect
+                    onChange={(value) => onAnswer(question.item_id, Number(value))}
+                    options={(question.options ?? []).map((option, index) => ({
+                      label: option,
+                      value: String(index + 1),
+                    }))}
+                    placeholder="Chọn câu trả lời"
+                    value={selectAnswerValue(question, answerValue)}
+                  />
+                </div>
+              ) : (
+                <Likert
+                  max={question.scale_max ?? 7}
+                  min={question.scale_min ?? 1}
                   onChange={(value) => onAnswer(question.item_id, value)}
-                  options={(question.options ?? []).map((option) => ({
-                    label: option,
-                    value: option,
-                  }))}
-                  placeholder="Chọn câu trả lời"
-                  value={String(answers[question.item_id] ?? "")}
+                  value={typeof normalizedValue === "number" ? normalizedValue : null}
                 />
-              </div>
-            ) : (
-              <Likert
-                max={question.scale_max ?? 5}
-                min={question.scale_min ?? 1}
-                onChange={(value) => onAnswer(question.item_id, value)}
-                value={
-                  typeof answers[question.item_id] === "number"
-                    ? Number(answers[question.item_id])
-                    : null
-                }
-              />
-            )}
-          </div>
-        ))}
+              )}
+            </div>
+          );
+        })}
       </div>
       <ActionRow>
         <button
@@ -1748,7 +1989,10 @@ function Likert({
   const values = Array.from({ length: max - min + 1 }, (_, index) => min + index);
   return (
     <div>
-      <div className="grid grid-cols-5 gap-2">
+      <div
+        className="grid gap-2"
+        style={{ gridTemplateColumns: `repeat(${values.length}, minmax(0, 1fr))` }}
+      >
         {values.map((item) => (
           <button
             className={cn(
@@ -1783,7 +2027,7 @@ function AssignmentScreen({
   const copy = groupCopy[group];
   const Icon = copy.icon;
   return (
-    <Panel eyebrow="Phân nhóm ngẫu nhiên" icon={IdCard} title="Phương thức được chỉ định">
+    <Panel eyebrow="Phương thức đã chọn" icon={IdCard} title="Phương thức thanh toán">
       <div className={cn("rounded-lg border p-5", copy.color)}>
         <div className="flex items-start gap-4">
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-white/70">
@@ -2422,19 +2666,19 @@ function ProductScreen({
               Tổng tiền vượt quá số dư thử nghiệm.
             </p>
           )}
+          <div className="mt-4 border-t border-[#ead8bf] pt-4">
+            <button
+              className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-[#d6c0aa]"
+              disabled={!canContinue}
+              onClick={onContinue}
+              type="button"
+            >
+              Xác nhận giỏ hàng
+              <ArrowRight size={17} aria-hidden />
+            </button>
+          </div>
         </aside>
       </div>
-      <ActionRow>
-        <button
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-[#d6c0aa]"
-          disabled={!canContinue}
-          onClick={onContinue}
-          type="button"
-        >
-          Xác nhận giỏ hàng
-          <ArrowRight size={17} aria-hidden />
-        </button>
-      </ActionRow>
     </Panel>
   );
 }
@@ -2569,7 +2813,7 @@ function CheckoutScreen({
             </div>
           </div>
           <p className="text-sm leading-6 opacity-85">
-            POS sẽ chuyển thẳng sang phương thức đã được phân nhóm.
+            POS sẽ chuyển thẳng sang phương thức đã chọn cho phiên này.
           </p>
         </div>
       </div>
@@ -3176,7 +3420,7 @@ function DebriefScreen({
           type="button"
         >
           <Download size={17} aria-hidden />
-          CSV dạng rộng
+          Bảng 4 sheet
         </button>
         <button
           className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-[#ead8bf] bg-white px-4 text-sm font-semibold text-stone-700 transition hover:bg-[#fffaf3]"

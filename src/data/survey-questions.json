@@ -5,7 +5,7 @@
       "construct": "DIGITAL_PAYMENT_USE",
       "text": "Tôi thường xuyên sử dụng các phương thức thanh toán số.",
       "scale_min": 1,
-      "scale_max": 5,
+      "scale_max": 7,
       "reverse_scored": false,
       "required": true
     },
@@ -14,7 +14,7 @@
       "construct": "FAMILIARITY_QR",
       "text": "Tôi quen thuộc với thanh toán bằng mã QR.",
       "scale_min": 1,
-      "scale_max": 5,
+      "scale_max": 7,
       "reverse_scored": false,
       "required": true
     },
@@ -23,7 +23,7 @@
       "construct": "FAMILIARITY_NFC",
       "text": "Tôi quen thuộc với thanh toán không tiếp xúc bằng thẻ NFC.",
       "scale_min": 1,
-      "scale_max": 5,
+      "scale_max": 7,
       "reverse_scored": false,
       "required": true
     },
@@ -32,7 +32,7 @@
       "construct": "FAMILIARITY_FACE_POS",
       "text": "Tôi quen thuộc với nhận diện khuôn mặt tại điểm bán.",
       "scale_min": 1,
-      "scale_max": 5,
+      "scale_max": 7,
       "reverse_scored": false,
       "required": true
     },
@@ -41,7 +41,7 @@
       "construct": "INITIAL_PRIVACY_CONCERN",
       "text": "Tôi lo ngại về việc dữ liệu cá nhân bị sử dụng sai mục đích trong thanh toán số.",
       "scale_min": 1,
-      "scale_max": 5,
+      "scale_max": 7,
       "reverse_scored": false,
       "required": true
     },
@@ -50,7 +50,7 @@
       "construct": "TECH_READINESS",
       "text": "Tôi sẵn sàng thử các công nghệ thanh toán mới trong môi trường thử nghiệm.",
       "scale_min": 1,
-      "scale_max": 5,
+      "scale_max": 7,
       "reverse_scored": false,
       "required": true
     },
@@ -79,7 +79,7 @@
       "construct": "SIMPLICITY",
       "text": "Phương thức thanh toán vừa trải nghiệm dễ thực hiện.",
       "scale_min": 1,
-      "scale_max": 5,
+      "scale_max": 7,
       "reverse_scored": false,
       "required": true
     },
@@ -88,7 +88,7 @@
       "construct": "CONVENIENCE",
       "text": "Phương thức thanh toán vừa trải nghiệm giúp tôi thanh toán nhanh chóng.",
       "scale_min": 1,
-      "scale_max": 5,
+      "scale_max": 7,
       "reverse_scored": false,
       "required": true
     },
@@ -97,7 +97,7 @@
       "construct": "PERCEIVED_USEFULNESS",
       "text": "Phương thức thanh toán vừa trải nghiệm hữu ích trong tình huống mua hàng tại điểm bán.",
       "scale_min": 1,
-      "scale_max": 5,
+      "scale_max": 7,
       "reverse_scored": false,
       "required": true
     },
@@ -106,7 +106,7 @@
       "construct": "PERCEIVED_SECURITY",
       "text": "Phương thức thanh toán vừa trải nghiệm tạo cảm giác giao dịch được bảo vệ.",
       "scale_min": 1,
-      "scale_max": 5,
+      "scale_max": 7,
       "reverse_scored": false,
       "required": true
     },
@@ -115,7 +115,7 @@
       "construct": "PRIVACY_CONCERN",
       "text": "Tôi lo ngại về dữ liệu cá nhân khi dùng phương thức thanh toán vừa trải nghiệm.",
       "scale_min": 1,
-      "scale_max": 5,
+      "scale_max": 7,
       "reverse_scored": false,
       "required": true
     },
@@ -124,7 +124,7 @@
       "construct": "TRUST",
       "text": "Tôi tin tưởng quy trình xử lý của phương thức thanh toán vừa trải nghiệm.",
       "scale_min": 1,
-      "scale_max": 5,
+      "scale_max": 7,
       "reverse_scored": false,
       "required": true
     },
@@ -133,7 +133,7 @@
       "construct": "FUTURE_INTENTION",
       "text": "Tôi sẵn sàng sử dụng phương thức thanh toán vừa trải nghiệm trong tương lai.",
       "scale_min": 1,
-      "scale_max": 5,
+      "scale_max": 7,
       "reverse_scored": false,
       "required": true
     },
@@ -142,7 +142,7 @@
       "construct": "RECOVERY_EASE",
       "text": "Nếu có lỗi xảy ra, tôi cảm thấy quy trình thử lại của phương thức này dễ hiểu.",
       "scale_min": 1,
-      "scale_max": 5,
+      "scale_max": 7,
       "reverse_scored": false,
       "required": true
     }
