@@ -4,7 +4,7 @@ The prototype is a full experiment walkthrough wrapped in a coffee shop checkout
 
 ## Shared Experiment Flow
 
-1. Researcher creates a new anonymous participant session.
+1. Researcher creates a new participant session with a display name.
 2. Participant reviews consent and continues.
 3. Participant completes the pre-survey without seeing internal item ids or construct labels.
 4. App randomly assigns `QR_PIN`, `NFC_CARD`, `FACE_POS`, or `PALM_VEIN`.
@@ -18,24 +18,25 @@ The prototype is a full experiment walkthrough wrapped in a coffee shop checkout
 ## QR_PIN
 
 1. Open the DemoBank phone mock.
-2. Create a four-digit test PIN.
-3. At payment, scan the POS QR code.
-4. Enter the exact cart total.
-5. Enter the test PIN.
-6. Confirm payment.
+2. Create a sender name and four-digit test PIN.
+3. At payment, scan the POS QR code with a phone.
+4. Review the mobile mock transfer screen: sender, receiver, amount, and product summary.
+5. Enter the test PIN on the phone.
+6. Confirm payment and watch the POS screen complete automatically.
 
 ## NFC_CARD
 
 1. Link the physical NFC test card.
 2. At payment, tap the NFC test card on the reader.
-3. No PIN is requested in the simulated transaction.
+3. A local reader bridge posts the tap to `/api/nfc-taps`.
+4. No PIN is requested in the simulated transaction.
 
 ## FACE_POS
 
 1. Confirm biometric data consent in setup.
-2. Capture three face samples at the POS camera.
+2. Enroll three real webcam face samples at the POS camera.
 3. At payment, look at the POS camera.
-4. Complete the simulated face match.
+4. Complete the browser-based face match.
 
 ## PALM_VEIN
 

@@ -31,7 +31,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { QRCodeSVG } from "qrcode.react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import surveyConfig from "@/data/survey-questions.json";
 import { catalog, catalogCategories, formatVnd, getProduct } from "@/lib/catalog";
 import type { CartLine, Product, ProductCategory } from "@/lib/types";
@@ -91,6 +91,7 @@ type TransactionRecord = {
 
 type ExperimentSession = {
   participant_id: string;
+  participant_name: string;
   protocol_version: string;
   assigned_group: StudyGroup | null;
   created_at: string;
@@ -99,6 +100,8 @@ type ExperimentSession = {
   post_survey_completed_at: string | null;
   session_status: "created" | "active" | "completed" | "technical_failure";
   current_step: StepKey;
+  face_descriptor?: number[] | null;
+  qr_account_name?: string;
   qr_pin?: string;
   biometric_consent_at?: string | null;
   template_ref?: string | null;
@@ -116,6 +119,7 @@ type ExperimentSession = {
 
 type AssignmentHistoryItem = {
   participant_id: string;
+  participant_name?: string;
   assigned_group: StudyGroup;
   assigned_at: string;
   override_reason?: string;
@@ -223,6 +227,21 @@ const flowSteps: StepKey[] = [
 const preQuestions = surveyConfig.pre as SurveyQuestion[];
 const postQuestions = surveyConfig.post as SurveyQuestion[];
 
+type FaceApi = typeof import("@vladmandic/face-api");
+
+type PublicQrTransfer = {
+  amount: number;
+  authorizationCode: string | null;
+  createdAt: string;
+  id: string;
+  paidAt: string | null;
+  productSummary: string;
+  receiverName: string;
+  senderName: string;
+  status: "pending" | "paid";
+  transactionId: string;
+};
+
 function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
@@ -291,7 +310,7 @@ function makeAssignmentBlocks(blockCount = 15) {
   return Array.from({ length: blockCount }).flatMap(() => shuffle(groupOrder));
 }
 
-function getNextAssignment(participantId: string) {
+function getNextAssignment(participantId: string, participantName?: string) {
   let queue = readJson<StudyGroup[]>(storageKeys.assignmentQueue, []);
   if (queue.length === 0) {
     queue = makeAssignmentBlocks();
@@ -308,6 +327,7 @@ function getNextAssignment(participantId: string) {
     ...history,
     {
       participant_id: participantId,
+      participant_name: participantName,
       assigned_group: assigned,
       assigned_at: nowIso(),
     },
@@ -322,9 +342,12 @@ function makeParticipantId() {
   return `P${String(current).padStart(4, "0")}`;
 }
 
-function makeSession(): ExperimentSession {
+function makeSession(participantName: string): ExperimentSession {
+  const trimmedName = participantName.trim() || "Khách thử nghiệm";
+
   return {
     participant_id: makeParticipantId(),
+    participant_name: trimmedName,
     protocol_version: protocolVersion,
     assigned_group: null,
     created_at: nowIso(),
@@ -334,6 +357,8 @@ function makeSession(): ExperimentSession {
     session_status: "created",
     current_step: "consent",
     biometric_consent_at: null,
+    face_descriptor: null,
+    qr_account_name: trimmedName,
     template_ref: null,
     template_deleted_at: null,
     setup_started_at: null,
@@ -350,13 +375,23 @@ function makeSession(): ExperimentSession {
 
 function normalizeSession(session: ExperimentSession | null) {
   if (!session) return null;
+  const participantName =
+    session.participant_name?.trim() || `Khách ${session.participant_id}`;
   if ((session.current_step as string) === "ranking") {
     return {
       ...session,
+      face_descriptor: session.face_descriptor ?? null,
+      participant_name: participantName,
+      qr_account_name: session.qr_account_name || participantName,
       current_step: "debrief" as StepKey,
     };
   }
-  return session;
+  return {
+    ...session,
+    face_descriptor: session.face_descriptor ?? null,
+    participant_name: participantName,
+    qr_account_name: session.qr_account_name || participantName,
+  };
 }
 
 function downloadCsv(filename: string, rows: Array<Record<string, unknown>>) {
@@ -389,6 +424,7 @@ function buildWideRow(session: ExperimentSession) {
   const group = session.assigned_group;
   return {
     participant_id: session.participant_id,
+    participant_name: session.participant_name,
     assigned_group: group,
     protocol_version: session.protocol_version,
     consent_at: session.consent_at,
@@ -429,12 +465,19 @@ function allStoredSessions(current?: ExperimentSession | null) {
 
 export function DemoApp() {
   const [hydrated, setHydrated] = useState(false);
+  const [qrPaymentId, setQrPaymentId] = useState<string | null>(null);
   const [session, setSession] = useState<ExperimentSession | null>(null);
   const cartLines = useMemo(() => cartToLines(session?.cart), [session?.cart]);
   const totalCents = useMemo(() => cartTotal(cartLines), [cartLines]);
 
   useEffect(() => {
     window.queueMicrotask(() => {
+      const paymentId = new URLSearchParams(window.location.search).get("qrPay");
+      if (paymentId) {
+        setQrPaymentId(paymentId);
+        setHydrated(true);
+        return;
+      }
       setSession(normalizeSession(readJson<ExperimentSession | null>(storageKeys.currentSession, null)));
       setHydrated(true);
     });
@@ -495,8 +538,8 @@ export function DemoApp() {
     }));
   };
 
-  const startNewSession = () => {
-    const next = makeSession();
+  const startNewSession = (participantName: string) => {
+    const next = makeSession(participantName);
     setSession({
       ...next,
       events: [
@@ -505,7 +548,10 @@ export function DemoApp() {
           timestamp: next.created_at,
           participant_id: next.participant_id,
           screen_name: "admin",
-          metadata: { protocol_version: next.protocol_version },
+          metadata: {
+            participant_name: next.participant_name,
+            protocol_version: next.protocol_version,
+          },
         },
       ],
     });
@@ -579,7 +625,9 @@ export function DemoApp() {
 
   const completePreSurvey = () => {
     updateSession((current) => {
-      const assignedGroup = current.assigned_group ?? getNextAssignment(current.participant_id);
+      const assignedGroup =
+        current.assigned_group ??
+        getNextAssignment(current.participant_id, current.participant_name);
       const timestamp = nowIso();
       return {
         ...current,
@@ -801,6 +849,7 @@ export function DemoApp() {
           current.session_status === "technical_failure" ? "technical_failure" : "completed",
         template_ref: biometric ? null : current.template_ref,
         template_deleted_at: biometric ? timestamp : current.template_deleted_at,
+        face_descriptor: biometric ? null : current.face_descriptor,
         events: [
           ...current.events,
           {
@@ -840,6 +889,10 @@ export function DemoApp() {
     return <LoadingScreen />;
   }
 
+  if (qrPaymentId) {
+    return <QrMobilePayment transferId={qrPaymentId} />;
+  }
+
   if (!session) {
     return <AdminHome onCreate={startNewSession} />;
   }
@@ -875,8 +928,14 @@ export function DemoApp() {
           )}
           {session.current_step === "setup" && session.assigned_group && (
             <SetupScreen
+              faceDescriptor={session.face_descriptor}
               group={session.assigned_group}
+              participantName={session.participant_name}
               pin={session.qr_pin ?? ""}
+              qrAccountName={session.qr_account_name ?? session.participant_name}
+              onAccountNameChange={(name) =>
+                updateSession((current) => ({ ...current, qr_account_name: name }))
+              }
               onConsent={() =>
                 updateSession((current) => ({
                   ...current,
@@ -889,6 +948,22 @@ export function DemoApp() {
                       participant_id: current.participant_id,
                       screen_name: "setup",
                       metadata: { method: current.assigned_group },
+                    },
+                  ],
+                }))
+              }
+              onFaceEnroll={(descriptor, metadata) =>
+                updateSession((current) => ({
+                  ...current,
+                  face_descriptor: descriptor,
+                  events: [
+                    ...current.events,
+                    {
+                      event_name: "face_template_enrolled",
+                      timestamp: nowIso(),
+                      participant_id: current.participant_id,
+                      screen_name: "setup",
+                      metadata,
                     },
                   ],
                 }))
@@ -921,9 +996,14 @@ export function DemoApp() {
           )}
           {session.current_step === "payment" && session.assigned_group && (
             <PaymentScreen
+              accountName={session.qr_account_name ?? session.participant_name}
+              faceDescriptor={session.face_descriptor}
               group={session.assigned_group}
+              items={session.transaction?.items ?? cartLines}
               pin={session.qr_pin ?? ""}
+              productSummary={session.transaction?.product ?? summarizeCart(cartLines)}
               retries={session.transaction?.number_of_retries ?? 0}
+              senderName={session.qr_account_name ?? session.participant_name}
               totalCents={payableAmount}
               transactionId={session.transaction?.transaction_id ?? ""}
               onComplete={completePayment}
@@ -988,9 +1068,139 @@ function LoadingScreen() {
   );
 }
 
-function AdminHome({ onCreate }: { onCreate: () => void }) {
+function QrMobilePayment({ transferId }: { transferId: string }) {
+  const [transfer, setTransfer] = useState<PublicQrTransfer | null>(null);
+  const [pin, setPin] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    fetch(`/api/qr-transfers/${transferId}`)
+      .then((response) => (response.ok ? response.json() : Promise.reject()))
+      .then((data: { transfer: PublicQrTransfer }) => {
+        if (active) setTransfer(data.transfer);
+      })
+      .catch(() => {
+        if (active) setError("Không tìm thấy giao dịch QR.");
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [transferId]);
+
+  const confirm = async () => {
+    if (!/^\d{4}$/.test(pin)) return;
+    setBusy(true);
+    setError("");
+    window.setTimeout(async () => {
+      try {
+        const response = await fetch(`/api/qr-transfers/${transferId}`, {
+          body: JSON.stringify({ pin }),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        });
+        const data = (await response.json().catch(() => null)) as
+          | { error?: string; transfer?: PublicQrTransfer }
+          | null;
+        if (!response.ok || !data?.transfer) {
+          setError(data?.error ?? "Không xác nhận được giao dịch.");
+          return;
+        }
+        setTransfer(data.transfer);
+      } catch {
+        setError("Không kết nối được máy chủ thanh toán.");
+      } finally {
+        setBusy(false);
+      }
+    }, 900);
+  };
+
+  if (!transfer && !error) {
+    return <LoadingScreen />;
+  }
+
+  return (
+    <main className="min-h-screen bg-[#f6efe5] px-4 py-6 text-stone-950">
+      <section className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-sm flex-col rounded-[28px] border-4 border-stone-900 bg-stone-950 p-3 shadow-xl">
+        <div className="flex flex-1 flex-col rounded-[22px] bg-[#fffaf3] p-5">
+          <div className="mb-6 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-[#7a4a2a]">DemoBank</p>
+              <h1 className="mt-1 text-2xl font-semibold">Chuyển khoản</h1>
+            </div>
+            <Smartphone size={22} aria-hidden />
+          </div>
+
+          {transfer ? (
+            <>
+              <div className="space-y-3 rounded-lg border border-[#ead8bf] bg-white p-4">
+                <Row label="Người gửi" value={transfer.senderName} />
+                <Row label="Người nhận" value={transfer.receiverName} />
+                <Row label="Sản phẩm" value={transfer.productSummary} />
+                <Row label="Số tiền" value={formatVnd(transfer.amount)} strong />
+              </div>
+
+              {transfer.status === "paid" ? (
+                <div className="mt-5 rounded-lg border border-[#d8b88b] bg-[#fff3df] p-5 text-center text-[#4f2f1c]">
+                  <CheckCircle2 className="mx-auto mb-3" size={36} aria-hidden />
+                  <h2 className="text-xl font-semibold">Thanh toán hoàn tất</h2>
+                  <p className="mt-2 text-sm">
+                    Mã xác nhận: {transfer.authorizationCode ?? "QR-PAID"}
+                  </p>
+                </div>
+              ) : (
+                <div className="mt-5">
+                  <label className="block">
+                    <span className="mb-1 block text-sm font-medium text-stone-700">
+                      Nhập PIN DemoBank
+                    </span>
+                    <input
+                      className="h-12 w-full rounded-lg border border-[#ead8bf] bg-white px-3 text-center text-lg font-semibold tracking-[0.3em] outline-none focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
+                      inputMode="numeric"
+                      maxLength={4}
+                      onChange={(event) =>
+                        setPin(event.target.value.replace(/\D/g, "").slice(0, 4))
+                      }
+                      placeholder="0000"
+                      type="password"
+                      value={pin}
+                    />
+                  </label>
+                  <button
+                    className="mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-[#d6c0aa]"
+                    disabled={busy || !/^\d{4}$/.test(pin)}
+                    onClick={confirm}
+                    type="button"
+                  >
+                    {busy ? <Loader2 className="animate-spin" size={17} /> : <BadgeCheck size={17} />}
+                    {busy ? "Đang xác minh..." : "Xác nhận thanh toán"}
+                  </button>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          {error && transfer?.status !== "paid" && (
+            <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {error}
+            </p>
+          )}
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function AdminHome({ onCreate }: { onCreate: (participantName: string) => void }) {
   const [history, setHistory] = useState<AssignmentHistoryItem[]>([]);
   const [completed, setCompleted] = useState<ExperimentSession[]>([]);
+  const [participantName, setParticipantName] = useState("");
 
   useEffect(() => {
     window.queueMicrotask(() => {
@@ -1020,14 +1230,33 @@ function AdminHome({ onCreate }: { onCreate: () => void }) {
                 thanh toán bằng phương thức được phân nhóm ngẫu nhiên.
               </p>
             </div>
-            <button
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f]"
-              onClick={onCreate}
-              type="button"
+            <form
+              className="grid w-full max-w-sm gap-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (!participantName.trim()) return;
+                onCreate(participantName);
+              }}
             >
-              <UserPlus size={17} aria-hidden />
-              Tạo người tham gia mới
-            </button>
+              <label className="text-sm font-medium text-stone-700" htmlFor="participant-name">
+                Tên người tham gia
+              </label>
+              <input
+                className="h-11 rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 text-sm outline-none transition focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
+                id="participant-name"
+                onChange={(event) => setParticipantName(event.target.value)}
+                placeholder="Ví dụ: Minh Anh"
+                value={participantName}
+              />
+              <button
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-[#d6c0aa]"
+                disabled={!participantName.trim()}
+                type="submit"
+              >
+                <UserPlus size={17} aria-hidden />
+                Tạo phiên mới
+              </button>
+            </form>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -1126,9 +1355,11 @@ function ExperimentHeader({
             <Hand size={20} aria-hidden />
           </div>
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold">PalmPay Coffee Study</p>
+            <p className="truncate text-sm font-semibold">
+              {session.participant_name || "PalmPay Coffee Study"}
+            </p>
             <p className="truncate text-xs text-stone-500">
-              {session.participant_id} · {protocolVersion}
+              {session.participant_id} · PalmPay Coffee Study
             </p>
           </div>
         </div>
@@ -1401,20 +1632,30 @@ function AssignmentScreen({
 
 function SetupScreen({
   biometricConsentAt,
+  faceDescriptor,
   group,
+  onAccountNameChange,
   onConsent,
+  onFaceEnroll,
   onFinish,
   onLog,
   onPinChange,
+  participantName,
   pin,
+  qrAccountName,
 }: {
   biometricConsentAt?: string | null;
+  faceDescriptor?: number[] | null;
   group: StudyGroup;
+  onAccountNameChange: (name: string) => void;
   onConsent: () => void;
+  onFaceEnroll: (descriptor: number[], metadata: Record<string, unknown>) => void;
   onFinish: (metadata?: Record<string, unknown>) => void;
   onLog: (eventName: string, screenName: StepKey, metadata?: Record<string, unknown>) => void;
   onPinChange: (pin: string) => void;
+  participantName: string;
   pin: string;
+  qrAccountName: string;
 }) {
   const [samples, setSamples] = useState(0);
   const [linked, setLinked] = useState(false);
@@ -1423,10 +1664,12 @@ function SetupScreen({
   const biometricReady = !needsBiometricConsent || Boolean(biometricConsentAt);
   const done =
     group === "QR_PIN"
-      ? /^\d{4}$/.test(pin)
+      ? /^\d{4}$/.test(pin) && qrAccountName.trim().length > 0
       : group === "NFC_CARD"
         ? linked
-        : biometricReady && samples >= 3;
+        : group === "FACE_POS"
+          ? biometricReady && Boolean(faceDescriptor)
+          : biometricReady && samples >= 3;
 
   const capture = () => {
     const next = Math.min(samples + 1, 3);
@@ -1451,22 +1694,61 @@ function SetupScreen({
             }}
           />
           <div className="rounded-lg border border-[#ead8bf] bg-white p-4">
-            <h3 className="font-semibold">Tạo mã PIN thử nghiệm</h3>
+            <h3 className="font-semibold">Tạo tài khoản DemoBank</h3>
             <p className="mt-2 text-sm leading-6 text-stone-600">
-              Mã này chỉ dùng trong phiên mô phỏng và không liên quan đến tài
-              khoản ngân hàng thật.
+              Tên và PIN này chỉ dùng cho màn hình chuyển khoản mô phỏng sau
+              khi người tham gia quét QR bằng điện thoại.
             </p>
-            <input
-              className="mt-4 h-12 w-full max-w-xs rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 text-lg font-semibold tracking-[0.2em] outline-none focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
-              inputMode="numeric"
-              maxLength={4}
-              onChange={(event) =>
-                onPinChange(event.target.value.replace(/\D/g, "").slice(0, 4))
-              }
-              placeholder="0000"
-              type="password"
-              value={pin}
-            />
+            <label className="mt-4 block max-w-xs">
+              <span className="mb-1 block text-sm font-medium text-stone-700">
+                Tên người gửi
+              </span>
+              <input
+                className="h-11 w-full rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 text-sm outline-none focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
+                onChange={(event) => onAccountNameChange(event.target.value)}
+                placeholder={participantName || "Tên người gửi"}
+                value={qrAccountName}
+              />
+            </label>
+            <label className="mt-3 block max-w-xs">
+              <span className="mb-1 block text-sm font-medium text-stone-700">
+                Mã PIN 4 số
+              </span>
+              <input
+                className="h-12 w-full rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 text-lg font-semibold tracking-[0.2em] outline-none focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
+                inputMode="numeric"
+                maxLength={4}
+                onChange={(event) =>
+                  onPinChange(event.target.value.replace(/\D/g, "").slice(0, 4))
+                }
+                placeholder="0000"
+                type="password"
+                value={pin}
+              />
+            </label>
+          </div>
+        </div>
+      )}
+
+      {group === "FACE_POS" && (
+        <div className="grid gap-4 lg:grid-cols-[360px_minmax(0,1fr)]">
+          <FaceEnrollment
+            consentReady={biometricReady}
+            enrolled={Boolean(faceDescriptor)}
+            onEnroll={onFaceEnroll}
+          />
+          <div className="rounded-lg border border-[#ead8bf] bg-white p-4">
+            <h3 className="font-semibold">Ghi nhận khuôn mặt thật</h3>
+            <p className="mt-2 text-sm leading-6 text-stone-600">
+              Hệ thống dùng camera của trình duyệt để phát hiện khuôn mặt và
+              tạo vector đặc trưng cho phiên thử nghiệm. Không lưu ảnh thô.
+            </p>
+            <div className="mt-4 rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 py-2 text-sm text-stone-600">
+              Trạng thái:{" "}
+              <span className="font-semibold text-[#6f3f24]">
+                {faceDescriptor ? "Đã ghi mẫu khuôn mặt" : "Chưa ghi mẫu"}
+              </span>
+            </div>
           </div>
         </div>
       )}
@@ -1519,13 +1801,11 @@ function SetupScreen({
         </div>
       )}
 
-      {(group === "FACE_POS" || group === "PALM_VEIN") && (
+      {group === "PALM_VEIN" && (
         <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
           <BiometricMock group={group} samples={samples} />
           <div className="rounded-lg border border-[#ead8bf] bg-white p-4">
-            <h3 className="font-semibold">
-              Ghi nhận ba mẫu {group === "FACE_POS" ? "khuôn mặt" : "lòng bàn tay"}
-            </h3>
+            <h3 className="font-semibold">Ghi nhận ba mẫu lòng bàn tay</h3>
             <p className="mt-2 text-sm leading-6 text-stone-600">
               Thời gian thiết lập được tách riêng với thời gian thanh toán để
               các nhóm sinh trắc học không bị đánh giá bất lợi.
@@ -1550,9 +1830,13 @@ function SetupScreen({
           onClick={() =>
             onFinish({
               method: group,
-              setup_samples: samples || undefined,
+              setup_samples:
+                group === "FACE_POS" && faceDescriptor ? 3 : samples || undefined,
               qr_pin_created: group === "QR_PIN" ? true : undefined,
+              qr_account_name: group === "QR_PIN" ? qrAccountName.trim() : undefined,
               nfc_card_ref: group === "NFC_CARD" ? "CARD-POS-042" : undefined,
+              face_descriptor_length:
+                group === "FACE_POS" ? faceDescriptor?.length : undefined,
             })
           }
           type="button"
@@ -1618,6 +1902,172 @@ function BiometricMock({
         </p>
         <p className="mt-1 text-xs text-stone-300">{samples}/3 mẫu đã ghi</p>
       </div>
+    </div>
+  );
+}
+
+function averageDescriptors(descriptors: Float32Array[]) {
+  if (!descriptors.length) return [];
+  const length = descriptors[0].length;
+  return Array.from({ length }, (_, index) => {
+    const sum = descriptors.reduce((total, descriptor) => total + descriptor[index], 0);
+    return Number((sum / descriptors.length).toFixed(6));
+  });
+}
+
+async function loadFaceApiModels() {
+  const faceapi = await import("@vladmandic/face-api");
+  await Promise.all([
+    faceapi.nets.tinyFaceDetector.loadFromUri("/models/face-api"),
+    faceapi.nets.faceLandmark68Net.loadFromUri("/models/face-api"),
+    faceapi.nets.faceRecognitionNet.loadFromUri("/models/face-api"),
+  ]);
+  return faceapi;
+}
+
+function FaceEnrollment({
+  consentReady,
+  enrolled,
+  onEnroll,
+}: {
+  consentReady: boolean;
+  enrolled: boolean;
+  onEnroll: (descriptor: number[], metadata: Record<string, unknown>) => void;
+}) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [api, setApi] = useState<FaceApi | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [cameraActive, setCameraActive] = useState(false);
+  const [error, setError] = useState("");
+  const [sampleCount, setSampleCount] = useState(enrolled ? 3 : 0);
+  const descriptorsRef = useRef<Float32Array[]>([]);
+
+  useEffect(() => {
+    return () => {
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+    };
+  }, []);
+
+  const startCamera = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const loadedApi = api ?? (await loadFaceApiModels());
+      setApi(loadedApi);
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: { facingMode: "user" },
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+      setCameraActive(true);
+    } catch (cameraError) {
+      setError(
+        cameraError instanceof Error
+          ? cameraError.message
+          : "Không mở được camera.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const captureFace = async () => {
+    if (!api || !videoRef.current) {
+      await startCamera();
+      return;
+    }
+
+    setBusy(true);
+    setError("");
+    try {
+      const detection = await api
+        .detectSingleFace(
+          videoRef.current,
+          new api.TinyFaceDetectorOptions({
+            inputSize: 224,
+            scoreThreshold: 0.5,
+          }),
+        )
+        .withFaceLandmarks()
+        .withFaceDescriptor();
+
+      if (!detection) {
+        setError("Không phát hiện khuôn mặt rõ. Thử nhìn thẳng vào camera.");
+        return;
+      }
+
+      descriptorsRef.current = [...descriptorsRef.current, detection.descriptor].slice(-3);
+      const nextCount = descriptorsRef.current.length;
+      setSampleCount(nextCount);
+
+      if (nextCount >= 3) {
+        onEnroll(averageDescriptors(descriptorsRef.current), {
+          face_model: "tiny_face_detector+face_landmark_68+face_recognition",
+          raw_image_stored: false,
+          sample_count: nextCount,
+        });
+      }
+    } catch (captureError) {
+      setError(
+        captureError instanceof Error
+          ? captureError.message
+          : "Không thể ghi mẫu khuôn mặt.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="rounded-lg border border-[#ead8bf] bg-white p-4">
+      <div className="relative aspect-video overflow-hidden rounded-lg border border-[#ead8bf] bg-stone-900">
+        <video
+          className="h-full w-full object-cover"
+          muted
+          playsInline
+          ref={videoRef}
+        />
+        {!cameraActive && (
+          <div className="absolute inset-0 flex items-center justify-center text-center text-sm text-white/80">
+            Camera enrollment
+          </div>
+        )}
+      </div>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-stone-600">
+          Mẫu đã ghi: <span className="font-semibold">{sampleCount}/3</span>
+        </p>
+        <div className="flex gap-2">
+          <button
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#ead8bf] bg-white px-3 text-sm font-semibold text-stone-700 transition hover:bg-[#fffaf3] disabled:text-[#b8a491]"
+            disabled={!consentReady || busy}
+            onClick={startCamera}
+            type="button"
+          >
+            <Camera size={16} aria-hidden />
+            Mở camera
+          </button>
+          <button
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-3 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-[#d6c0aa]"
+            disabled={!consentReady || busy || enrolled}
+            onClick={captureFace}
+            type="button"
+          >
+            {busy ? <Loader2 className="animate-spin" size={16} /> : <ScanFace size={16} />}
+            Ghi mẫu
+          </button>
+        </div>
+      </div>
+      {error && (
+        <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {error}
+        </p>
+      )}
     </div>
   );
 }
@@ -1941,135 +2391,85 @@ function CheckoutScreen({
 }
 
 function PaymentScreen({
+  accountName,
+  faceDescriptor,
   group,
+  items,
   onComplete,
   onFailure,
   onLog,
   onRetry,
   pin,
+  productSummary,
   retries,
+  senderName,
   totalCents,
   transactionId,
 }: {
+  accountName: string;
+  faceDescriptor?: number[] | null;
   group: StudyGroup;
+  items: CartLine[];
   onComplete: (metadata?: Record<string, unknown>) => void;
   onFailure: () => void;
   onLog: (eventName: string, screenName: StepKey, metadata?: Record<string, unknown>) => void;
   onRetry: (errorCode: string) => void;
   pin: string;
+  productSummary: string;
   retries: number;
+  senderName: string;
   totalCents: number;
   transactionId: string;
 }) {
-  const [qrStep, setQrStep] = useState<"start" | "scanned" | "confirmed">("start");
-  const [amount, setAmount] = useState("");
-  const [pinAttempt, setPinAttempt] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const finish = (metadata: Record<string, unknown>) => {
+  const finish = useCallback((metadata: Record<string, unknown>) => {
     setBusy(true);
     window.setTimeout(() => onComplete(metadata), 600);
-  };
+  }, [onComplete]);
 
   return (
     <Panel eyebrow="Thanh toán tại POS" icon={groupCopy[group].icon} title={groupCopy[group].label}>
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="rounded-lg border border-[#ead8bf] bg-white p-4">
           {group === "QR_PIN" && (
-            <div className="space-y-4">
-              <div className="flex justify-center rounded-lg border border-[#ead8bf] bg-[#fffaf3] p-4">
-                <QRCodeSVG
-                  level="M"
-                  size={210}
-                  value={JSON.stringify({
-                    merchant: "PalmPay Lab Store",
-                    transaction_id: transactionId,
-                    amount: totalCents,
-                  })}
-                />
-              </div>
-              <div className="grid gap-2 sm:grid-cols-3">
-                <button
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-3 text-sm font-semibold text-white disabled:bg-[#d6c0aa]"
-                  disabled={qrStep !== "start"}
-                  onClick={() => {
-                    setQrStep("scanned");
-                    onLog("qr_scanned", "payment", { transaction_id: transactionId });
-                  }}
-                  type="button"
-                >
-                  <QrCode size={16} aria-hidden />
-                  Quét QR
-                </button>
-                <input
-                  className="h-10 rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 text-sm outline-none focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
-                  inputMode="numeric"
-                  onChange={(event) =>
-                    setAmount(event.target.value.replace(/\D/g, "").slice(0, 8))
-                  }
-                  placeholder={String(totalCents)}
-                  value={amount}
-                />
-                <input
-                  className="h-10 rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 text-sm outline-none focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
-                  inputMode="numeric"
-                  maxLength={4}
-                  onChange={(event) =>
-                    setPinAttempt(event.target.value.replace(/\D/g, "").slice(0, 4))
-                  }
-                  placeholder="PIN"
-                  type="password"
-                  value={pinAttempt}
-                />
-              </div>
-              <button
-                className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-[#d6c0aa]"
-                disabled={busy || qrStep === "start"}
-                onClick={() => {
-                  onLog("amount_submitted", "payment", {
-                    amount_entered: Number(amount),
-                    expected_amount: totalCents,
-                  });
-                  if (Number(amount) !== totalCents) {
-                    onRetry("wrong_amount");
-                    return;
-                  }
-                  if (pinAttempt !== pin) {
-                    onRetry("pin_failed");
-                    return;
-                  }
-                  setQrStep("confirmed");
-                  finish({ channel: "qr_pin", amount_entered: Number(amount), pin_ok: true });
-                }}
-                type="button"
-              >
-                {busy ? <Loader2 className="animate-spin" size={17} /> : <BadgeCheck size={17} />}
-                Xác nhận
-              </button>
-            </div>
+            <QrPosPayment
+              amount={totalCents}
+              items={items}
+              onLog={onLog}
+              onPaid={(transfer) =>
+                finish({
+                  authorization_code: transfer.authorizationCode,
+                  channel: "qr_pin",
+                  transfer_id: transfer.id,
+                })
+              }
+              pin={pin}
+              productSummary={productSummary}
+              senderName={senderName || accountName}
+              transactionId={transactionId}
+            />
           )}
 
           {group === "NFC_CARD" && (
-            <TapPayment
-              busy={busy}
-              icon={Nfc}
-              label="Vui lòng chạm thẻ"
+            <NfcBridgePayment
               amount={totalCents}
-              onComplete={() => finish({ channel: "nfc_card", card_ref: "CARD-POS-042" })}
-              onLog={() => onLog("nfc_tapped", "payment", { card_ref: "CARD-POS-042" })}
+              busy={busy}
+              onComplete={(tap) => finish({ channel: "nfc_card", card_ref: tap.cardRef })}
+              onLog={onLog}
+              onRetry={onRetry}
+              transactionId={transactionId}
             />
           )}
 
           {group === "FACE_POS" && (
-            <TapPayment
-              busy={busy}
-              icon={ScanFace}
-              label="Vui lòng nhìn vào camera"
+            <FaceRecognitionPayment
               amount={totalCents}
-              onComplete={() =>
-                finish({ channel: "face_pos", match_score: 0.93, threshold: 0.82 })
-              }
-              onLog={() => onLog("face_match_success", "payment", { threshold: 0.82 })}
+              busy={busy}
+              enrolledDescriptor={faceDescriptor}
+              onComplete={(metadata) => finish({ channel: "face_pos", ...metadata })}
+              onLog={onLog}
+              onRetry={onRetry}
             />
           )}
 
@@ -2094,10 +2494,346 @@ function PaymentScreen({
           retries={retries}
         />
       </div>
-      {qrStep === "confirmed" && (
-        <p className="mt-4 text-sm font-medium text-[#7a4a2a]">DemoBank đã gửi trạng thái thành công về máy chủ.</p>
-      )}
     </Panel>
+  );
+}
+
+function QrPosPayment({
+  amount,
+  items,
+  onLog,
+  onPaid,
+  pin,
+  productSummary,
+  senderName,
+  transactionId,
+}: {
+  amount: number;
+  items: CartLine[];
+  onLog: (eventName: string, screenName: StepKey, metadata?: Record<string, unknown>) => void;
+  onPaid: (transfer: PublicQrTransfer) => void;
+  pin: string;
+  productSummary: string;
+  senderName: string;
+  transactionId: string;
+}) {
+  const [paymentUrl, setPaymentUrl] = useState("");
+  const [transfer, setTransfer] = useState<PublicQrTransfer | null>(null);
+  const [error, setError] = useState("");
+  const paidHandledRef = useRef(false);
+  const itemsKey = useMemo(() => JSON.stringify(items), [items]);
+
+  useEffect(() => {
+    let active = true;
+    if (!transactionId || !pin || transfer) return;
+
+    fetch("/api/qr-transfers", {
+      body: JSON.stringify({
+        amount,
+        items,
+        pin,
+        productSummary,
+        senderName,
+        transactionId,
+      }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    })
+      .then((response) => (response.ok ? response.json() : Promise.reject()))
+      .then((data: { transfer: PublicQrTransfer }) => {
+        if (!active) return;
+        setTransfer(data.transfer);
+        setPaymentUrl(`${window.location.origin}/?qrPay=${data.transfer.id}`);
+        onLog("qr_transfer_created", "payment", {
+          amount,
+          transfer_id: data.transfer.id,
+        });
+      })
+      .catch(() => {
+        if (active) setError("Không tạo được QR chuyển khoản.");
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [amount, items, itemsKey, onLog, pin, productSummary, senderName, transactionId, transfer]);
+
+  useEffect(() => {
+    if (!transfer || transfer.status === "paid") return;
+    const interval = window.setInterval(() => {
+      fetch(`/api/qr-transfers/${transfer.id}`)
+        .then((response) => (response.ok ? response.json() : Promise.reject()))
+        .then((data: { transfer: PublicQrTransfer }) => {
+          setTransfer(data.transfer);
+          if (data.transfer.status === "paid" && !paidHandledRef.current) {
+            paidHandledRef.current = true;
+            onLog("qr_transfer_paid", "payment", {
+              authorization_code: data.transfer.authorizationCode,
+              transfer_id: data.transfer.id,
+            });
+            onPaid(data.transfer);
+          }
+        })
+        .catch(() => setError("Mất kết nối trạng thái QR."));
+    }, 1000);
+
+    return () => window.clearInterval(interval);
+  }, [onLog, onPaid, transfer]);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-center rounded-lg border border-[#ead8bf] bg-[#fffaf3] p-4">
+        {paymentUrl ? (
+          <QRCodeSVG level="M" size={230} value={paymentUrl} />
+        ) : (
+          <Loader2 className="animate-spin text-[#7a4a2a]" size={42} aria-hidden />
+        )}
+      </div>
+      <div className="rounded-lg border border-[#ead8bf] bg-white p-4 text-sm">
+        <Row label="Người gửi" value={senderName} />
+        <Row label="Người nhận" value="Palm Pay" />
+        <Row label="Sản phẩm" value={productSummary} />
+        <Row label="Số tiền" value={formatVnd(amount)} strong />
+      </div>
+      <div className="rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 py-2 text-sm text-stone-600">
+        Trạng thái:{" "}
+        <span className="font-semibold text-[#6f3f24]">
+          {transfer?.status === "paid"
+            ? "Điện thoại đã xác nhận thanh toán"
+            : "Đang chờ điện thoại quét QR"}
+        </span>
+      </div>
+      {paymentUrl && (
+        <a
+          className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-[#ead8bf] bg-white px-3 text-sm font-semibold text-stone-700 transition hover:bg-[#fffaf3]"
+          href={paymentUrl}
+          rel="noreferrer"
+          target="_blank"
+        >
+          Mở mock mobile trên máy này
+          <ArrowRight size={16} aria-hidden />
+        </a>
+      )}
+      {error && (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function NfcBridgePayment({
+  amount,
+  busy,
+  onComplete,
+  onLog,
+  onRetry,
+  transactionId,
+}: {
+  amount: number;
+  busy: boolean;
+  onComplete: (tap: { cardRef: string; transactionId: string }) => void;
+  onLog: (eventName: string, screenName: StepKey, metadata?: Record<string, unknown>) => void;
+  onRetry: (errorCode: string) => void;
+  transactionId: string;
+}) {
+  const handledRef = useRef(false);
+  const [status, setStatus] = useState("Đang chờ tap từ NFC reader bridge");
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      fetch(`/api/nfc-taps?transactionId=${encodeURIComponent(transactionId)}`)
+        .then((response) => (response.ok ? response.json() : Promise.reject()))
+        .then((data: { tap: { cardRef: string; transactionId: string } | null }) => {
+          if (!data.tap || handledRef.current) return;
+          handledRef.current = true;
+          if (data.tap.cardRef !== "CARD-POS-042") {
+            setStatus(`Thẻ không khớp: ${data.tap.cardRef}`);
+            onRetry("wrong_card");
+            return;
+          }
+          setStatus("Đã nhận tap NFC");
+          onLog("nfc_tapped", "payment", { card_ref: data.tap.cardRef });
+          onComplete(data.tap);
+        })
+        .catch(() => setStatus("Không đọc được trạng thái NFC bridge"));
+    }, 800);
+
+    return () => window.clearInterval(interval);
+  }, [onComplete, onLog, onRetry, transactionId]);
+
+  const simulateTap = async () => {
+    await fetch("/api/nfc-taps", {
+      body: JSON.stringify({ cardRef: "CARD-POS-042", transactionId }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex min-h-64 items-center justify-center rounded-lg border border-[#ead8bf] bg-[#fffaf3]">
+        <div className="text-center">
+          <Nfc className="mx-auto mb-4 text-[#405438]" size={60} aria-hidden />
+          <p className="text-lg font-semibold">Chạm thẻ vào đầu đọc USB</p>
+          <p className="mt-1 text-sm text-stone-500">{formatVnd(amount)}</p>
+          <p className="mt-3 text-sm font-medium text-[#6f3f24]">{status}</p>
+        </div>
+      </div>
+      <button
+        className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-[#ead8bf] bg-white px-4 text-sm font-semibold text-stone-700 transition hover:bg-[#fffaf3] disabled:bg-[#d6c0aa]"
+        disabled={busy}
+        onClick={simulateTap}
+        type="button"
+      >
+        <Nfc size={17} aria-hidden />
+        Mô phỏng bridge tap
+      </button>
+    </div>
+  );
+}
+
+function FaceRecognitionPayment({
+  amount,
+  busy,
+  enrolledDescriptor,
+  onComplete,
+  onLog,
+  onRetry,
+}: {
+  amount: number;
+  busy: boolean;
+  enrolledDescriptor?: number[] | null;
+  onComplete: (metadata: Record<string, unknown>) => void;
+  onLog: (eventName: string, screenName: StepKey, metadata?: Record<string, unknown>) => void;
+  onRetry: (errorCode: string) => void;
+}) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [api, setApi] = useState<FaceApi | null>(null);
+  const [cameraActive, setCameraActive] = useState(false);
+  const [localBusy, setLocalBusy] = useState(false);
+  const [message, setMessage] = useState("Mở camera để xác minh khuôn mặt");
+
+  useEffect(() => {
+    return () => {
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+    };
+  }, []);
+
+  const startCamera = async () => {
+    setLocalBusy(true);
+    try {
+      const loadedApi = api ?? (await loadFaceApiModels());
+      setApi(loadedApi);
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: { facingMode: "user" },
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+      setCameraActive(true);
+      setMessage("Camera đã sẵn sàng");
+    } catch {
+      setMessage("Không mở được camera");
+      onRetry("camera_disconnected");
+    } finally {
+      setLocalBusy(false);
+    }
+  };
+
+  const verify = async () => {
+    if (!enrolledDescriptor?.length) {
+      setMessage("Chưa có mẫu khuôn mặt đã đăng ký");
+      onRetry("face_no_template");
+      return;
+    }
+    if (!api || !videoRef.current) {
+      await startCamera();
+      return;
+    }
+
+    setLocalBusy(true);
+    try {
+      const detection = await api
+        .detectSingleFace(
+          videoRef.current,
+          new api.TinyFaceDetectorOptions({
+            inputSize: 224,
+            scoreThreshold: 0.5,
+          }),
+        )
+        .withFaceLandmarks()
+        .withFaceDescriptor();
+
+      if (!detection) {
+        setMessage("Không phát hiện khuôn mặt");
+        onRetry("no_face");
+        return;
+      }
+
+      const distance = api.euclideanDistance(
+        new Float32Array(enrolledDescriptor),
+        detection.descriptor,
+      );
+      const threshold = 0.55;
+      onLog("face_match_attempt", "payment", { distance, threshold });
+
+      if (distance > threshold) {
+        setMessage(`Không khớp mẫu (${distance.toFixed(2)})`);
+        onRetry("face_no_match");
+        return;
+      }
+
+      setMessage("Đối chiếu thành công");
+      onComplete({
+        match_distance: Number(distance.toFixed(4)),
+        threshold,
+      });
+    } finally {
+      setLocalBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="relative aspect-video overflow-hidden rounded-lg border border-[#ead8bf] bg-stone-900">
+        <video className="h-full w-full object-cover" muted playsInline ref={videoRef} />
+        {!cameraActive && (
+          <div className="absolute inset-0 flex items-center justify-center text-sm text-white/80">
+            Face POS camera
+          </div>
+        )}
+      </div>
+      <div className="rounded-lg border border-[#ead8bf] bg-[#fffaf3] p-3 text-sm text-stone-600">
+        <Row label="Số tiền" value={formatVnd(amount)} strong />
+        <p className="mt-2 font-medium text-[#6f3f24]">{message}</p>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <button
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-[#ead8bf] bg-white px-4 text-sm font-semibold text-stone-700 transition hover:bg-[#fffaf3]"
+          disabled={busy || localBusy}
+          onClick={startCamera}
+          type="button"
+        >
+          <Camera size={17} aria-hidden />
+          Mở camera
+        </button>
+        <button
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-[#d6c0aa]"
+          disabled={busy || localBusy}
+          onClick={verify}
+          type="button"
+        >
+          {localBusy ? <Loader2 className="animate-spin" size={17} /> : <ScanFace size={17} />}
+          Xác minh
+        </button>
+      </div>
+    </div>
   );
 }
 
