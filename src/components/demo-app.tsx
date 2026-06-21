@@ -164,7 +164,7 @@ const groupCopy: Record<
     instruction:
       "Mở DemoBank, quét mã QR của POS, nhập đúng số tiền và xác nhận bằng mã PIN thử nghiệm.",
     icon: QrCode,
-    color: "bg-sky-50 text-sky-900 border-sky-200",
+    color: "bg-[#f5eee7] text-[#5a341f] border-[#d9bfa8]",
   },
   NFC_CARD: {
     label: "Thẻ không tiếp xúc NFC",
@@ -175,7 +175,7 @@ const groupCopy: Record<
     instruction:
       "Chạm thẻ NFC thử nghiệm vào đầu đọc khi POS yêu cầu. Giao dịch trong phiên không yêu cầu PIN.",
     icon: Nfc,
-    color: "bg-emerald-50 text-emerald-900 border-emerald-200",
+    color: "bg-[#eef2e7] text-[#405438] border-[#c6d1b7]",
   },
   FACE_POS: {
     label: "Nhận diện khuôn mặt tại điểm bán",
@@ -186,7 +186,7 @@ const groupCopy: Record<
     instruction:
       "Nhìn vào camera tại POS cho đến khi hệ thống xác nhận đúng một khuôn mặt và đối chiếu thành công.",
     icon: ScanFace,
-    color: "bg-violet-50 text-violet-900 border-violet-200",
+    color: "bg-[#f3e8e1] text-[#70412d] border-[#d8b5a5]",
   },
   PALM_VEIN: {
     label: "Nhận diện tĩnh mạch lòng bàn tay PalmPay",
@@ -197,7 +197,7 @@ const groupCopy: Record<
     instruction:
       "Đưa lòng bàn tay qua máy quét theo khoảng cách hướng dẫn cho đến khi mẫu được đối chiếu thành công.",
     icon: Hand,
-    color: "bg-amber-50 text-amber-900 border-amber-200",
+    color: "bg-[#fff3df] text-[#7a4a2a] border-[#dfbd7f]",
   },
 };
 
@@ -1026,7 +1026,7 @@ export function DemoApp() {
 function LoadingScreen() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#f6efe5]">
-      <div className="inline-flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
+      <div className="inline-flex items-center gap-3 rounded-lg border border-[#ead8bf] bg-white px-4 py-3 text-sm text-stone-600 shadow-sm">
         <Loader2 className="animate-spin" size={18} aria-hidden />
         Loading
       </div>
@@ -1053,14 +1053,14 @@ function AdminHome({ onCreate }: { onCreate: () => void }) {
   return (
     <main className="min-h-screen bg-[#f6efe5] px-4 py-5 text-stone-950 sm:px-6">
       <div className="mx-auto grid max-w-7xl gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <section className="rounded-lg border border-[#ead8bf] bg-white p-5 shadow-sm">
           <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="text-sm font-medium text-[#7a4a2a]">{protocolVersion}</p>
               <h1 className="mt-1 text-2xl font-semibold tracking-normal">
                 PalmPay Coffee Experiment
               </h1>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-600">
                 Nền tảng mô phỏng thí nghiệm tại quầy cafe: người tham gia
                 đi theo luồng nghiên cứu đầy đủ, chọn món từ catalog, rồi
                 thanh toán bằng phương thức được phân nhóm ngẫu nhiên.
@@ -1100,7 +1100,7 @@ function AdminHome({ onCreate }: { onCreate: () => void }) {
         </section>
 
         <aside className="space-y-5">
-          <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <section className="rounded-lg border border-[#ead8bf] bg-white p-4 shadow-sm">
             <h2 className="font-semibold">Thiết bị</h2>
             <div className="mt-3 space-y-2 text-sm">
               {[
@@ -1110,7 +1110,7 @@ function AdminHome({ onCreate }: { onCreate: () => void }) {
                 "Máy quét PalmPay",
               ].map((item) => (
                 <div
-                  className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2"
+                  className="flex items-center justify-between rounded-lg border border-[#ead8bf] px-3 py-2"
                   key={item}
                 >
                   <span>{item}</span>
@@ -1123,11 +1123,11 @@ function AdminHome({ onCreate }: { onCreate: () => void }) {
             </div>
           </section>
 
-          <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <section className="rounded-lg border border-[#ead8bf] bg-white p-4 shadow-sm">
             <h2 className="font-semibold">Xuất dữ liệu</h2>
             <div className="mt-3 grid gap-2">
               <button
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#ead8bf] bg-white px-3 text-sm font-semibold text-stone-700 transition hover:bg-[#fffaf3]"
                 disabled={completed.length === 0}
                 onClick={() => downloadCsv("palmpay-wide.csv", completed.map(buildWideRow))}
                 type="button"
@@ -1136,7 +1136,7 @@ function AdminHome({ onCreate }: { onCreate: () => void }) {
                 CSV dạng rộng
               </button>
               <button
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#ead8bf] bg-white px-3 text-sm font-semibold text-stone-700 transition hover:bg-[#fffaf3]"
                 disabled={completed.length === 0}
                 onClick={() =>
                   downloadCsv(
@@ -1173,17 +1173,17 @@ function ExperimentHeader({
           </div>
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold">PalmPay Coffee Study</p>
-            <p className="truncate text-xs text-slate-500">
+            <p className="truncate text-xs text-stone-500">
               {session.participant_id} · {protocolVersion}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <span className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700">
+          <span className="rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 py-2 text-sm font-medium text-stone-700">
             Số dư: {formatVnd(startingBalance)}
           </span>
           <button
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#ead8bf] bg-white px-3 text-sm font-semibold text-stone-700 transition hover:bg-[#fffaf3]"
             onClick={onReset}
             type="button"
           >
@@ -1205,7 +1205,7 @@ function ProgressRail({
 }) {
   const activeIndex = flowSteps.indexOf(currentStep);
   return (
-    <aside className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <aside className="rounded-lg border border-[#ead8bf] bg-white p-4 shadow-sm">
       <div className="mb-4 flex items-center gap-2">
         <ClipboardCheck size={18} aria-hidden />
         <h2 className="font-semibold">Luồng thí nghiệm</h2>
@@ -1221,8 +1221,8 @@ function ProgressRail({
                 active
                   ? "border-[#d8b88b] bg-[#fff3df] text-[#4f2f1c]"
                   : done
-                    ? "border-slate-200 bg-slate-50 text-slate-500"
-                    : "border-transparent text-slate-400",
+                    ? "border-[#ead8bf] bg-[#fffaf3] text-stone-500"
+                    : "border-transparent text-stone-400",
               )}
               key={step}
             >
@@ -1250,7 +1250,7 @@ function ConsentScreen({ onContinue }: { onContinue: () => void }) {
       icon={ShieldCheck}
       title="Thông tin nghiên cứu"
     >
-      <div className="grid gap-3 text-sm leading-6 text-slate-600 sm:grid-cols-2">
+      <div className="grid gap-3 text-sm leading-6 text-stone-600 sm:grid-cols-2">
         {[
           "Đây là nghiên cứu học thuật.",
           "Không sử dụng tiền thật hoặc tài khoản thật.",
@@ -1258,14 +1258,14 @@ function ConsentScreen({ onContinue }: { onContinue: () => void }) {
           "Dữ liệu chỉ được sử dụng cho mục đích nghiên cứu.",
         ].map((item) => (
           <div
-            className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3"
+            className="rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 py-3"
             key={item}
           >
             {item}
           </div>
         ))}
       </div>
-      <label className="mt-5 flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-700">
+      <label className="mt-5 flex items-start gap-3 rounded-lg border border-[#ead8bf] bg-white p-3 text-sm text-stone-700">
         <input
           checked={checked}
           className="mt-1 h-4 w-4"
@@ -1279,7 +1279,7 @@ function ConsentScreen({ onContinue }: { onContinue: () => void }) {
       </label>
       <ActionRow>
         <button
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-slate-300"
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-[#d6c0aa]"
           disabled={!checked}
           onClick={onContinue}
           type="button"
@@ -1315,12 +1315,12 @@ function SurveyScreen({
       <div className="space-y-4">
         {questions.map((question) => (
           <div
-            className="rounded-lg border border-slate-200 bg-white p-4"
+            className="rounded-lg border border-[#ead8bf] bg-white p-4"
             key={question.item_id}
           >
             <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-slate-950">
+                <p className="text-sm font-semibold text-stone-950">
                   {question.text}
                 </p>
               </div>
@@ -1328,7 +1328,7 @@ function SurveyScreen({
             {question.type === "select" ? (
               <label className="relative block max-w-sm">
                 <select
-                  className="h-11 w-full appearance-none rounded-lg border border-slate-200 bg-slate-50 px-3 pr-9 text-sm outline-none transition focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
+                  className="h-11 w-full appearance-none rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 pr-9 text-sm outline-none transition focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
                   onChange={(event) => onAnswer(question.item_id, event.target.value)}
                   value={String(answers[question.item_id] ?? "")}
                 >
@@ -1342,7 +1342,7 @@ function SurveyScreen({
                   ))}
                 </select>
                 <ChevronDown
-                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
+                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-stone-400"
                   size={16}
                   aria-hidden
                 />
@@ -1364,7 +1364,7 @@ function SurveyScreen({
       </div>
       <ActionRow>
         <button
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-slate-300"
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-[#d6c0aa]"
           disabled={!complete}
           onClick={onSubmit}
           type="button"
@@ -1398,7 +1398,7 @@ function Likert({
               "h-11 rounded-lg border text-sm font-semibold transition",
               value === item
                 ? "border-[#6f3f24] bg-[#6f3f24] text-white"
-                : "border-slate-200 bg-slate-50 text-slate-700 hover:border-[#c9955d]",
+                : "border-[#ead8bf] bg-[#fffaf3] text-stone-700 hover:border-[#c9955d]",
             )}
             key={item}
             onClick={() => onChange(item)}
@@ -1408,7 +1408,7 @@ function Likert({
           </button>
         ))}
       </div>
-      <div className="mt-2 flex justify-between text-xs text-slate-500">
+      <div className="mt-2 flex justify-between text-xs text-stone-500">
         <span>Hoàn toàn không đồng ý</span>
         <span>Hoàn toàn đồng ý</span>
       </div>
@@ -1504,14 +1504,14 @@ function SetupScreen({
               onLog("demo_bank_opened", "setup", {});
             }}
           />
-          <div className="rounded-lg border border-slate-200 bg-white p-4">
+          <div className="rounded-lg border border-[#ead8bf] bg-white p-4">
             <h3 className="font-semibold">Tạo mã PIN thử nghiệm</h3>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
+            <p className="mt-2 text-sm leading-6 text-stone-600">
               Mã này chỉ dùng trong phiên mô phỏng và không liên quan đến tài
               khoản ngân hàng thật.
             </p>
             <input
-              className="mt-4 h-12 w-full max-w-xs rounded-lg border border-slate-200 bg-slate-50 px-3 text-lg font-semibold tracking-[0.2em] outline-none focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
+              className="mt-4 h-12 w-full max-w-xs rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 text-lg font-semibold tracking-[0.2em] outline-none focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
               inputMode="numeric"
               maxLength={4}
               onChange={(event) =>
@@ -1527,15 +1527,15 @@ function SetupScreen({
 
       {group === "NFC_CARD" && (
         <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-5 text-emerald-950">
+          <div className="rounded-lg border border-[#c6d1b7] bg-[#eef2e7] p-5 text-[#405438]">
             <CreditCard className="mb-8" size={38} aria-hidden />
             <p className="text-sm font-medium">NFC TEST CARD</p>
             <p className="mt-2 text-2xl font-semibold">CARD-POS-042</p>
             <p className="mt-6 text-sm">Không yêu cầu PIN trong phiên mô phỏng</p>
           </div>
-          <div className="rounded-lg border border-slate-200 bg-white p-4">
+          <div className="rounded-lg border border-[#ead8bf] bg-white p-4">
             <h3 className="font-semibold">Liên kết thẻ thử nghiệm</h3>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
+            <p className="mt-2 text-sm leading-6 text-stone-600">
               Thẻ vật lý được dùng để tránh chồng lấn với điện thoại ở nhóm QR
               hoặc nhận diện khuôn mặt trên điện thoại.
             </p>
@@ -1555,7 +1555,7 @@ function SetupScreen({
       )}
 
       {needsBiometricConsent && (
-        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
+        <div className="mb-4 rounded-lg border border-[#dfbd7f] bg-[#fff3df] p-4 text-sm leading-6 text-[#7a4a2a]">
           <label className="flex items-start gap-3">
             <input
               checked={Boolean(biometricConsentAt)}
@@ -1576,16 +1576,16 @@ function SetupScreen({
       {(group === "FACE_POS" || group === "PALM_VEIN") && (
         <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
           <BiometricMock group={group} samples={samples} />
-          <div className="rounded-lg border border-slate-200 bg-white p-4">
+          <div className="rounded-lg border border-[#ead8bf] bg-white p-4">
             <h3 className="font-semibold">
               Ghi nhận ba mẫu {group === "FACE_POS" ? "khuôn mặt" : "lòng bàn tay"}
             </h3>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
+            <p className="mt-2 text-sm leading-6 text-stone-600">
               Thời gian thiết lập được tách riêng với thời gian thanh toán để
               các nhóm sinh trắc học không bị đánh giá bất lợi.
             </p>
             <button
-              className="mt-4 inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-slate-300"
+              className="mt-4 inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-[#d6c0aa]"
               disabled={!biometricReady || samples >= 3}
               onClick={capture}
               type="button"
@@ -1599,7 +1599,7 @@ function SetupScreen({
 
       <ActionRow>
         <button
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-slate-300"
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-[#d6c0aa]"
           disabled={!done}
           onClick={() =>
             onFinish({
@@ -1629,16 +1629,16 @@ function PhoneMock({
   opened: boolean;
 }) {
   return (
-    <div className="rounded-[28px] border-4 border-slate-900 bg-slate-950 p-3 shadow-sm">
-      <div className="rounded-[20px] bg-slate-50 p-4">
+    <div className="rounded-[28px] border-4 border-stone-900 bg-stone-950 p-3 shadow-sm">
+      <div className="rounded-[20px] bg-[#fffaf3] p-4">
         <div className="mb-5 flex items-center justify-between">
           <span className="text-sm font-semibold">DemoBank</span>
           <Smartphone size={17} aria-hidden />
         </div>
-        <p className="text-xs text-slate-500">Số dư thử nghiệm</p>
+        <p className="text-xs text-stone-500">Số dư thử nghiệm</p>
         <p className="mt-1 text-2xl font-semibold">{formatVnd(balance)}</p>
         <button
-          className="mt-8 inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-sky-700 px-3 text-sm font-semibold text-white disabled:bg-sky-200"
+          className="mt-8 inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-3 text-sm font-semibold text-white disabled:bg-[#d6c0aa]"
           disabled={opened}
           onClick={onOpen}
           type="button"
@@ -1660,17 +1660,17 @@ function BiometricMock({
 }) {
   const face = group === "FACE_POS";
   return (
-    <div className="flex aspect-video items-center justify-center rounded-lg border border-slate-200 bg-slate-900 text-white">
+    <div className="flex aspect-video items-center justify-center rounded-lg border border-[#ead8bf] bg-stone-900 text-white">
       <div className="text-center">
         {face ? (
-          <Camera className="mx-auto mb-4 text-violet-200" size={58} aria-hidden />
+          <Camera className="mx-auto mb-4 text-[#d8b5a5]" size={58} aria-hidden />
         ) : (
-          <Hand className="mx-auto mb-4 text-amber-200" size={58} aria-hidden />
+          <Hand className="mx-auto mb-4 text-[#dfbd7f]" size={58} aria-hidden />
         )}
         <p className="text-sm font-semibold">
           {face ? "Camera POS" : "PalmPay scanner"}
         </p>
-        <p className="mt-1 text-xs text-slate-300">{samples}/3 mẫu đã ghi</p>
+        <p className="mt-1 text-xs text-stone-300">{samples}/3 mẫu đã ghi</p>
       </div>
     </div>
   );
@@ -1832,7 +1832,7 @@ function ProductScreen({
       </div>
       <ActionRow>
         <button
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-stone-300"
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-[#d6c0aa]"
           disabled={!canContinue}
           onClick={onContinue}
           type="button"
@@ -1892,7 +1892,7 @@ function ProductCard({
         <div className="flex h-10 items-center justify-between rounded-lg border border-[#dcc6aa] bg-[#fffaf3] px-2">
           <button
             aria-label={`Giảm ${product.name}`}
-            className="flex h-8 w-8 items-center justify-center rounded-md text-stone-700 transition hover:bg-white disabled:text-stone-300"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-stone-700 transition hover:bg-white disabled:text-[#b8a491]"
             disabled={quantity === 0}
             onClick={onRemove}
             type="button"
@@ -1981,7 +1981,7 @@ function CheckoutScreen({
       </div>
       <ActionRow>
         <button
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-stone-300"
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-[#d6c0aa]"
           disabled={!canPay}
           onClick={onPay}
           type="button"
@@ -2028,10 +2028,10 @@ function PaymentScreen({
   return (
     <Panel eyebrow="Thanh toán tại POS" icon={groupCopy[group].icon} title={groupCopy[group].label}>
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="rounded-lg border border-slate-200 bg-white p-4">
+        <div className="rounded-lg border border-[#ead8bf] bg-white p-4">
           {group === "QR_PIN" && (
             <div className="space-y-4">
-              <div className="flex justify-center rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <div className="flex justify-center rounded-lg border border-[#ead8bf] bg-[#fffaf3] p-4">
                 <QRCodeSVG
                   level="M"
                   size={210}
@@ -2044,7 +2044,7 @@ function PaymentScreen({
               </div>
               <div className="grid gap-2 sm:grid-cols-3">
                 <button
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-sky-700 px-3 text-sm font-semibold text-white disabled:bg-slate-300"
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-3 text-sm font-semibold text-white disabled:bg-[#d6c0aa]"
                   disabled={qrStep !== "start"}
                   onClick={() => {
                     setQrStep("scanned");
@@ -2056,7 +2056,7 @@ function PaymentScreen({
                   Quét QR
                 </button>
                 <input
-                  className="h-10 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm outline-none focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
+                  className="h-10 rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 text-sm outline-none focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
                   inputMode="numeric"
                   onChange={(event) =>
                     setAmount(event.target.value.replace(/\D/g, "").slice(0, 8))
@@ -2065,7 +2065,7 @@ function PaymentScreen({
                   value={amount}
                 />
                 <input
-                  className="h-10 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm outline-none focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
+                  className="h-10 rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 text-sm outline-none focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
                   inputMode="numeric"
                   maxLength={4}
                   onChange={(event) =>
@@ -2077,7 +2077,7 @@ function PaymentScreen({
                 />
               </div>
               <button
-                className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-slate-300"
+                className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-[#d6c0aa]"
                 disabled={busy || qrStep === "start"}
                 onClick={() => {
                   onLog("amount_submitted", "payment", {
@@ -2172,15 +2172,15 @@ function TapPayment({
 }) {
   return (
     <div className="space-y-4">
-      <div className="flex min-h-64 items-center justify-center rounded-lg border border-slate-200 bg-slate-50">
+      <div className="flex min-h-64 items-center justify-center rounded-lg border border-[#ead8bf] bg-[#fffaf3]">
         <div className="text-center">
           <Icon className="mx-auto mb-4 text-[#7a4a2a]" size={60} aria-hidden />
           <p className="text-lg font-semibold">{label}</p>
-          <p className="mt-1 text-sm text-slate-500">{formatVnd(amount)}</p>
+          <p className="mt-1 text-sm text-stone-500">{formatVnd(amount)}</p>
         </div>
       </div>
       <button
-        className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-slate-300"
+        className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-[#d6c0aa]"
         disabled={busy}
         onClick={() => {
           onLog();
@@ -2232,19 +2232,19 @@ function RetryPanel({
   };
 
   return (
-    <aside className="rounded-lg border border-slate-200 bg-white p-4">
+    <aside className="rounded-lg border border-[#ead8bf] bg-white p-4">
       <div className="mb-3 flex items-center gap-2">
         <TimerReset size={18} aria-hidden />
         <h3 className="font-semibold">Thử lại và lỗi</h3>
       </div>
-      <p className="text-sm leading-6 text-slate-600">
+      <p className="text-sm leading-6 text-stone-600">
         Tối đa hai lần thử lại. Sau đó hệ thống ghi nhận lỗi kỹ thuật và mở
         khảo sát sau trải nghiệm.
       </p>
       <div className="mt-3 space-y-2">
         {errors[group].map((error) => (
           <button
-            className="inline-flex h-10 w-full items-center justify-start gap-2 rounded-lg border border-slate-200 bg-white px-3 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:text-slate-300"
+            className="inline-flex h-10 w-full items-center justify-start gap-2 rounded-lg border border-[#ead8bf] bg-white px-3 text-left text-sm font-medium text-stone-700 transition hover:bg-[#fffaf3] disabled:text-[#b8a491]"
             disabled={retries >= 2}
             key={error.code}
             onClick={() => onRetry(error.code)}
@@ -2255,7 +2255,7 @@ function RetryPanel({
           </button>
         ))}
       </div>
-      <div className="mt-4 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">
+      <div className="mt-4 rounded-lg bg-[#fffaf3] px-3 py-2 text-sm text-stone-600">
         Số lần thử lại: <span className="font-semibold">{retries}/2</span>
       </div>
       <button
@@ -2351,21 +2351,21 @@ function RankingScreen({
           const copy = groupCopy[group];
           const Icon = copy.icon;
           return (
-            <article className="rounded-lg border border-slate-200 bg-white p-4" key={group}>
+            <article className="rounded-lg border border-[#ead8bf] bg-white p-4" key={group}>
               <div className="mb-3 flex items-start gap-3">
                 <div className={cn("flex h-10 w-10 items-center justify-center rounded-lg border", copy.color)}>
                   <Icon size={18} aria-hidden />
                 </div>
                 <div>
                   <h3 className="text-sm font-semibold">{copy.label}</h3>
-                  <p className="mt-1 text-sm leading-6 text-slate-600">
+                  <p className="mt-1 text-sm leading-6 text-stone-600">
                     {copy.neutralDescription}
                   </p>
                 </div>
               </div>
               <label className="relative block">
                 <select
-                  className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-slate-50 px-3 pr-9 text-sm outline-none focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
+                  className="h-10 w-full appearance-none rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 pr-9 text-sm outline-none focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
                   onChange={(event) => onRanking(group, Number(event.target.value))}
                   value={ranking[group] ?? ""}
                 >
@@ -2383,7 +2383,7 @@ function RankingScreen({
                   ))}
                 </select>
                 <ChevronDown
-                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
+                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-stone-400"
                   size={16}
                   aria-hidden
                 />
@@ -2411,8 +2411,8 @@ function RankingScreen({
         />
       </div>
 
-      <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
-        <label className="flex items-start gap-3 text-sm text-slate-700">
+      <div className="mt-4 rounded-lg border border-[#ead8bf] bg-white p-4">
+        <label className="flex items-start gap-3 text-sm text-stone-700">
           <input
             checked={wantsInterview}
             className="mt-1 h-4 w-4"
@@ -2423,7 +2423,7 @@ function RankingScreen({
         </label>
         {wantsInterview && (
           <input
-            className="mt-3 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm outline-none focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
+            className="mt-3 h-10 w-full rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 text-sm outline-none focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
             onChange={(event) => setContact(event.target.value)}
             placeholder="Email hoặc số điện thoại"
             value={contact}
@@ -2433,7 +2433,7 @@ function RankingScreen({
 
       <ActionRow>
         <button
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-slate-300"
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-[#d6c0aa]"
           disabled={!rankingComplete}
           onClick={submit}
           type="button"
@@ -2459,7 +2459,7 @@ function DebriefScreen({
 }) {
   return (
     <Panel eyebrow="Kết thúc phiên" icon={CheckCircle2} title="Giải thích cuối thí nghiệm">
-      <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-600">
+      <div className="rounded-lg border border-[#ead8bf] bg-white p-4 text-sm leading-6 text-stone-600">
         <p>
           Phiên này so sánh trải nghiệm thanh toán tại điểm bán giữa QR + PIN,
           thẻ NFC, nhận diện khuôn mặt tại POS và PalmPay tĩnh mạch lòng bàn
@@ -2476,7 +2476,7 @@ function DebriefScreen({
       </div>
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
         <button
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-[#ead8bf] bg-white px-4 text-sm font-semibold text-stone-700 transition hover:bg-[#fffaf3]"
           onClick={onExport}
           type="button"
         >
@@ -2484,7 +2484,7 @@ function DebriefScreen({
           CSV dạng rộng
         </button>
         <button
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-[#ead8bf] bg-white px-4 text-sm font-semibold text-stone-700 transition hover:bg-[#fffaf3]"
           onClick={onExportEvents}
           type="button"
         >
@@ -2516,7 +2516,7 @@ function Panel({
   title: string;
 }) {
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+    <section className="rounded-lg border border-[#ead8bf] bg-white p-5 shadow-sm">
       <div className="mb-5 flex items-start gap-3">
         <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[#6f3f24] text-white">
           <Icon size={21} aria-hidden />
@@ -2533,7 +2533,7 @@ function Panel({
 
 function ActionRow({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mt-5 flex justify-end border-t border-slate-200 pt-4">
+    <div className="mt-5 flex justify-end border-t border-[#ead8bf] pt-4">
       {children}
     </div>
   );
@@ -2549,9 +2549,9 @@ function Row({
   value: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 border-b border-slate-100 py-2 last:border-0">
-      <span className="text-sm text-slate-500">{label}</span>
-      <span className={cn("text-right text-sm", strong ? "font-semibold text-slate-950" : "font-medium text-slate-700")}>
+    <div className="flex items-center justify-between gap-4 border-b border-[#f0dfc8] py-2 last:border-0">
+      <span className="text-sm text-stone-500">{label}</span>
+      <span className={cn("text-right text-sm", strong ? "font-semibold text-stone-950" : "font-medium text-stone-700")}>
         {value}
       </span>
     </div>
@@ -2569,9 +2569,9 @@ function TextArea({
 }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-sm font-medium text-slate-700">{label}</span>
+      <span className="mb-1 block text-sm font-medium text-stone-700">{label}</span>
       <textarea
-        className="min-h-24 w-full resize-y rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
+        className="min-h-24 w-full resize-y rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 py-2 text-sm outline-none focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
         onChange={(event) => onChange(event.target.value)}
         value={value}
       />
