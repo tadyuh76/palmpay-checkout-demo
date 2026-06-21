@@ -9,10 +9,8 @@ import {
   CheckCircle2,
   ChevronDown,
   ClipboardCheck,
-  CreditCard,
   Download,
   Hand,
-  IdCard,
   Loader2,
   Minus,
   Nfc,
@@ -42,8 +40,6 @@ type StepKey =
   | "admin"
   | "consent"
   | "pre"
-  | "assignment"
-  | "setup"
   | "product"
   | "checkout"
   | "payment"
@@ -209,8 +205,6 @@ const stepLabels: Record<StepKey, string> = {
   admin: "Quản trị",
   consent: "Đồng ý",
   pre: "Khảo sát trước",
-  assignment: "Phương thức",
-  setup: "Thiết lập",
   product: "Sản phẩm",
   checkout: "Xác nhận",
   payment: "Thanh toán",
@@ -222,8 +216,6 @@ const stepLabels: Record<StepKey, string> = {
 const flowSteps: StepKey[] = [
   "consent",
   "pre",
-  "assignment",
-  "setup",
   "product",
   "checkout",
   "payment",
@@ -358,13 +350,14 @@ function makeSession(
   enrollment: InitialEnrollment = {},
 ): ExperimentSession {
   const trimmedName = participantName.trim() || "Khách thử nghiệm";
+  const createdAt = nowIso();
 
   return {
     participant_id: makeParticipantId(),
     participant_name: trimmedName,
     protocol_version: protocolVersion,
     assigned_group: selectedGroup,
-    created_at: nowIso(),
+    created_at: createdAt,
     consent_at: null,
     pre_survey_completed_at: null,
     post_survey_completed_at: null,
@@ -377,10 +370,13 @@ function makeSession(
     face_account_name: trimmedName,
     qr_account_name: trimmedName,
     qr_pin: selectedGroup === "QR_PIN" ? enrollment.qrPin ?? "" : "",
-    template_ref: null,
+    template_ref:
+      selectedGroup === "FACE_POS" || selectedGroup === "PALM_VEIN"
+        ? `tpl_${crypto.randomUUID().slice(0, 8)}`
+        : null,
     template_deleted_at: null,
-    setup_started_at: null,
-    setup_completed_at: null,
+    setup_started_at: createdAt,
+    setup_completed_at: createdAt,
     checkout_started_at: null,
     checkout_completed_at: null,
     cart: {},
@@ -395,6 +391,7 @@ function normalizeSession(session: ExperimentSession | null) {
   if (!session) return null;
   const participantName =
     session.participant_name?.trim() || `Khách ${session.participant_id}`;
+  const rawStep = session.current_step as string;
   if ((session.current_step as string) === "ranking") {
     return {
       ...session,
@@ -407,10 +404,16 @@ function normalizeSession(session: ExperimentSession | null) {
   }
   return {
     ...session,
+    current_step:
+      rawStep === "assignment" || rawStep === "setup"
+        ? "product"
+        : session.current_step,
     face_descriptor: session.face_descriptor ?? null,
     face_account_name: session.face_account_name || participantName,
     participant_name: participantName,
     qr_account_name: session.qr_account_name || participantName,
+    setup_started_at: session.setup_started_at ?? session.created_at,
+    setup_completed_at: session.setup_completed_at ?? session.created_at,
   };
 }
 
@@ -839,11 +842,20 @@ export function DemoApp() {
         current.assigned_group ??
         getNextAssignment(current.participant_id, current.participant_name);
       const timestamp = nowIso();
+      const setupTimestamp =
+        current.setup_completed_at ?? current.setup_started_at ?? current.created_at ?? timestamp;
       return {
         ...current,
         assigned_group: assignedGroup,
         pre_survey_completed_at: timestamp,
-        current_step: "assignment",
+        current_step: "product",
+        setup_started_at: current.setup_started_at ?? setupTimestamp,
+        setup_completed_at: current.setup_completed_at ?? setupTimestamp,
+        template_ref:
+          current.template_ref ??
+          (assignedGroup === "FACE_POS" || assignedGroup === "PALM_VEIN"
+            ? `tpl_${crypto.randomUUID().slice(0, 8)}`
+            : null),
         events: [
           ...current.events,
           {
@@ -859,55 +871,22 @@ export function DemoApp() {
               : "random_group_assigned",
             timestamp,
             participant_id: current.participant_id,
-            screen_name: "assignment",
+            screen_name: "pre",
             metadata: {
               assigned_group: assignedGroup,
               block_randomized: !hasSelectedGroup,
             },
           },
+          {
+            event_name: "product_started",
+            timestamp,
+            participant_id: current.participant_id,
+            screen_name: "product",
+            metadata: { assigned_group: assignedGroup },
+          },
         ],
       };
     });
-  };
-
-  const startSetup = () => {
-    updateSession((current) => ({
-      ...current,
-      current_step: "setup",
-      setup_started_at: current.setup_started_at ?? nowIso(),
-      events: [
-        ...current.events,
-        {
-          event_name: "setup_started",
-          timestamp: nowIso(),
-          participant_id: current.participant_id,
-          screen_name: "setup",
-          metadata: { assigned_group: current.assigned_group },
-        },
-      ],
-    }));
-  };
-
-  const finishSetup = (metadata: Record<string, unknown> = {}) => {
-    updateSession((current) => ({
-      ...current,
-      current_step: "product",
-      setup_completed_at: nowIso(),
-      template_ref:
-        current.assigned_group === "FACE_POS" || current.assigned_group === "PALM_VEIN"
-          ? `tpl_${crypto.randomUUID().slice(0, 8)}`
-          : current.template_ref,
-      events: [
-        ...current.events,
-        {
-          event_name: "setup_completed",
-          timestamp: nowIso(),
-          participant_id: current.participant_id,
-          screen_name: "setup",
-          metadata,
-        },
-      ],
-    }));
   };
 
   const startCheckout = () => {
@@ -1136,37 +1115,6 @@ export function DemoApp() {
               onSubmit={completePreSurvey}
               questions={preQuestions}
               title="Thông tin nền"
-            />
-          )}
-          {session.current_step === "assignment" && session.assigned_group && (
-            <AssignmentScreen group={session.assigned_group} onContinue={startSetup} />
-          )}
-          {session.current_step === "setup" && session.assigned_group && (
-            <SetupScreen
-              faceAccountName={session.face_account_name ?? session.participant_name}
-              faceDescriptor={session.face_descriptor}
-              group={session.assigned_group}
-              pin={session.qr_pin ?? ""}
-              qrAccountName={session.qr_account_name ?? session.participant_name}
-              onConsent={() =>
-                updateSession((current) => ({
-                  ...current,
-                  biometric_consent_at: nowIso(),
-                  events: [
-                    ...current.events,
-                    {
-                      event_name: "biometric_consent_completed",
-                      timestamp: nowIso(),
-                      participant_id: current.participant_id,
-                      screen_name: "setup",
-                      metadata: { method: current.assigned_group },
-                    },
-                  ],
-                }))
-              }
-              onFinish={finishSetup}
-              onLog={logEvent}
-              biometricConsentAt={session.biometric_consent_at}
             />
           )}
           {session.current_step === "product" && (
@@ -2095,255 +2043,6 @@ function Likert({
       <div className="mt-2 flex justify-between text-xs text-stone-500">
         <span>Hoàn toàn không đồng ý</span>
         <span>Hoàn toàn đồng ý</span>
-      </div>
-    </div>
-  );
-}
-
-function AssignmentScreen({
-  group,
-  onContinue,
-}: {
-  group: StudyGroup;
-  onContinue: () => void;
-}) {
-  const copy = groupCopy[group];
-  const Icon = copy.icon;
-  return (
-    <Panel eyebrow="Phương thức đã chọn" icon={IdCard} title="Phương thức thanh toán">
-      <div className={cn("rounded-lg border p-5", copy.color)}>
-        <div className="flex items-start gap-4">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-white/70">
-            <Icon size={24} aria-hidden />
-          </div>
-          <div>
-            <p className="text-sm font-medium uppercase">{group}</p>
-            <h2 className="mt-1 text-xl font-semibold">{copy.label}</h2>
-            <p className="mt-2 text-sm leading-6 opacity-85">{copy.instruction}</p>
-          </div>
-        </div>
-      </div>
-      <ActionRow>
-        <button
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f]"
-          onClick={onContinue}
-          type="button"
-        >
-          Thiết lập phương thức
-          <ArrowRight size={17} aria-hidden />
-        </button>
-      </ActionRow>
-    </Panel>
-  );
-}
-
-function SetupScreen({
-  biometricConsentAt,
-  faceAccountName,
-  faceDescriptor,
-  group,
-  onConsent,
-  onFinish,
-  onLog,
-  pin,
-  qrAccountName,
-}: {
-  biometricConsentAt?: string | null;
-  faceAccountName: string;
-  faceDescriptor?: number[] | null;
-  group: StudyGroup;
-  onConsent: () => void;
-  onFinish: (metadata?: Record<string, unknown>) => void;
-  onLog: (eventName: string, screenName: StepKey, metadata?: Record<string, unknown>) => void;
-  pin: string;
-  qrAccountName: string;
-}) {
-  const [samples, setSamples] = useState(0);
-  const needsBiometricConsent = group === "FACE_POS" || group === "PALM_VEIN";
-  const biometricReady = !needsBiometricConsent || Boolean(biometricConsentAt);
-  const done =
-    group === "QR_PIN"
-      ? /^\d{4}$/.test(pin) && qrAccountName.trim().length > 0
-      : group === "NFC_CARD"
-        ? true
-        : group === "FACE_POS"
-          ? biometricReady && Boolean(faceDescriptor) && faceAccountName.trim().length > 0
-          : biometricReady && samples >= 3;
-
-  const capture = () => {
-    const next = Math.min(samples + 1, 3);
-    setSamples(next);
-    onLog(
-      group === "FACE_POS" ? "face_sample_captured" : "palm_sample_captured",
-      "setup",
-      { sample_number: next, raw_image_stored: false },
-    );
-  };
-
-  return (
-    <Panel eyebrow="Thiết lập phương thức" icon={groupCopy[group].icon} title={groupCopy[group].label}>
-      {group === "QR_PIN" && (
-        <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-          <div className="rounded-lg border border-[#ead8bf] bg-[#fffaf3] p-5">
-            <Smartphone className="mb-8 text-[#7a4a2a]" size={38} aria-hidden />
-            <p className="text-sm font-medium text-stone-600">DemoBank QR</p>
-            <p className="mt-2 text-2xl font-semibold">{qrAccountName}</p>
-            <p className="mt-6 text-sm text-stone-600">PIN đã đăng ký trên màn hình đầu</p>
-          </div>
-          <div className="rounded-lg border border-[#ead8bf] bg-white p-4">
-            <h3 className="font-semibold">Tài khoản QR đã sẵn sàng</h3>
-            <p className="mt-2 text-sm leading-6 text-stone-600">
-              Người tham gia sẽ quét QR ở bước thanh toán bằng điện thoại. Tên
-              người gửi trên màn hình chuyển khoản là tên đã đăng ký ban đầu.
-            </p>
-            <div className="mt-4 space-y-2 rounded-lg border border-[#ead8bf] bg-[#fffaf3] p-3 text-sm">
-              <Row label="Người gửi" value={qrAccountName} />
-              <Row label="PIN" value={/^\d{4}$/.test(pin) ? "••••" : "Chưa có"} />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {group === "FACE_POS" && (
-        <div className="grid gap-4 lg:grid-cols-[360px_minmax(0,1fr)]">
-          <div className="flex aspect-video items-center justify-center rounded-lg border border-[#ead8bf] bg-stone-900 text-white">
-            <div className="text-center">
-              <ScanFace className="mx-auto mb-4 text-[#d8b5a5]" size={58} aria-hidden />
-              <p className="text-sm font-semibold">
-                {faceDescriptor ? "Face ID đã đăng ký" : "Chưa có mẫu Face ID"}
-              </p>
-              <p className="mt-1 text-xs text-stone-300">
-                Xác nhận thanh toán sẽ dùng camera POS
-              </p>
-            </div>
-          </div>
-          <div className="rounded-lg border border-[#ead8bf] bg-white p-4">
-            <h3 className="font-semibold">Face ID đã sẵn sàng</h3>
-            <p className="mt-2 text-sm leading-6 text-stone-600">
-              Khuôn mặt được đăng ký ngay trên màn hình đầu. Khi thanh toán,
-              POS sẽ mở camera tại website này để xác nhận giao dịch.
-            </p>
-            <div className="mt-4 space-y-2 rounded-lg border border-[#ead8bf] bg-[#fffaf3] p-3 text-sm">
-              <Row label="Tên Face ID" value={faceAccountName} />
-              <Row
-                label="Trạng thái"
-                value={faceDescriptor ? "Đã ghi mẫu khuôn mặt" : "Chưa ghi mẫu"}
-              />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {group === "NFC_CARD" && (
-        <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-          <div className="rounded-lg border border-[#c6d1b7] bg-[#eef2e7] p-5 text-[#405438]">
-            <CreditCard className="mb-8" size={38} aria-hidden />
-            <p className="text-sm font-medium">NFC TEST CARD</p>
-            <p className="mt-2 text-2xl font-semibold">CARD-POS-042</p>
-            <p className="mt-6 text-sm">Không yêu cầu PIN trong phiên mô phỏng</p>
-          </div>
-          <div className="rounded-lg border border-[#ead8bf] bg-white p-4">
-            <h3 className="font-semibold">Thẻ NFC đã sẵn sàng</h3>
-            <p className="mt-2 text-sm leading-6 text-stone-600">
-              Không cần thiết lập thẻ trong website. Ở bước thanh toán, người
-              tham gia chỉ cần chạm thẻ vào đầu đọc NFC đang kết nối với POS.
-            </p>
-            <div className="mt-4 rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 py-2 text-sm text-stone-600">
-              Card ref: <span className="font-semibold text-[#405438]">CARD-POS-042</span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {needsBiometricConsent && (group !== "FACE_POS" || !biometricConsentAt) && (
-        <div className="mb-4 rounded-lg border border-[#dfbd7f] bg-[#fff3df] p-4 text-sm leading-6 text-[#7a4a2a]">
-          <label className="flex items-start gap-3">
-            <input
-              checked={Boolean(biometricConsentAt)}
-              className="mt-0.5 h-4 w-4 shrink-0 accent-[#6f3f24]"
-              disabled={Boolean(biometricConsentAt)}
-              onChange={onConsent}
-              type="checkbox"
-            />
-            <span>
-              Tôi đồng ý cho hệ thống tạo mẫu đặc trưng mã hóa cho phiên thử
-              nghiệm. Hệ thống không lưu hình ảnh thô và mẫu sẽ được xóa khi
-              kết thúc phiên.
-            </span>
-          </label>
-        </div>
-      )}
-
-      {group === "PALM_VEIN" && (
-        <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-          <BiometricMock group={group} samples={samples} />
-          <div className="rounded-lg border border-[#ead8bf] bg-white p-4">
-            <h3 className="font-semibold">Ghi nhận ba mẫu lòng bàn tay</h3>
-            <p className="mt-2 text-sm leading-6 text-stone-600">
-              Thời gian thiết lập được tách riêng với thời gian thanh toán để
-              các nhóm sinh trắc học không bị đánh giá bất lợi.
-            </p>
-            <button
-              className="mt-4 inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-[#d6c0aa]"
-              disabled={!biometricReady || samples >= 3}
-              onClick={capture}
-              type="button"
-            >
-              <ScanLine size={17} aria-hidden />
-              Ghi mẫu {Math.min(samples + 1, 3)}/3
-            </button>
-          </div>
-        </div>
-      )}
-
-      <ActionRow>
-        <button
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-[#d6c0aa]"
-          disabled={!done}
-          onClick={() =>
-            onFinish({
-              method: group,
-              setup_samples:
-                group === "FACE_POS" && faceDescriptor ? 3 : samples || undefined,
-              qr_pin_created: group === "QR_PIN" ? true : undefined,
-              qr_account_name: group === "QR_PIN" ? qrAccountName.trim() : undefined,
-              face_account_name:
-                group === "FACE_POS" ? faceAccountName.trim() : undefined,
-              nfc_card_ref: group === "NFC_CARD" ? "CARD-POS-042" : undefined,
-              face_descriptor_length:
-                group === "FACE_POS" ? faceDescriptor?.length : undefined,
-            })
-          }
-          type="button"
-        >
-          Hoàn tất thiết lập
-          <ArrowRight size={17} aria-hidden />
-        </button>
-      </ActionRow>
-    </Panel>
-  );
-}
-
-function BiometricMock({
-  group,
-  samples,
-}: {
-  group: StudyGroup;
-  samples: number;
-}) {
-  const face = group === "FACE_POS";
-  return (
-    <div className="flex aspect-video items-center justify-center rounded-lg border border-[#ead8bf] bg-stone-900 text-white">
-      <div className="text-center">
-        {face ? (
-          <Camera className="mx-auto mb-4 text-[#d8b5a5]" size={58} aria-hidden />
-        ) : (
-          <Hand className="mx-auto mb-4 text-[#dfbd7f]" size={58} aria-hidden />
-        )}
-        <p className="text-sm font-semibold">
-          {face ? "Camera POS" : "PalmPay scanner"}
-        </p>
-        <p className="mt-1 text-xs text-stone-300">{samples}/3 mẫu đã ghi</p>
       </div>
     </div>
   );
