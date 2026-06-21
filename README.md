@@ -1,8 +1,6 @@
 # PalmPay Coffee Experiment
 
-Coffee-shop checkout prototype for the PalmPay point-of-sale study. The visible participant experience stays close to a normal cafe checkout: browse the menu, add products to the cart, review the order, and pay with the method assigned by the experiment.
-
-Research-only pieces such as consent, pre/post surveys, ranking, debrief, and CSV export are still available, but they are tucked into the compact `Research` panel instead of driving the main UI.
+Coffee-themed point-of-sale prototype for the PalmPay experiment. The app keeps the full research sequence visible to the researcher and participant: consent, pre-survey, randomized method assignment, method setup, coffee catalog selection, checkout, assigned payment, receipt, post-survey, ranking, debrief, and CSV export.
 
 ## Experiment Groups
 
@@ -11,17 +9,20 @@ Research-only pieces such as consent, pre/post surveys, ranking, debrief, and CS
 - `FACE_POS`: Face recognition at the point of sale using a POS camera.
 - `PALM_VEIN`: PalmPay palm-vein recognition using a palm scanner.
 
-The NFC condition is intentionally a physical card, not a phone, so it does not overlap with the QR phone flow or phone-based biometric payment.
+The NFC condition is intentionally a physical card, not a phone, so it stays separate from the QR phone flow and phone-based payment expectations.
 
 ## Main Flow
 
-1. The app creates an anonymous participant session and assigns one payment method by shuffled blocks.
-2. Participant browses the coffee catalog and builds a cart.
-3. If the assigned method has not been set up, checkout opens the method setup step.
-4. Participant reviews the cart.
-5. POS opens only the assigned payment method.
-6. Success receipt shows the paid amount, remaining test balance, method, and transaction id.
-7. Researcher can open the `Research` panel for consent, surveys, ranking, debrief, and exports.
+1. Researcher creates an anonymous participant session.
+2. Participant confirms consent.
+3. Participant completes the pre-survey.
+4. App assigns one of the four payment groups by shuffled blocks.
+5. Participant completes setup for the assigned method.
+6. Participant selects one or more coffee catalog items within the test balance.
+7. Participant reviews the cart and pays with only the assigned method.
+8. Receipt shows the selected order, paid amount, remaining test balance, and transaction id.
+9. Participant completes the post-survey, method ranking, debrief, and optional interview contact.
+10. Biometric templates are marked deleted at the end of biometric sessions.
 
 ## Stack
 
@@ -42,4 +43,4 @@ Open `http://localhost:7999`.
 
 ## Data
 
-The prototype records participant id, assigned group, setup and checkout timing, transaction details, retries/errors, survey answers, ranking answers, and event logs. Use the `Research` panel to export `palmpay-wide.csv` and `palmpay-events.csv`.
+The prototype records participant id, assigned group, setup and checkout timing, selected cart items, transaction total, retries/errors, survey answers, ranking answers, biometric deletion timestamp, and event logs. Export `palmpay-wide.csv` and `palmpay-events.csv` from the final debrief screen or admin screen.
