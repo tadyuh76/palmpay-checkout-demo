@@ -6,7 +6,7 @@
   "scope": "/",
   "display": "standalone",
   "background_color": "#f6efe5",
-  "theme_color": "#6f3f24",
+  "theme_color": "#09244B",
   "categories": ["finance", "education", "productivity"],
   "icons": [
     {
