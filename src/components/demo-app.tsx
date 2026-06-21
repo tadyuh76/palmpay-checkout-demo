@@ -458,8 +458,8 @@ function authErrorMessage(
   }
 
   return mode === "signin"
-    ? "Sign in failed. Check the password, create the account first, or make sure the local server is running."
-    : "Account could not be created. Make sure the local server is running, then try again.";
+    ? "Sign in failed. Check the password or create the account first."
+    : "Account could not be created. Try another email, or sign in if the account already exists.";
 }
 
 function AuthPanel({ onSignedIn }: { onSignedIn: () => void }) {
@@ -499,7 +499,7 @@ function AuthPanel({ onSignedIn }: { onSignedIn: () => void }) {
       onSignedIn();
     } catch {
       setError(
-        "Could not reach the auth server. Make sure the local server is running, then try again.",
+        "Could not reach the auth server. Use the deployed site, or start the local dev server and try again.",
       );
     } finally {
       setLoading(false);
