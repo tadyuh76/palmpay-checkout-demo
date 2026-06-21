@@ -1,0 +1,30 @@
+{
+  "name": "PalmPay Coffee Experiment",
+  "short_name": "PalmPay Demo",
+  "description": "Coffee checkout prototype for comparing QR + PIN, NFC card, Face ID, and PalmPay palm-vein payments.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f6efe5",
+  "theme_color": "#6f3f24",
+  "categories": ["finance", "education", "productivity"],
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/brand/palmpay-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/brand/palmpay-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
