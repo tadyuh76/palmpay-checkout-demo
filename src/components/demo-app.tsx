@@ -1102,7 +1102,7 @@ export function DemoApp() {
   return (
     <main className="min-h-screen bg-[#f6efe5] text-stone-950">
       <ExperimentHeader session={session} onReset={resetCurrentSession} />
-      <div className="mx-auto grid max-w-7xl gap-5 px-4 py-5 sm:px-6 lg:grid-cols-[260px_minmax(0,1fr)]">
+      <div className="mx-auto grid max-w-[1680px] gap-5 px-4 py-5 sm:px-6 lg:grid-cols-[260px_minmax(0,1fr)]">
         <ProgressRail currentStep={session.current_step} group={session.assigned_group} />
         <section className="min-w-0">
           {session.current_step === "consent" && (
@@ -1597,7 +1597,7 @@ function AdminHome({
 
   return (
     <main className="min-h-screen bg-[#f6efe5] px-4 py-5 text-stone-950 sm:px-6">
-      <div className="mx-auto grid max-w-7xl gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="mx-auto grid max-w-[1680px] gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
         <section className="rounded-lg border border-[#ead8bf] bg-white p-5 shadow-sm">
           <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -1763,7 +1763,7 @@ function ExperimentHeader({
 }) {
   return (
     <header className="sticky top-0 z-20 border-b border-[#ead8bf] bg-[#fffaf3]/95 backdrop-blur">
-      <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
+      <div className="mx-auto flex max-w-[1680px] flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center">
             <Image
@@ -1811,7 +1811,7 @@ function ProgressRail({
 }) {
   const activeIndex = flowSteps.indexOf(currentStep);
   return (
-    <aside className="rounded-lg border border-[#ead8bf] bg-white p-4 shadow-sm">
+    <aside className="self-start rounded-lg border border-[#ead8bf] bg-white p-4 shadow-sm lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto">
       <div className="mb-4 flex items-center gap-2">
         <ClipboardCheck size={18} aria-hidden />
         <h2 className="font-semibold">Luồng thí nghiệm</h2>
@@ -2551,7 +2551,7 @@ function ProductScreen({
 
   return (
     <Panel eyebrow="Mua hàng" icon={ShoppingBag} title="Chọn món tại quầy cafe">
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="min-w-0 space-y-4">
           <div className="rounded-lg border border-[#ead8bf] bg-[#fffaf3] p-4">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -2596,7 +2596,7 @@ function ProductScreen({
             </div>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid items-stretch gap-4 lg:grid-cols-2 2xl:grid-cols-3">
             {visibleProducts.map((item) => (
               <ProductCard
                 key={item.id}
@@ -2694,12 +2694,37 @@ function ProductCard({
   product: Product;
   quantity: number;
 }) {
+  const selected = quantity > 0;
+  const selectProduct = () => {
+    if (!selected) onAdd();
+  };
+
   return (
-    <article className="overflow-hidden rounded-lg border border-[#ead8bf] bg-white shadow-sm">
+    <article
+      aria-label={`${selected ? "Đã chọn" : "Chọn"} ${product.name}`}
+      aria-pressed={selected}
+      className={cn(
+        "group flex h-full min-h-[460px] flex-col overflow-hidden rounded-lg border bg-white text-left shadow-sm outline-none transition focus:ring-2 focus:ring-[#9a6237]",
+        selected
+          ? "border-[#9a6237] bg-[#fffaf3] shadow-md ring-2 ring-[#c9955d]/25"
+          : "cursor-pointer border-[#ead8bf] hover:border-[#c9955d] hover:shadow-md",
+      )}
+      onClick={selectProduct}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        selectProduct();
+      }}
+      role="button"
+      tabIndex={0}
+    >
       <div className="relative aspect-[4/3] bg-[#efe1cf]">
         <Image
           alt={product.imageAlt}
-          className="object-cover"
+          className={cn(
+            "object-cover transition duration-300",
+            selected ? "scale-[1.02]" : "group-hover:scale-[1.02]",
+          )}
           fill
           sizes="(min-width: 1024px) 340px, (min-width: 768px) 45vw, 92vw"
           src={product.image}
@@ -2709,9 +2734,15 @@ function ProductCard({
             Popular
           </span>
         )}
+        {selected && (
+          <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-lg bg-[#6f3f24] px-2 py-1 text-xs font-semibold text-white shadow-sm">
+            <CheckCircle2 size={14} aria-hidden />
+            Đã chọn
+          </span>
+        )}
       </div>
-      <div className="p-4">
-        <div className="mb-3 flex items-start justify-between gap-3">
+      <div className="flex flex-1 flex-col p-4">
+        <div className="flex flex-1 items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase text-[#7a4a2a]">
               {product.category}
@@ -2727,12 +2758,22 @@ function ProductCard({
             {formatVnd(product.priceCents)}
           </p>
         </div>
-        <div className="flex h-10 items-center justify-between rounded-lg border border-[#dcc6aa] bg-[#fffaf3] px-2">
+        <div
+          className={cn(
+            "mt-4 flex h-11 items-center justify-between rounded-lg border px-2 transition",
+            selected
+              ? "border-[#9a6237] bg-[#efe1cf]"
+              : "border-[#dcc6aa] bg-[#fffaf3]",
+          )}
+        >
           <button
             aria-label={`Giảm ${product.name}`}
             className="flex h-8 w-8 items-center justify-center rounded-md text-stone-700 transition hover:bg-white disabled:text-[#b8a491]"
             disabled={quantity === 0}
-            onClick={onRemove}
+            onClick={(event) => {
+              event.stopPropagation();
+              onRemove();
+            }}
             type="button"
           >
             <Minus size={16} aria-hidden />
@@ -2743,7 +2784,10 @@ function ProductCard({
           <button
             aria-label={`Thêm ${product.name}`}
             className="flex h-8 w-8 items-center justify-center rounded-md bg-[#6f3f24] text-white transition hover:bg-[#5a341f]"
-            onClick={onAdd}
+            onClick={(event) => {
+              event.stopPropagation();
+              onAdd();
+            }}
             type="button"
           >
             <Plus size={16} aria-hidden />
