@@ -101,6 +101,7 @@ type ExperimentSession = {
   session_status: "created" | "active" | "completed" | "technical_failure";
   current_step: StepKey;
   face_descriptor?: number[] | null;
+  face_account_name?: string;
   qr_account_name?: string;
   qr_pin?: string;
   biometric_consent_at?: string | null;
@@ -174,13 +175,13 @@ const groupCopy: Record<
     color: "bg-[#eef2e7] text-[#405438] border-[#c6d1b7]",
   },
   FACE_POS: {
-    label: "Nhận diện khuôn mặt tại điểm bán",
-    shortLabel: "Face POS",
-    device: "Camera tại POS",
+    label: "Face ID qua QR",
+    shortLabel: "Face ID",
+    device: "Điện thoại + camera",
     neutralDescription:
-      "Người tham gia nhìn vào camera tại điểm bán để hệ thống đối chiếu với mẫu khuôn mặt đã đăng ký trong phiên thử nghiệm.",
+      "Người tham gia đăng ký tên và khuôn mặt, sau đó quét mã QR của POS bằng điện thoại và xác nhận chuyển khoản bằng khuôn mặt.",
     instruction:
-      "Nhìn vào camera tại POS cho đến khi hệ thống xác nhận đúng một khuôn mặt và đối chiếu thành công.",
+      "Đăng ký tên Face ID, ghi mẫu khuôn mặt, rồi quét QR tại bước thanh toán và xác nhận bằng camera điện thoại.",
     icon: ScanFace,
     color: "bg-[#f8e2d9] text-[#8a432f] border-[#dfa493]",
   },
@@ -231,9 +232,11 @@ type FaceApi = typeof import("@vladmandic/face-api");
 
 type PublicQrTransfer = {
   amount: number;
+  authMethod: "pin" | "face";
   authorizationCode: string | null;
   createdAt: string;
   id: string;
+  matchDistance: number | null;
   paidAt: string | null;
   productSummary: string;
   receiverName: string;
@@ -358,6 +361,7 @@ function makeSession(participantName: string): ExperimentSession {
     current_step: "consent",
     biometric_consent_at: null,
     face_descriptor: null,
+    face_account_name: trimmedName,
     qr_account_name: trimmedName,
     template_ref: null,
     template_deleted_at: null,
@@ -381,6 +385,7 @@ function normalizeSession(session: ExperimentSession | null) {
     return {
       ...session,
       face_descriptor: session.face_descriptor ?? null,
+      face_account_name: session.face_account_name || participantName,
       participant_name: participantName,
       qr_account_name: session.qr_account_name || participantName,
       current_step: "debrief" as StepKey,
@@ -389,6 +394,7 @@ function normalizeSession(session: ExperimentSession | null) {
   return {
     ...session,
     face_descriptor: session.face_descriptor ?? null,
+    face_account_name: session.face_account_name || participantName,
     participant_name: participantName,
     qr_account_name: session.qr_account_name || participantName,
   };
@@ -426,6 +432,7 @@ function buildWideRow(session: ExperimentSession) {
     participant_id: session.participant_id,
     participant_name: session.participant_name,
     assigned_group: group,
+    face_account_name: session.face_account_name ?? null,
     protocol_version: session.protocol_version,
     consent_at: session.consent_at,
     pre_survey_completed_at: session.pre_survey_completed_at,
@@ -928,6 +935,7 @@ export function DemoApp() {
           )}
           {session.current_step === "setup" && session.assigned_group && (
             <SetupScreen
+              faceAccountName={session.face_account_name ?? session.participant_name}
               faceDescriptor={session.face_descriptor}
               group={session.assigned_group}
               participantName={session.participant_name}
@@ -968,6 +976,9 @@ export function DemoApp() {
                   ],
                 }))
               }
+              onFaceAccountNameChange={(name) =>
+                updateSession((current) => ({ ...current, face_account_name: name }))
+              }
               onFinish={finishSetup}
               onLog={logEvent}
               onPinChange={(pin) =>
@@ -997,13 +1008,18 @@ export function DemoApp() {
           {session.current_step === "payment" && session.assigned_group && (
             <PaymentScreen
               accountName={session.qr_account_name ?? session.participant_name}
+              faceAccountName={session.face_account_name ?? session.participant_name}
               faceDescriptor={session.face_descriptor}
               group={session.assigned_group}
               items={session.transaction?.items ?? cartLines}
               pin={session.qr_pin ?? ""}
               productSummary={session.transaction?.product ?? summarizeCart(cartLines)}
               retries={session.transaction?.number_of_retries ?? 0}
-              senderName={session.qr_account_name ?? session.participant_name}
+              senderName={
+                session.assigned_group === "FACE_POS"
+                  ? session.face_account_name ?? session.participant_name
+                  : session.qr_account_name ?? session.participant_name
+              }
               totalCents={payableAmount}
               transactionId={session.transaction?.transaction_id ?? ""}
               onComplete={completePayment}
@@ -1090,7 +1106,7 @@ function QrMobilePayment({ transferId }: { transferId: string }) {
     };
   }, [transferId]);
 
-  const confirm = async () => {
+  const confirmPin = async () => {
     if (!/^\d{4}$/.test(pin)) return;
     setBusy(true);
     setError("");
@@ -1151,33 +1167,41 @@ function QrMobilePayment({ transferId }: { transferId: string }) {
                   </p>
                 </div>
               ) : (
-                <div className="mt-5">
-                  <label className="block">
-                    <span className="mb-1 block text-sm font-medium text-stone-700">
-                      Nhập PIN DemoBank
-                    </span>
-                    <input
-                      className="h-12 w-full rounded-lg border border-[#ead8bf] bg-white px-3 text-center text-lg font-semibold tracking-[0.3em] outline-none focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
-                      inputMode="numeric"
-                      maxLength={4}
-                      onChange={(event) =>
-                        setPin(event.target.value.replace(/\D/g, "").slice(0, 4))
-                      }
-                      placeholder="0000"
-                      type="password"
-                      value={pin}
-                    />
-                  </label>
-                  <button
-                    className="mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-[#d6c0aa]"
-                    disabled={busy || !/^\d{4}$/.test(pin)}
-                    onClick={confirm}
-                    type="button"
-                  >
-                    {busy ? <Loader2 className="animate-spin" size={17} /> : <BadgeCheck size={17} />}
-                    {busy ? "Đang xác minh..." : "Xác nhận thanh toán"}
-                  </button>
-                </div>
+                transfer.authMethod === "face" ? (
+                  <FaceMobileConfirmation
+                    onError={setError}
+                    onPaid={setTransfer}
+                    transferId={transferId}
+                  />
+                ) : (
+                  <div className="mt-5">
+                    <label className="block">
+                      <span className="mb-1 block text-sm font-medium text-stone-700">
+                        Nhập PIN DemoBank
+                      </span>
+                      <input
+                        className="h-12 w-full rounded-lg border border-[#ead8bf] bg-white px-3 text-center text-lg font-semibold tracking-[0.3em] outline-none focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
+                        inputMode="numeric"
+                        maxLength={4}
+                        onChange={(event) =>
+                          setPin(event.target.value.replace(/\D/g, "").slice(0, 4))
+                        }
+                        placeholder="0000"
+                        type="password"
+                        value={pin}
+                      />
+                    </label>
+                    <button
+                      className="mt-4 inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-[#d6c0aa]"
+                      disabled={busy || !/^\d{4}$/.test(pin)}
+                      onClick={confirmPin}
+                      type="button"
+                    >
+                      {busy ? <Loader2 className="animate-spin" size={17} /> : <BadgeCheck size={17} />}
+                      {busy ? "Đang xác minh..." : "Xác nhận thanh toán"}
+                    </button>
+                  </div>
+                )
               )}
             </>
           ) : (
@@ -1194,6 +1218,162 @@ function QrMobilePayment({ transferId }: { transferId: string }) {
         </div>
       </section>
     </main>
+  );
+}
+
+function FaceMobileConfirmation({
+  onError,
+  onPaid,
+  transferId,
+}: {
+  onError: (message: string) => void;
+  onPaid: (transfer: PublicQrTransfer) => void;
+  transferId: string;
+}) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [api, setApi] = useState<FaceApi | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [cameraActive, setCameraActive] = useState(false);
+  const [message, setMessage] = useState("Mở camera để xác nhận Face ID");
+
+  useEffect(() => {
+    return () => {
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+    };
+  }, []);
+
+  const startCamera = async () => {
+    setBusy(true);
+    onError("");
+    try {
+      const loadedApi = api ?? (await loadFaceApiModels());
+      setApi(loadedApi);
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: { facingMode: "user" },
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+      setCameraActive(true);
+      setMessage("Camera đã sẵn sàng");
+    } catch {
+      setMessage("Không mở được camera");
+      onError("Không mở được camera trên điện thoại.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const confirmFace = async () => {
+    if (!api || !videoRef.current) {
+      await startCamera();
+      return;
+    }
+
+    setBusy(true);
+    onError("");
+    setMessage("Đang quét khuôn mặt...");
+    try {
+      const detection = await api
+        .detectSingleFace(
+          videoRef.current,
+          new api.TinyFaceDetectorOptions({
+            inputSize: 224,
+            scoreThreshold: 0.5,
+          }),
+        )
+        .withFaceLandmarks()
+        .withFaceDescriptor();
+
+      if (!detection) {
+        setMessage("Không phát hiện khuôn mặt rõ");
+        onError("Không phát hiện khuôn mặt rõ. Thử nhìn thẳng vào camera.");
+        setBusy(false);
+        return;
+      }
+
+      setMessage("Đang xác minh giao dịch...");
+      window.setTimeout(async () => {
+        try {
+          const response = await fetch(`/api/qr-transfers/${transferId}`, {
+            body: JSON.stringify({
+              faceDescriptor: Array.from(detection.descriptor),
+            }),
+            headers: { "Content-Type": "application/json" },
+            method: "POST",
+          });
+          const data = (await response.json().catch(() => null)) as
+            | {
+                error?: string;
+                matchDistance?: number;
+                threshold?: number;
+                transfer?: PublicQrTransfer;
+              }
+            | null;
+          if (!response.ok || !data?.transfer) {
+            const detail =
+              typeof data?.matchDistance === "number" &&
+              typeof data?.threshold === "number"
+                ? ` (${data.matchDistance.toFixed(2)} > ${data.threshold})`
+                : "";
+            setMessage("Face ID không khớp");
+            onError(`${data?.error ?? "Không xác nhận được Face ID."}${detail}`);
+            return;
+          }
+          setMessage("Face ID đã xác nhận");
+          onPaid(data.transfer);
+        } catch {
+          setMessage("Không kết nối được máy chủ thanh toán");
+          onError("Không kết nối được máy chủ thanh toán.");
+        } finally {
+          setBusy(false);
+        }
+      }, 900);
+    } catch {
+      setMessage("Không thể xác minh khuôn mặt");
+      onError("Không thể xác minh khuôn mặt.");
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="mt-5 space-y-3">
+      <div className="relative aspect-video overflow-hidden rounded-lg border border-[#ead8bf] bg-stone-900">
+        <video className="h-full w-full object-cover" muted playsInline ref={videoRef} />
+        {!cameraActive && (
+          <div className="absolute inset-0 flex items-center justify-center text-center text-sm text-white/80">
+            Face ID camera
+          </div>
+        )}
+      </div>
+      <p className="rounded-lg border border-[#ead8bf] bg-white px-3 py-2 text-sm font-medium text-[#6f3f24]">
+        {message}
+      </p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <button
+          className="inline-flex h-12 items-center justify-center gap-2 rounded-lg border border-[#ead8bf] bg-white px-4 text-sm font-semibold text-stone-700 transition hover:bg-[#fffaf3] disabled:text-[#b8a491]"
+          disabled={busy}
+          onClick={startCamera}
+          type="button"
+        >
+          <Camera size={17} aria-hidden />
+          Mở camera
+        </button>
+        <button
+          className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-[#d6c0aa]"
+          disabled={busy}
+          onClick={confirmFace}
+          type="button"
+        >
+          {busy ? <Loader2 className="animate-spin" size={17} /> : <ScanFace size={17} />}
+          Xác nhận Face ID
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -1289,7 +1469,7 @@ function AdminHome({ onCreate }: { onCreate: (participantName: string) => void }
               {[
                 "Điện thoại DemoBank",
                 "Đầu đọc thẻ NFC",
-                "Camera tại POS",
+                "Camera điện thoại Face ID",
                 "Máy quét PalmPay",
               ].map((item) => (
                 <div
@@ -1632,10 +1812,12 @@ function AssignmentScreen({
 
 function SetupScreen({
   biometricConsentAt,
+  faceAccountName,
   faceDescriptor,
   group,
   onAccountNameChange,
   onConsent,
+  onFaceAccountNameChange,
   onFaceEnroll,
   onFinish,
   onLog,
@@ -1645,10 +1827,12 @@ function SetupScreen({
   qrAccountName,
 }: {
   biometricConsentAt?: string | null;
+  faceAccountName: string;
   faceDescriptor?: number[] | null;
   group: StudyGroup;
   onAccountNameChange: (name: string) => void;
   onConsent: () => void;
+  onFaceAccountNameChange: (name: string) => void;
   onFaceEnroll: (descriptor: number[], metadata: Record<string, unknown>) => void;
   onFinish: (metadata?: Record<string, unknown>) => void;
   onLog: (eventName: string, screenName: StepKey, metadata?: Record<string, unknown>) => void;
@@ -1668,7 +1852,7 @@ function SetupScreen({
       : group === "NFC_CARD"
         ? linked
         : group === "FACE_POS"
-          ? biometricReady && Boolean(faceDescriptor)
+          ? biometricReady && Boolean(faceDescriptor) && faceAccountName.trim().length > 0
           : biometricReady && samples >= 3;
 
   const capture = () => {
@@ -1738,11 +1922,23 @@ function SetupScreen({
             onEnroll={onFaceEnroll}
           />
           <div className="rounded-lg border border-[#ead8bf] bg-white p-4">
-            <h3 className="font-semibold">Ghi nhận khuôn mặt thật</h3>
+            <h3 className="font-semibold">Đăng ký Face ID DemoBank</h3>
             <p className="mt-2 text-sm leading-6 text-stone-600">
-              Hệ thống dùng camera của trình duyệt để phát hiện khuôn mặt và
-              tạo vector đặc trưng cho phiên thử nghiệm. Không lưu ảnh thô.
+              Tên này sẽ xuất hiện là người gửi trên màn hình chuyển khoản
+              sau khi người tham gia quét QR bằng điện thoại. Khuôn mặt được
+              dùng để xác nhận giao dịch thay cho PIN.
             </p>
+            <label className="mt-4 block max-w-xs">
+              <span className="mb-1 block text-sm font-medium text-stone-700">
+                Tên tài khoản Face ID
+              </span>
+              <input
+                className="h-11 w-full rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 text-sm outline-none focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
+                onChange={(event) => onFaceAccountNameChange(event.target.value)}
+                placeholder={participantName || "Tên người gửi"}
+                value={faceAccountName}
+              />
+            </label>
             <div className="mt-4 rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 py-2 text-sm text-stone-600">
               Trạng thái:{" "}
               <span className="font-semibold text-[#6f3f24]">
@@ -1834,6 +2030,8 @@ function SetupScreen({
                 group === "FACE_POS" && faceDescriptor ? 3 : samples || undefined,
               qr_pin_created: group === "QR_PIN" ? true : undefined,
               qr_account_name: group === "QR_PIN" ? qrAccountName.trim() : undefined,
+              face_account_name:
+                group === "FACE_POS" ? faceAccountName.trim() : undefined,
               nfc_card_ref: group === "NFC_CARD" ? "CARD-POS-042" : undefined,
               face_descriptor_length:
                 group === "FACE_POS" ? faceDescriptor?.length : undefined,
@@ -2392,6 +2590,7 @@ function CheckoutScreen({
 
 function PaymentScreen({
   accountName,
+  faceAccountName,
   faceDescriptor,
   group,
   items,
@@ -2407,6 +2606,7 @@ function PaymentScreen({
   transactionId,
 }: {
   accountName: string;
+  faceAccountName: string;
   faceDescriptor?: number[] | null;
   group: StudyGroup;
   items: CartLine[];
@@ -2435,6 +2635,7 @@ function PaymentScreen({
           {group === "QR_PIN" && (
             <QrPosPayment
               amount={totalCents}
+              authMethod="pin"
               items={items}
               onLog={onLog}
               onPaid={(transfer) =>
@@ -2463,13 +2664,24 @@ function PaymentScreen({
           )}
 
           {group === "FACE_POS" && (
-            <FaceRecognitionPayment
+            <QrPosPayment
               amount={totalCents}
-              busy={busy}
-              enrolledDescriptor={faceDescriptor}
-              onComplete={(metadata) => finish({ channel: "face_pos", ...metadata })}
+              authMethod="face"
+              faceDescriptor={faceDescriptor}
+              items={items}
               onLog={onLog}
-              onRetry={onRetry}
+              onPaid={(transfer) =>
+                finish({
+                  authorization_code: transfer.authorizationCode,
+                  channel: "face_qr",
+                  match_distance: transfer.matchDistance,
+                  transfer_id: transfer.id,
+                })
+              }
+              pin={pin}
+              productSummary={productSummary}
+              senderName={faceAccountName || accountName}
+              transactionId={transactionId}
             />
           )}
 
@@ -2500,6 +2712,8 @@ function PaymentScreen({
 
 function QrPosPayment({
   amount,
+  authMethod,
+  faceDescriptor,
   items,
   onLog,
   onPaid,
@@ -2509,6 +2723,8 @@ function QrPosPayment({
   transactionId,
 }: {
   amount: number;
+  authMethod: "pin" | "face";
+  faceDescriptor?: number[] | null;
   items: CartLine[];
   onLog: (eventName: string, screenName: StepKey, metadata?: Record<string, unknown>) => void;
   onPaid: (transfer: PublicQrTransfer) => void;
@@ -2521,17 +2737,25 @@ function QrPosPayment({
   const [transfer, setTransfer] = useState<PublicQrTransfer | null>(null);
   const [error, setError] = useState("");
   const paidHandledRef = useRef(false);
+  const faceDescriptorKey = useMemo(
+    () => JSON.stringify(faceDescriptor ?? []),
+    [faceDescriptor],
+  );
   const itemsKey = useMemo(() => JSON.stringify(items), [items]);
 
   useEffect(() => {
     let active = true;
-    if (!transactionId || !pin || transfer) return;
+    const credentialReady =
+      authMethod === "pin" ? /^\d{4}$/.test(pin) : Boolean(faceDescriptor?.length);
+    if (!transactionId || !credentialReady || transfer) return;
 
     fetch("/api/qr-transfers", {
       body: JSON.stringify({
         amount,
+        authMethod,
+        faceDescriptor: authMethod === "face" ? faceDescriptor : undefined,
         items,
-        pin,
+        pin: authMethod === "pin" ? pin : undefined,
         productSummary,
         senderName,
         transactionId,
@@ -2544,10 +2768,15 @@ function QrPosPayment({
         if (!active) return;
         setTransfer(data.transfer);
         setPaymentUrl(`${window.location.origin}/?qrPay=${data.transfer.id}`);
-        onLog("qr_transfer_created", "payment", {
-          amount,
-          transfer_id: data.transfer.id,
-        });
+        onLog(
+          authMethod === "face" ? "face_qr_transfer_created" : "qr_transfer_created",
+          "payment",
+          {
+            amount,
+            auth_method: authMethod,
+            transfer_id: data.transfer.id,
+          },
+        );
       })
       .catch(() => {
         if (active) setError("Không tạo được QR chuyển khoản.");
@@ -2556,7 +2785,20 @@ function QrPosPayment({
     return () => {
       active = false;
     };
-  }, [amount, items, itemsKey, onLog, pin, productSummary, senderName, transactionId, transfer]);
+  }, [
+    amount,
+    authMethod,
+    faceDescriptor,
+    faceDescriptorKey,
+    items,
+    itemsKey,
+    onLog,
+    pin,
+    productSummary,
+    senderName,
+    transactionId,
+    transfer,
+  ]);
 
   useEffect(() => {
     if (!transfer || transfer.status === "paid") return;
@@ -2567,10 +2809,18 @@ function QrPosPayment({
           setTransfer(data.transfer);
           if (data.transfer.status === "paid" && !paidHandledRef.current) {
             paidHandledRef.current = true;
-            onLog("qr_transfer_paid", "payment", {
-              authorization_code: data.transfer.authorizationCode,
-              transfer_id: data.transfer.id,
-            });
+            onLog(
+              data.transfer.authMethod === "face"
+                ? "face_qr_transfer_paid"
+                : "qr_transfer_paid",
+              "payment",
+              {
+                authorization_code: data.transfer.authorizationCode,
+                auth_method: data.transfer.authMethod,
+                match_distance: data.transfer.matchDistance,
+                transfer_id: data.transfer.id,
+              },
+            );
             onPaid(data.transfer);
           }
         })
@@ -2594,13 +2844,19 @@ function QrPosPayment({
         <Row label="Người nhận" value="Palm Pay" />
         <Row label="Sản phẩm" value={productSummary} />
         <Row label="Số tiền" value={formatVnd(amount)} strong />
+        <Row
+          label="Xác thực"
+          value={authMethod === "face" ? "Face ID" : "PIN DemoBank"}
+        />
       </div>
       <div className="rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 py-2 text-sm text-stone-600">
         Trạng thái:{" "}
         <span className="font-semibold text-[#6f3f24]">
           {transfer?.status === "paid"
             ? "Điện thoại đã xác nhận thanh toán"
-            : "Đang chờ điện thoại quét QR"}
+            : authMethod === "face"
+              ? "Đang chờ điện thoại quét QR và xác minh khuôn mặt"
+              : "Đang chờ điện thoại quét QR"}
         </span>
       </div>
       {paymentUrl && (
@@ -2639,20 +2895,55 @@ function NfcBridgePayment({
   transactionId: string;
 }) {
   const handledRef = useRef(false);
-  const [status, setStatus] = useState("Đang chờ tap từ NFC reader bridge");
+  const lastTapKeyRef = useRef("");
+  const [status, setStatus] = useState("Đang đăng ký giao dịch với NFC reader bridge");
+
+  useEffect(() => {
+    if (!transactionId) return;
+    let active = true;
+
+    fetch("/api/nfc-session", {
+      body: JSON.stringify({
+        acceptedCardRef: "CARD-POS-042",
+        amount,
+        transactionId,
+      }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    })
+      .then((response) => (response.ok ? response.json() : Promise.reject()))
+      .then(() => {
+        if (active) setStatus("Đang chờ tap từ NFC reader bridge");
+      })
+      .catch(() => {
+        if (active) setStatus("Không đăng ký được phiên NFC đang chờ");
+      });
+
+    return () => {
+      active = false;
+      fetch("/api/nfc-session", {
+        body: JSON.stringify({ transactionId }),
+        headers: { "Content-Type": "application/json" },
+        method: "DELETE",
+      }).catch(() => undefined);
+    };
+  }, [amount, transactionId]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
       fetch(`/api/nfc-taps?transactionId=${encodeURIComponent(transactionId)}`)
         .then((response) => (response.ok ? response.json() : Promise.reject()))
-        .then((data: { tap: { cardRef: string; transactionId: string } | null }) => {
+        .then((data: { tap: { cardRef: string; createdAt: string; transactionId: string } | null }) => {
           if (!data.tap || handledRef.current) return;
-          handledRef.current = true;
+          const tapKey = `${data.tap.cardRef}:${data.tap.createdAt}`;
+          if (tapKey === lastTapKeyRef.current) return;
+          lastTapKeyRef.current = tapKey;
           if (data.tap.cardRef !== "CARD-POS-042") {
             setStatus(`Thẻ không khớp: ${data.tap.cardRef}`);
             onRetry("wrong_card");
             return;
           }
+          handledRef.current = true;
           setStatus("Đã nhận tap NFC");
           onLog("nfc_tapped", "payment", { card_ref: data.tap.cardRef });
           onComplete(data.tap);
@@ -2664,11 +2955,14 @@ function NfcBridgePayment({
   }, [onComplete, onLog, onRetry, transactionId]);
 
   const simulateTap = async () => {
-    await fetch("/api/nfc-taps", {
+    const response = await fetch("/api/nfc-taps", {
       body: JSON.stringify({ cardRef: "CARD-POS-042", transactionId }),
       headers: { "Content-Type": "application/json" },
       method: "POST",
     });
+    if (!response.ok) {
+      setStatus("Nút mô phỏng bị chặn bởi bridge token production");
+    }
   };
 
   return (
@@ -2690,149 +2984,6 @@ function NfcBridgePayment({
         <Nfc size={17} aria-hidden />
         Mô phỏng bridge tap
       </button>
-    </div>
-  );
-}
-
-function FaceRecognitionPayment({
-  amount,
-  busy,
-  enrolledDescriptor,
-  onComplete,
-  onLog,
-  onRetry,
-}: {
-  amount: number;
-  busy: boolean;
-  enrolledDescriptor?: number[] | null;
-  onComplete: (metadata: Record<string, unknown>) => void;
-  onLog: (eventName: string, screenName: StepKey, metadata?: Record<string, unknown>) => void;
-  onRetry: (errorCode: string) => void;
-}) {
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const [api, setApi] = useState<FaceApi | null>(null);
-  const [cameraActive, setCameraActive] = useState(false);
-  const [localBusy, setLocalBusy] = useState(false);
-  const [message, setMessage] = useState("Mở camera để xác minh khuôn mặt");
-
-  useEffect(() => {
-    return () => {
-      streamRef.current?.getTracks().forEach((track) => track.stop());
-    };
-  }, []);
-
-  const startCamera = async () => {
-    setLocalBusy(true);
-    try {
-      const loadedApi = api ?? (await loadFaceApiModels());
-      setApi(loadedApi);
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: { facingMode: "user" },
-      });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
-      setCameraActive(true);
-      setMessage("Camera đã sẵn sàng");
-    } catch {
-      setMessage("Không mở được camera");
-      onRetry("camera_disconnected");
-    } finally {
-      setLocalBusy(false);
-    }
-  };
-
-  const verify = async () => {
-    if (!enrolledDescriptor?.length) {
-      setMessage("Chưa có mẫu khuôn mặt đã đăng ký");
-      onRetry("face_no_template");
-      return;
-    }
-    if (!api || !videoRef.current) {
-      await startCamera();
-      return;
-    }
-
-    setLocalBusy(true);
-    try {
-      const detection = await api
-        .detectSingleFace(
-          videoRef.current,
-          new api.TinyFaceDetectorOptions({
-            inputSize: 224,
-            scoreThreshold: 0.5,
-          }),
-        )
-        .withFaceLandmarks()
-        .withFaceDescriptor();
-
-      if (!detection) {
-        setMessage("Không phát hiện khuôn mặt");
-        onRetry("no_face");
-        return;
-      }
-
-      const distance = api.euclideanDistance(
-        new Float32Array(enrolledDescriptor),
-        detection.descriptor,
-      );
-      const threshold = 0.55;
-      onLog("face_match_attempt", "payment", { distance, threshold });
-
-      if (distance > threshold) {
-        setMessage(`Không khớp mẫu (${distance.toFixed(2)})`);
-        onRetry("face_no_match");
-        return;
-      }
-
-      setMessage("Đối chiếu thành công");
-      onComplete({
-        match_distance: Number(distance.toFixed(4)),
-        threshold,
-      });
-    } finally {
-      setLocalBusy(false);
-    }
-  };
-
-  return (
-    <div className="space-y-4">
-      <div className="relative aspect-video overflow-hidden rounded-lg border border-[#ead8bf] bg-stone-900">
-        <video className="h-full w-full object-cover" muted playsInline ref={videoRef} />
-        {!cameraActive && (
-          <div className="absolute inset-0 flex items-center justify-center text-sm text-white/80">
-            Face POS camera
-          </div>
-        )}
-      </div>
-      <div className="rounded-lg border border-[#ead8bf] bg-[#fffaf3] p-3 text-sm text-stone-600">
-        <Row label="Số tiền" value={formatVnd(amount)} strong />
-        <p className="mt-2 font-medium text-[#6f3f24]">{message}</p>
-      </div>
-      <div className="grid gap-2 sm:grid-cols-2">
-        <button
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-[#ead8bf] bg-white px-4 text-sm font-semibold text-stone-700 transition hover:bg-[#fffaf3]"
-          disabled={busy || localBusy}
-          onClick={startCamera}
-          type="button"
-        >
-          <Camera size={17} aria-hidden />
-          Mở camera
-        </button>
-        <button
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-[#d6c0aa]"
-          disabled={busy || localBusy}
-          onClick={verify}
-          type="button"
-        >
-          {localBusy ? <Loader2 className="animate-spin" size={17} /> : <ScanFace size={17} />}
-          Xác minh
-        </button>
-      </div>
     </div>
   );
 }
@@ -2898,11 +3049,11 @@ function RetryPanel({
       { code: "wrong_card", label: "Thẻ không khớp phiên" },
     ],
     FACE_POS: [
-      { code: "no_face", label: "Không phát hiện khuôn mặt" },
+      { code: "no_face", label: "Điện thoại không thấy khuôn mặt" },
       { code: "multiple_faces", label: "Có nhiều khuôn mặt" },
-      { code: "low_quality", label: "Hình ảnh không đủ chất lượng" },
-      { code: "face_no_match", label: "Không khớp mẫu" },
-      { code: "camera_disconnected", label: "Camera mất kết nối" },
+      { code: "low_quality", label: "Hình ảnh điện thoại chưa đủ rõ" },
+      { code: "face_no_match", label: "Face ID không khớp mẫu" },
+      { code: "camera_disconnected", label: "Camera điện thoại mất kết nối" },
     ],
     PALM_VEIN: [
       { code: "no_hand", label: "Không phát hiện bàn tay" },
@@ -3006,9 +3157,9 @@ function DebriefScreen({
       <div className="rounded-lg border border-[#ead8bf] bg-white p-4 text-sm leading-6 text-stone-600">
         <p>
           Phiên này so sánh trải nghiệm thanh toán tại điểm bán giữa QR + PIN,
-          thẻ NFC, nhận diện khuôn mặt tại POS và PalmPay tĩnh mạch lòng bàn
-          tay. Trọng tâm là cảm nhận về sự đơn giản, thuận tiện, hữu ích, bảo
-          mật, quyền riêng tư, niềm tin và ý định sử dụng.
+          thẻ NFC, Face ID qua QR và PalmPay tĩnh mạch lòng bàn tay. Trọng tâm
+          là cảm nhận về sự đơn giản, thuận tiện, hữu ích, bảo mật, quyền riêng
+          tư, niềm tin và ý định sử dụng.
         </p>
         {(session.assigned_group === "FACE_POS" ||
           session.assigned_group === "PALM_VEIN") && (

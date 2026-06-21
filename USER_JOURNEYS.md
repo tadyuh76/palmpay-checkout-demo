@@ -27,16 +27,20 @@ The prototype is a full experiment walkthrough wrapped in a coffee shop checkout
 ## NFC_CARD
 
 1. Link the physical NFC test card.
-2. At payment, tap the NFC test card on the reader.
-3. A local reader bridge posts the tap to `/api/nfc-taps`.
-4. No PIN is requested in the simulated transaction.
+2. At payment, the POS registers the active transaction for the local reader bridge.
+3. Tap the NFC test card on the USB reader connected to the Mac.
+4. The local bridge posts the detected card token to `/api/nfc-taps`.
+5. No PIN is requested in the simulated transaction.
 
 ## FACE_POS
 
 1. Confirm biometric data consent in setup.
-2. Enroll three real webcam face samples at the POS camera.
-3. At payment, look at the POS camera.
-4. Complete the browser-based face match.
+2. Register a Face ID account name.
+3. Enroll three real webcam face samples.
+4. At payment, scan the POS QR code with a phone.
+5. Review the mobile mock transfer screen: sender, receiver, amount, and product summary.
+6. Confirm the transfer with the phone camera face check.
+7. Watch the POS screen complete automatically.
 
 ## PALM_VEIN
 

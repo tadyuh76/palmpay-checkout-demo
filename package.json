@@ -8,6 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
+    "nfc:bridge": "node scripts/nfc-bridge.mjs",
+    "nfc:bridge:mock": "node scripts/nfc-bridge.mjs --mock",
     "auth:migrate": "npx auth@latest migrate --config src/lib/auth.ts --yes",
     "setup": "npm run auth:migrate"
   },
