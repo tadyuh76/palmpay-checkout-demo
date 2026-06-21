@@ -1,15 +1,17 @@
-# PalmPay Checkout Demo
+# PalmPay Coffee Checkout
 
-Retail checkout prototype for the PalmPay experiment. Users sign in, add at least one payment method, shop from a small catalog, and pay with QR code, NFC card, face recognition, or palm-vein scan.
+Coffee shop checkout demo for PalmPay. Users sign in, add at least one payment method, search a coffee menu, build an order, and pay with QR code, NFC card, face recognition, or palm-vein scan.
 
 ## Stack
 
 - Next.js + React + TypeScript
 - Better Auth with email/password and optional Google OAuth
-- SQLite via `better-sqlite3`
+- Neon/Postgres via `pg` when `DATABASE_URL` is set
+- SQLite via `better-sqlite3` as the local fallback
 - `@vladmandic/face-api` for browser face enrollment and matching
 - `qrcode.react` for QR payment payloads
 - Web NFC `NDEFReader` when the browser/device supports it
+- Generated product images stored in `public/menu`
 
 ## Run
 
@@ -21,11 +23,25 @@ npm run dev -- -p 7999
 
 Open `http://localhost:7999`.
 
-The email form is prefilled for local testing. Create the user once, then sign in with the same credentials.
+The email form is prefilled for local testing. Create the user once, then sign in with the same credentials. Use `USER_JOURNEYS.md` for one participant flow per payment method.
 
 ## Environment
 
 Copy `.env.example` to `.env.local` if you want to override defaults.
+
+Set `DATABASE_URL` to a Neon connection string to use hosted Postgres:
+
+```text
+DATABASE_URL=postgresql://user:password@host/db?sslmode=require
+```
+
+Then run:
+
+```bash
+npm run setup
+```
+
+If `DATABASE_URL` is not set, the app uses local SQLite at `PALMPAY_DB_PATH`.
 
 Google sign-in is optional. Set `NEXT_PUBLIC_GOOGLE_AUTH_ENABLED=true`, `GOOGLE_CLIENT_ID`, and `GOOGLE_CLIENT_SECRET`, then add this callback URL in Google Cloud:
 
@@ -33,10 +49,7 @@ Google sign-in is optional. Set `NEXT_PUBLIC_GOOGLE_AUTH_ENABLED=true`, `GOOGLE_
 http://localhost:7999/api/auth/callback/google
 ```
 
-On Vercel, Better Auth uses the generated `VERCEL_URL` unless
-`BETTER_AUTH_URL` is explicitly set. The demo falls back to SQLite in `/tmp`
-on Vercel, which is writable but ephemeral; use a hosted database for
-long-lived accounts and payment history.
+On Vercel, set `BETTER_AUTH_URL` to the production URL and set `DATABASE_URL` to the Neon connection string so accounts, payment methods, and orders persist. Without `DATABASE_URL`, Vercel falls back to temporary SQLite in `/tmp`, which is only useful for short demo sessions.
 
 ## Payment Notes
 

@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PalmPay Checkout",
-  description: "Retail checkout demo with QR, NFC, face, and palm payment.",
+  title: "PalmPay Coffee",
+  description: "Coffee checkout demo with QR, NFC, face, and palm payment.",
 };
 
 export default function RootLayout({
@@ -27,7 +27,7 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-neutral-50">{children}</body>
+      <body className="flex min-h-full flex-col bg-background">{children}</body>
     </html>
   );
 }

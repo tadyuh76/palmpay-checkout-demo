@@ -4,10 +4,7 @@ import {
   BadgeCheck,
   Check,
   CircleCheck,
-  Coffee,
-  Cookie,
   CreditCard,
-  GlassWater,
   Hand,
   Loader2,
   LogOut,
@@ -16,20 +13,19 @@ import {
   Plus,
   QrCode,
   ReceiptText,
-  Salad,
-  Sandwich,
   ScanFace,
   ScanLine,
+  Search,
   ShieldCheck,
   ShoppingBag,
-  Soup,
   Trash2,
   WalletCards,
   X,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
+import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { catalog, formatVnd, getProduct } from "@/lib/catalog";
+import { catalog, catalogCategories, formatVnd, getProduct } from "@/lib/catalog";
 import { authClient } from "@/lib/auth-client";
 import type {
   CartLine,
@@ -37,6 +33,7 @@ import type {
   PaymentMethod,
   PaymentMethodType,
   Product,
+  ProductCategory,
 } from "@/lib/types";
 
 type Cart = Record<string, number>;
@@ -83,26 +80,21 @@ const methodCopy: Record<
   },
 };
 
-const productIcons: Record<Product["icon"], typeof Coffee> = {
-  coffee: Coffee,
-  sandwich: Sandwich,
-  salad: Salad,
-  cookie: Cookie,
-  juice: GlassWater,
-  soup: Soup,
-};
-
 function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
-const appSurfaceClass = "bg-cyan-50/30 text-neutral-950";
-const inputFocusClass = "focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100";
+const appSurfaceClass = "bg-[#f6efe5] text-stone-950";
+const inputFocusClass = "focus:border-amber-900 focus:ring-2 focus:ring-amber-100";
 const primaryButtonClass =
-  "bg-cyan-700 text-white shadow-sm shadow-cyan-900/10 hover:bg-cyan-800 disabled:bg-neutral-300 disabled:shadow-none";
-const primaryIconClass = "bg-cyan-700 text-white";
-const primarySelectedClass = "border-cyan-600 bg-cyan-50/80";
-const primarySoftClass = "border-cyan-200 bg-cyan-50 text-cyan-800";
+  "bg-[#5a341f] text-white shadow-sm shadow-stone-950/10 hover:bg-[#432615] disabled:bg-stone-300 disabled:shadow-none";
+const primaryIconClass = "bg-[#5a341f] text-amber-50";
+const primarySelectedClass = "border-amber-900 bg-amber-50/80";
+const primarySoftClass = "border-amber-200 bg-amber-50 text-amber-900";
+const categoryOptions: Array<ProductCategory | "All"> = [
+  "All",
+  ...catalogCategories,
+];
 
 export function DemoApp() {
   const {
@@ -116,6 +108,9 @@ export function DemoApp() {
   const [selectedMethodId, setSelectedMethodId] = useState<string>("");
   const [enrollmentMode, setEnrollmentMode] = useState<EnrollmentMode>(null);
   const [stage, setStage] = useState<Stage>("catalog");
+  const [catalogQuery, setCatalogQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] =
+    useState<ProductCategory | "All">("All");
   const [activePayment, setActivePayment] = useState<PaymentMethod | null>(null);
   const [receipt, setReceipt] = useState<Order | null>(null);
   const [loadingData, setLoadingData] = useState(false);
@@ -312,7 +307,7 @@ export function DemoApp() {
 
   return (
     <main className={cn("min-h-screen", appSurfaceClass)}>
-      <header className="sticky top-0 z-20 border-b border-neutral-200 bg-white/95 backdrop-blur">
+      <header className="sticky top-0 z-20 border-b border-stone-200 bg-[#fffaf3]/95 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <div
@@ -324,12 +319,12 @@ export function DemoApp() {
               <Hand size={20} aria-hidden />
             </div>
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold">PalmPay Checkout</p>
-              <p className="truncate text-xs text-neutral-500">{user.email}</p>
+              <p className="truncate text-sm font-semibold">PalmPay Coffee</p>
+              <p className="truncate text-xs text-stone-500">{user.email}</p>
             </div>
           </div>
           <button
-            className="inline-flex h-10 items-center gap-2 rounded-lg border border-neutral-200 bg-white px-3 text-sm font-medium text-neutral-700 transition hover:border-neutral-300 hover:bg-neutral-100"
+            className="inline-flex h-10 items-center gap-2 rounded-lg border border-stone-200 bg-white px-3 text-sm font-medium text-stone-700 transition hover:border-stone-300 hover:bg-stone-100"
             onClick={async () => {
               await authClient.signOut();
               setCart({});
@@ -350,17 +345,25 @@ export function DemoApp() {
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
               <h1 className="text-2xl font-semibold tracking-normal">
-                Shop
+                Coffee menu
               </h1>
-              <p className="text-sm text-neutral-500">
-                Pick items and pay with one registered method.
+              <p className="text-sm text-stone-500">
+                Order drinks and bites, then checkout.
               </p>
             </div>
             <SegmentedStage value={stage} onChange={setStage} />
           </div>
 
           {stage === "catalog" && (
-            <CatalogGrid cart={cart} onAdd={addToCart} onRemove={removeFromCart} />
+            <CatalogGrid
+              cart={cart}
+              category={selectedCategory}
+              onAdd={addToCart}
+              onCategoryChange={setSelectedCategory}
+              onQueryChange={setCatalogQuery}
+              onRemove={removeFromCart}
+              query={catalogQuery}
+            />
           )}
 
           {stage === "checkout" && (
@@ -437,7 +440,7 @@ export function DemoApp() {
 
 function LoadingScreen() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-cyan-50/30">
+    <div className="flex min-h-screen items-center justify-center bg-[#f6efe5]">
       <div className="inline-flex items-center gap-3 rounded-lg border border-neutral-200 bg-white px-4 py-3 text-sm text-neutral-600">
         <Loader2 className="animate-spin" size={18} aria-hidden />
         Loading
@@ -516,7 +519,7 @@ function AuthPanel({ onSignedIn }: { onSignedIn: () => void }) {
             <Hand size={22} aria-hidden />
           </div>
           <div>
-            <h1 className="text-xl font-semibold">PalmPay Checkout</h1>
+            <h1 className="text-xl font-semibold">PalmPay Coffee</h1>
             <p className="text-sm text-neutral-500">Sign in to continue</p>
           </div>
         </div>
@@ -644,7 +647,7 @@ function SegmentedStage({
             className={cn(
               "inline-flex h-9 items-center justify-center gap-2 rounded-md px-3 text-sm font-medium transition",
               value === stage.value
-                ? "bg-cyan-700 text-white shadow-sm shadow-cyan-900/10"
+                ? "bg-[#5a341f] text-white shadow-sm shadow-stone-950/10"
                 : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-950",
             )}
             key={stage.value}
@@ -662,25 +665,101 @@ function SegmentedStage({
 
 function CatalogGrid({
   cart,
+  category,
   onAdd,
+  onCategoryChange,
+  onQueryChange,
   onRemove,
+  query,
 }: {
   cart: Cart;
+  category: ProductCategory | "All";
   onAdd: (productId: string) => void;
+  onCategoryChange: (category: ProductCategory | "All") => void;
+  onQueryChange: (query: string) => void;
   onRemove: (productId: string) => void;
+  query: string;
 }) {
+  const normalizedQuery = query.trim().toLowerCase();
+  const products = useMemo(
+    () =>
+      catalog.filter((product) => {
+        const matchesCategory =
+          category === "All" || product.category === category;
+        const matchesQuery =
+          !normalizedQuery ||
+          [
+            product.name,
+            product.detail,
+            product.category,
+            ...product.tags,
+          ]
+            .join(" ")
+            .toLowerCase()
+            .includes(normalizedQuery);
+
+        return matchesCategory && matchesQuery;
+      }),
+    [category, normalizedQuery],
+  );
+
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-      {catalog.map((product) => (
-        <ProductCard
-          key={product.id}
-          product={product}
-          quantity={cart[product.id] ?? 0}
-          onAdd={() => onAdd(product.id)}
-          onRemove={() => onRemove(product.id)}
-        />
-      ))}
-    </div>
+    <>
+      <div className="mb-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+        <label className="relative block">
+          <Search
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-stone-400"
+            size={17}
+            aria-hidden
+          />
+          <input
+            className={cn(
+              "h-11 w-full rounded-lg border border-stone-200 bg-[#fffaf3] pl-10 pr-3 text-sm outline-none transition placeholder:text-stone-400",
+              inputFocusClass,
+            )}
+            onChange={(event) => onQueryChange(event.target.value)}
+            placeholder="Search coffee, pastries"
+            value={query}
+          />
+        </label>
+
+        <div className="flex gap-2 overflow-x-auto pb-1 lg:justify-end lg:pb-0">
+          {categoryOptions.map((item) => (
+            <button
+              className={cn(
+                "h-11 shrink-0 rounded-lg border px-3 text-sm font-medium transition",
+                category === item
+                  ? "border-amber-900 bg-[#5a341f] text-white shadow-sm shadow-stone-950/10"
+                  : "border-stone-200 bg-[#fffaf3] text-stone-600 hover:border-amber-300 hover:text-stone-950",
+              )}
+              key={item}
+              onClick={() => onCategoryChange(item)}
+              type="button"
+            >
+              {item}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {products.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-stone-300 bg-[#fffaf3]/70 px-4 py-12 text-center text-sm text-stone-500">
+          No menu items found
+        </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {products.map((product) => (
+            <ProductCard
+              key={product.id}
+              product={product}
+              quantity={cart[product.id] ?? 0}
+              onAdd={() => onAdd(product.id)}
+              onRemove={() => onRemove(product.id)}
+            />
+          ))}
+        </div>
+      )}
+    </>
   );
 }
 
@@ -695,48 +774,65 @@ function ProductCard({
   onAdd: () => void;
   onRemove: () => void;
 }) {
-  const Icon = productIcons[product.icon];
-
   return (
-    <article className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm">
-      <div
-        className={cn(
-          "mb-4 flex aspect-[4/3] items-center justify-center rounded-lg border",
-          product.accent,
-        )}
-      >
-        <Icon size={54} strokeWidth={1.7} aria-hidden />
-      </div>
-
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="truncate text-base font-semibold">{product.name}</h2>
-          <p className="mt-1 text-sm text-neutral-500">{product.detail}</p>
+    <article className="overflow-hidden rounded-lg border border-stone-200 bg-[#fffaf3] shadow-sm">
+      <div className="relative aspect-square bg-amber-50">
+        <Image
+          alt={product.imageAlt}
+          className="object-cover"
+          fill
+          sizes="(min-width: 1280px) 30vw, (min-width: 640px) 45vw, 92vw"
+          src={product.image}
+        />
+        <div className="absolute left-3 top-3 flex flex-wrap gap-2">
+          <span className="rounded-full bg-white/90 px-2 py-1 text-xs font-medium text-stone-700 shadow-sm backdrop-blur">
+            {product.category}
+          </span>
+          {product.popular && (
+            <span className="rounded-full bg-amber-900/90 px-2 py-1 text-xs font-medium text-white shadow-sm backdrop-blur">
+              Popular
+            </span>
+          )}
         </div>
-        <p className="shrink-0 text-sm font-semibold">
-          {formatVnd(product.priceCents)}
-        </p>
       </div>
 
-      <div className="mt-4 grid h-10 grid-cols-[40px_1fr_40px] items-center rounded-lg border border-neutral-200 bg-neutral-50">
-        <button
-          aria-label={`Remove ${product.name}`}
-          className="flex h-10 items-center justify-center rounded-l-lg text-neutral-500 transition hover:bg-cyan-50 hover:text-cyan-800 disabled:text-neutral-300"
-          disabled={quantity === 0}
-          onClick={onRemove}
-          type="button"
-        >
-          <Minus size={16} aria-hidden />
-        </button>
-        <div className="text-center text-sm font-semibold">{quantity}</div>
-        <button
-          aria-label={`Add ${product.name}`}
-          className="flex h-10 items-center justify-center rounded-r-lg text-neutral-500 transition hover:bg-cyan-50 hover:text-cyan-800"
-          onClick={onAdd}
-          type="button"
-        >
-          <Plus size={16} aria-hidden />
-        </button>
+      <div className="p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="truncate text-base font-semibold text-stone-950">
+              {product.name}
+            </h2>
+            <p className="mt-1 min-h-10 text-sm leading-5 text-stone-500">
+              {product.detail}
+            </p>
+          </div>
+          <p className="shrink-0 text-sm font-semibold text-stone-900">
+            {formatVnd(product.priceCents)}
+          </p>
+        </div>
+
+        <div className="mt-4 grid h-10 grid-cols-[40px_1fr_40px] items-center rounded-lg border border-stone-200 bg-white">
+          <button
+            aria-label={`Remove ${product.name}`}
+            className="flex h-10 items-center justify-center rounded-l-lg text-stone-500 transition hover:bg-amber-50 hover:text-amber-900 disabled:text-stone-300"
+            disabled={quantity === 0}
+            onClick={onRemove}
+            type="button"
+          >
+            <Minus size={16} aria-hidden />
+          </button>
+          <div className="text-center text-sm font-semibold text-stone-900">
+            {quantity}
+          </div>
+          <button
+            aria-label={`Add ${product.name}`}
+            className="flex h-10 items-center justify-center rounded-r-lg text-stone-500 transition hover:bg-amber-50 hover:text-amber-900"
+            onClick={onAdd}
+            type="button"
+          >
+            <Plus size={16} aria-hidden />
+          </button>
+        </div>
       </div>
     </article>
   );
@@ -791,7 +887,7 @@ function CartPanel({
                 <div className="flex h-9 items-center rounded-lg border border-neutral-200">
                   <button
                     aria-label={`Remove ${product.name}`}
-                    className="flex h-9 w-9 items-center justify-center text-neutral-500 hover:text-cyan-800"
+                    className="flex h-9 w-9 items-center justify-center text-neutral-500 hover:text-amber-900"
                     onClick={() => onRemove(product.id)}
                     type="button"
                   >
@@ -799,7 +895,7 @@ function CartPanel({
                   </button>
                   <button
                     aria-label={`Add ${product.name}`}
-                    className="flex h-9 w-9 items-center justify-center text-neutral-500 hover:text-cyan-800"
+                    className="flex h-9 w-9 items-center justify-center text-neutral-500 hover:text-amber-900"
                     onClick={() => onAdd(product.id)}
                     type="button"
                   >
@@ -874,8 +970,8 @@ function MethodPanel({
                 selected
                   ? primarySelectedClass
                   : enrolled
-                    ? "border-neutral-200 bg-white hover:border-cyan-200"
-                    : "border-dashed border-neutral-200 bg-neutral-50/80 hover:border-cyan-200 hover:bg-cyan-50/50",
+                    ? "border-neutral-200 bg-white hover:border-amber-200"
+                    : "border-dashed border-neutral-200 bg-neutral-50/80 hover:border-amber-200 hover:bg-amber-50/50",
               )}
               key={type}
             >
@@ -890,7 +986,7 @@ function MethodPanel({
                     selected
                       ? primaryIconClass
                       : enrolled
-                        ? "bg-cyan-100 text-cyan-800"
+                        ? "bg-amber-100 text-amber-900"
                         : "border border-neutral-200 bg-white text-neutral-500",
                   )}
                 >
@@ -906,9 +1002,9 @@ function MethodPanel({
                   className={cn(
                     "mt-3 inline-flex h-6 items-center rounded-full px-2 text-xs font-medium",
                     selected
-                      ? "bg-cyan-700 text-white"
+                      ? "bg-[#5a341f] text-white"
                       : enrolled
-                        ? "bg-cyan-50 text-cyan-700"
+                        ? "bg-amber-50 text-amber-900"
                         : "border border-neutral-200 bg-white text-neutral-500",
                   )}
                 >
@@ -1078,7 +1174,7 @@ function ReceiptPanel({
 }) {
   return (
     <section className="rounded-lg border border-neutral-200 bg-white p-6 text-center shadow-sm">
-      <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-lg bg-cyan-50 text-cyan-700">
+      <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-lg bg-amber-50 text-amber-900">
         <CircleCheck size={30} aria-hidden />
       </div>
       <h2 className="text-2xl font-semibold">Paid</h2>
@@ -1476,7 +1572,7 @@ function NfcPayment({
     <div className="space-y-3">
       <div className="flex min-h-40 items-center justify-center rounded-lg border border-neutral-200 bg-neutral-50">
         <div className="text-center">
-          <Nfc className="mx-auto mb-3 text-cyan-700" size={44} />
+          <Nfc className="mx-auto mb-3 text-amber-900" size={44} />
           <p className="text-sm font-medium">{status}</p>
         </div>
       </div>
@@ -1768,7 +1864,7 @@ function PalmScanner({
       <div className="flex aspect-video items-center justify-center rounded-lg border border-neutral-200 bg-neutral-50">
         <div className="relative flex h-32 w-32 items-center justify-center rounded-lg border border-neutral-300 bg-white">
           <Hand size={64} strokeWidth={1.5} aria-hidden />
-          <div className="absolute inset-x-5 top-1/2 h-px bg-cyan-500" />
+          <div className="absolute inset-x-5 top-1/2 h-px bg-amber-500" />
         </div>
       </div>
       <div className="grid gap-2">
@@ -1820,7 +1916,7 @@ function DialogFrame({
   onClose?: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-cyan-950/30 px-4 py-6">
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-stone-950/30 px-4 py-6">
       <section className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-lg border border-neutral-200 bg-white p-5 shadow-xl">
         <div className="mb-2 flex justify-end">
           {onClose && (

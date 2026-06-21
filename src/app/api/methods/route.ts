@@ -1,38 +1,15 @@
-import { db, createId } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import {
+  disablePaymentMethod,
+  listPaymentMethods,
+  upsertPaymentMethod,
+} from "@/lib/store";
+import {
   paymentMethodTypes,
-  type PaymentMethod,
   type PaymentMethodType,
 } from "@/lib/types";
 
 export const runtime = "nodejs";
-
-type MethodRow = {
-  id: string;
-  user_id: string;
-  type: PaymentMethodType;
-  label: string;
-  status: "active" | "disabled";
-  token_ref: string;
-  metadata_json: string;
-  created_at: string;
-  last_used_at: string | null;
-};
-
-function toPaymentMethod(row: MethodRow): PaymentMethod {
-  return {
-    id: row.id,
-    userId: row.user_id,
-    type: row.type,
-    label: row.label,
-    status: row.status,
-    tokenRef: row.token_ref,
-    metadata: JSON.parse(row.metadata_json || "{}"),
-    createdAt: row.created_at,
-    lastUsedAt: row.last_used_at,
-  };
-}
 
 function isPaymentMethodType(value: unknown): value is PaymentMethodType {
   return (
@@ -47,15 +24,8 @@ export async function GET() {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const rows = db
-    .prepare(
-      `SELECT * FROM payment_methods
-       WHERE user_id = ? AND status = 'active'
-       ORDER BY created_at ASC`,
-    )
-    .all(user.id) as MethodRow[];
-
-  return Response.json({ methods: rows.map(toPaymentMethod) });
+  const methods = await listPaymentMethods(user.id);
+  return Response.json({ methods });
 }
 
 export async function POST(request: Request) {
@@ -78,46 +48,19 @@ export async function POST(request: Request) {
     typeof body.label === "string" && body.label.trim()
       ? body.label.trim().slice(0, 80)
       : defaultLabel(body.type);
-  const metadata =
-    body.metadata && typeof body.metadata === "object" ? body.metadata : {};
-  const metadataJson = JSON.stringify(metadata);
+  const metadata: Record<string, unknown> =
+    body.metadata && typeof body.metadata === "object"
+      ? (body.metadata as Record<string, unknown>)
+      : {};
 
-  const existing = db
-    .prepare(
-      `SELECT * FROM payment_methods
-       WHERE user_id = ? AND type = ? AND status = 'active'
-       LIMIT 1`,
-    )
-    .get(user.id, body.type) as MethodRow | undefined;
+  const method = await upsertPaymentMethod({
+    userId: user.id,
+    type: body.type,
+    label,
+    metadata,
+  });
 
-  if (existing) {
-    db.prepare(
-      `UPDATE payment_methods
-       SET label = ?, metadata_json = ?
-       WHERE id = ?`,
-    ).run(label, metadataJson, existing.id);
-
-    const updated = db
-      .prepare("SELECT * FROM payment_methods WHERE id = ?")
-      .get(existing.id) as MethodRow;
-
-    return Response.json({ method: toPaymentMethod(updated) });
-  }
-
-  const id = createId("pm");
-  const tokenRef = `${body.type}_${crypto.randomUUID()}`;
-
-  db.prepare(
-    `INSERT INTO payment_methods
-      (id, user_id, type, label, token_ref, metadata_json)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-  ).run(id, user.id, body.type, label, tokenRef, metadataJson);
-
-  const row = db
-    .prepare("SELECT * FROM payment_methods WHERE id = ?")
-    .get(id) as MethodRow;
-
-  return Response.json({ method: toPaymentMethod(row) }, { status: 201 });
+  return Response.json({ method }, { status: 201 });
 }
 
 export async function DELETE(request: Request) {
@@ -133,11 +76,7 @@ export async function DELETE(request: Request) {
     return Response.json({ error: "Missing id" }, { status: 400 });
   }
 
-  db.prepare(
-    `UPDATE payment_methods
-     SET status = 'disabled'
-     WHERE id = ? AND user_id = ?`,
-  ).run(id, user.id);
+  await disablePaymentMethod(user.id, id);
 
   return Response.json({ ok: true });
 }

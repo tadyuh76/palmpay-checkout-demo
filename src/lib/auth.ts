@@ -9,7 +9,7 @@ const vercelUrl = process.env.VERCEL_URL
   : undefined;
 
 export const auth = betterAuth({
-  appName: "PalmPay Demo",
+  appName: "PalmPay Coffee",
   database: db,
   secret:
     process.env.BETTER_AUTH_SECRET ??

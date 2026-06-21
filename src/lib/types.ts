@@ -32,11 +32,16 @@ export type Order = {
   createdAt: string;
 };
 
+export type ProductCategory = "Hot Coffee" | "Iced Coffee" | "Bakery" | "Dessert";
+
 export type Product = {
   id: string;
   name: string;
   detail: string;
+  category: ProductCategory;
   priceCents: number;
-  accent: string;
-  icon: "coffee" | "sandwich" | "salad" | "cookie" | "juice" | "soup";
+  image: string;
+  imageAlt: string;
+  tags: string[];
+  popular?: boolean;
 };
