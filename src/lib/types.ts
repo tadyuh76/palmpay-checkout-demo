@@ -1,5 +1,11 @@
 export const paymentMethodTypes = ["qr", "nfc", "face", "palm"] as const;
 
+export const locales = ["vi", "en"] as const;
+
+export type Locale = (typeof locales)[number];
+
+export type LocalizedText = Record<Locale, string>;
+
 export type PaymentMethodType = (typeof paymentMethodTypes)[number];
 
 export type PaymentMethod = {
@@ -37,11 +43,15 @@ export type ProductCategory = "Hot Coffee" | "Iced Coffee" | "Bakery" | "Dessert
 export type Product = {
   id: string;
   name: string;
+  nameI18n?: LocalizedText;
   detail: string;
+  detailI18n?: LocalizedText;
   category: ProductCategory;
   priceCents: number;
   image: string;
   imageAlt: string;
+  imageAltI18n?: LocalizedText;
   tags: string[];
+  tagsI18n?: Record<Locale, string[]>;
   popular?: boolean;
 };

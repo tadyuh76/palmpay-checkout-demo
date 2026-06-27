@@ -31,8 +31,20 @@ import Image from "next/image";
 import { QRCodeSVG } from "qrcode.react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import surveyConfig from "@/data/survey-questions.json";
-import { catalog, catalogCategories, formatVnd, getProduct } from "@/lib/catalog";
-import type { CartLine, Product, ProductCategory } from "@/lib/types";
+import {
+  catalog,
+  catalogCategories,
+  catalogCategoryLabels,
+  formatVnd,
+  getProduct,
+} from "@/lib/catalog";
+import type {
+  CartLine,
+  Locale,
+  LocalizedText,
+  Product,
+  ProductCategory,
+} from "@/lib/types";
 
 type StudyGroup = "QR_PIN" | "NFC_CARD" | "FACE_POS" | "PALM_VEIN";
 type Cart = Record<string, number>;
@@ -40,6 +52,7 @@ type StepKey =
   | "admin"
   | "consent"
   | "pre"
+  | "setup"
   | "product"
   | "checkout"
   | "payment"
@@ -50,11 +63,14 @@ type StepKey =
 type SurveyQuestion = {
   item_id: string;
   construct: string;
-  text: string;
+  construct_label?: string | LocalizedText;
+  section_intro?: string | LocalizedText;
+  source_text?: string;
+  text: string | LocalizedText;
   scale_min?: number;
   scale_max?: number;
   type?: "select";
-  options?: string[];
+  options?: string[] | Record<Locale, string[]>;
   reverse_scored: boolean;
   required: boolean;
 };
@@ -130,12 +146,6 @@ type ExperimentStateSnapshot = {
   participantCounter: number;
 };
 
-type InitialEnrollment = {
-  biometricConsentAt?: string | null;
-  faceDescriptor?: number[] | null;
-  qrPin?: string;
-};
-
 const protocolVersion = "PALMPAY-POS-2026.06";
 const startingBalance = 100000;
 const faceMatchThreshold = 0.55;
@@ -150,6 +160,52 @@ const storageKeys = {
 
 const groupOrder: StudyGroup[] = ["QR_PIN", "NFC_CARD", "FACE_POS", "PALM_VEIN"];
 const categoryOptions: Array<ProductCategory | "All"> = ["All", ...catalogCategories];
+const surveySettings = surveyConfig as {
+  default_locale?: Locale;
+  post: SurveyQuestion[];
+};
+const defaultLocale: Locale = surveySettings.default_locale === "en" ? "en" : "vi";
+
+function localizeText(value: string | LocalizedText | undefined, locale = defaultLocale) {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  return value[locale] ?? value.vi ?? value.en ?? "";
+}
+
+function questionText(question: SurveyQuestion, locale = defaultLocale) {
+  return localizeText(question.text, locale);
+}
+
+function constructLabel(question: SurveyQuestion, locale = defaultLocale) {
+  return localizeText(question.construct_label, locale) || question.construct;
+}
+
+function questionOptions(question: SurveyQuestion, locale = defaultLocale) {
+  const options = question.options ?? [];
+  if (Array.isArray(options)) return options;
+  return options[locale] ?? options.vi ?? options.en ?? [];
+}
+
+function productName(product: Product, locale = defaultLocale) {
+  return localizeText(product.nameI18n, locale) || product.name;
+}
+
+function productDetail(product: Product, locale = defaultLocale) {
+  return localizeText(product.detailI18n, locale) || product.detail;
+}
+
+function productImageAlt(product: Product, locale = defaultLocale) {
+  return localizeText(product.imageAltI18n, locale) || product.imageAlt;
+}
+
+function productTags(product: Product, locale = defaultLocale) {
+  return product.tagsI18n?.[locale] ?? product.tagsI18n?.vi ?? product.tags;
+}
+
+function categoryLabel(category: ProductCategory | "All", locale = defaultLocale) {
+  if (category === "All") return locale === "vi" ? "Tất cả" : "All";
+  return localizeText(catalogCategoryLabels[category], locale) || category;
+}
 
 const groupCopy: Record<
   StudyGroup,
@@ -176,7 +232,7 @@ const groupCopy: Record<
   },
   NFC_CARD: {
     label: "Thẻ không tiếp xúc NFC",
-    shortLabel: "NFC card",
+    shortLabel: "Thẻ NFC",
     device: "Thẻ NFC + đầu đọc",
     neutralDescription:
       "Người tham gia dùng thẻ NFC thử nghiệm để chạm vào đầu đọc tại điểm bán cho giao dịch giá trị nhỏ.",
@@ -192,7 +248,7 @@ const groupCopy: Record<
     neutralDescription:
       "Người tham gia đăng ký tên và khuôn mặt trước phiên, sau đó xác nhận thanh toán trực tiếp bằng camera tại POS.",
     instruction:
-      "Đăng ký tên Face ID và ghi mẫu khuôn mặt trên màn hình đầu, rồi xác nhận bằng camera POS ở bước thanh toán.",
+      "Ghi mẫu khuôn mặt sau khi đồng ý tham gia, rồi xác nhận bằng camera POS ở bước thanh toán.",
     icon: ScanFace,
     color: "bg-[#f8e2d9] text-[#8a432f] border-[#dfa493]",
   },
@@ -213,6 +269,7 @@ const stepLabels: Record<StepKey, string> = {
   admin: "Quản trị",
   consent: "Đồng ý",
   pre: "Khảo sát trước",
+  setup: "Đăng ký",
   product: "Sản phẩm",
   checkout: "Xác nhận",
   payment: "Thanh toán",
@@ -223,7 +280,7 @@ const stepLabels: Record<StepKey, string> = {
 
 const flowSteps: StepKey[] = [
   "consent",
-  "pre",
+  "setup",
   "product",
   "checkout",
   "payment",
@@ -232,8 +289,7 @@ const flowSteps: StepKey[] = [
   "debrief",
 ];
 
-const preQuestions = surveyConfig.pre as SurveyQuestion[];
-const postQuestions = surveyConfig.post as SurveyQuestion[];
+const postQuestions = surveySettings.post;
 
 type FaceApi = typeof import("@vladmandic/face-api");
 
@@ -283,11 +339,11 @@ function cartCount(lines: CartLine[]) {
   return lines.reduce((sum, line) => sum + line.quantity, 0);
 }
 
-function summarizeCart(lines: CartLine[]) {
+function summarizeCart(lines: CartLine[], locale = defaultLocale) {
   return lines
     .map((line) => {
       const item = getProduct(line.productId);
-      return `${item?.name ?? line.productId} x${line.quantity}`;
+      return `${item ? productName(item, locale) : line.productId} x${line.quantity}`;
     })
     .join("; ");
 }
@@ -301,6 +357,21 @@ function readJson<T>(key: string, fallback: T): T {
   } catch {
     return fallback;
   }
+}
+
+function redactBiometricForLocalStorage<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((item) => redactBiometricForLocalStorage(item)) as T;
+  }
+
+  if (!value || typeof value !== "object") return value;
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [
+      key,
+      key === "face_descriptor" ? null : redactBiometricForLocalStorage(item),
+    ]),
+  ) as T;
 }
 
 function storagePatch<T>(key: string, value: T) {
@@ -332,7 +403,10 @@ function persistExperimentState(patch: Record<string, unknown>) {
 }
 
 function writeJson<T>(key: string, value: T) {
-  window.localStorage.setItem(key, JSON.stringify(value));
+  window.localStorage.setItem(
+    key,
+    JSON.stringify(redactBiometricForLocalStorage(value)),
+  );
   const patch = storagePatch(key, value);
   if (patch) persistExperimentState(patch);
 }
@@ -378,7 +452,10 @@ function normalizeStateSnapshot(value: unknown): ExperimentStateSnapshot {
 }
 
 function writeLocalJson<T>(key: string, value: T) {
-  window.localStorage.setItem(key, JSON.stringify(value));
+  window.localStorage.setItem(
+    key,
+    JSON.stringify(redactBiometricForLocalStorage(value)),
+  );
 }
 
 function applyStateSnapshot(state: ExperimentStateSnapshot) {
@@ -450,7 +527,6 @@ function makeParticipantId() {
 function makeSession(
   participantName: string,
   selectedGroup: StudyGroup | null = null,
-  enrollment: InitialEnrollment = {},
 ): ExperimentSession {
   const trimmedName = participantName.trim() || "Khách thử nghiệm";
   const createdAt = nowIso();
@@ -466,20 +542,18 @@ function makeSession(
     post_survey_completed_at: null,
     session_status: "created",
     current_step: "consent",
-    biometric_consent_at:
-      selectedGroup === "FACE_POS" ? enrollment.biometricConsentAt ?? null : null,
-    face_descriptor:
-      selectedGroup === "FACE_POS" ? enrollment.faceDescriptor ?? null : null,
+    biometric_consent_at: null,
+    face_descriptor: null,
     face_account_name: trimmedName,
     qr_account_name: trimmedName,
-    qr_pin: selectedGroup === "QR_PIN" ? enrollment.qrPin ?? "" : "",
+    qr_pin: "",
     template_ref:
       selectedGroup === "FACE_POS" || selectedGroup === "PALM_VEIN"
         ? `tpl_${crypto.randomUUID().slice(0, 8)}`
         : null,
     template_deleted_at: null,
-    setup_started_at: createdAt,
-    setup_completed_at: createdAt,
+    setup_started_at: null,
+    setup_completed_at: null,
     checkout_started_at: null,
     checkout_completed_at: null,
     cart: {},
@@ -492,8 +566,7 @@ function makeSession(
 
 function normalizeSession(session: ExperimentSession | null) {
   if (!session) return null;
-  const participantName =
-    session.participant_name?.trim() || `Khách ${session.participant_id}`;
+  const participantName = session.participant_name?.trim() ?? "";
   const rawStep = session.current_step as string;
   if ((session.current_step as string) === "ranking") {
     return {
@@ -508,15 +581,17 @@ function normalizeSession(session: ExperimentSession | null) {
   return {
     ...session,
     current_step:
-      rawStep === "assignment" || rawStep === "setup"
+      rawStep === "assignment"
         ? "product"
-        : session.current_step,
+        : rawStep === "entry" || rawStep === "pre"
+          ? "setup"
+          : session.current_step,
     face_descriptor: session.face_descriptor ?? null,
     face_account_name: session.face_account_name || participantName,
     participant_name: participantName,
     qr_account_name: session.qr_account_name || participantName,
-    setup_started_at: session.setup_started_at ?? session.created_at,
-    setup_completed_at: session.setup_completed_at ?? session.created_at,
+    setup_started_at: session.setup_started_at ?? null,
+    setup_completed_at: session.setup_completed_at ?? null,
   };
 }
 
@@ -549,12 +624,32 @@ function downloadCsv(filename: string, rows: Array<Record<string, unknown>>) {
   downloadBlob(filename, new Blob([csv], { type: "text/csv;charset=utf-8" }));
 }
 
+function downloadLabeledCsv(
+  filename: string,
+  columns: ExportColumn[],
+  rows: Array<Record<string, unknown>>,
+) {
+  const escape = (value: unknown) => {
+    if (value === null || value === undefined) return "";
+    const text =
+      typeof value === "object" ? JSON.stringify(value) : String(value);
+    return `"${text.replaceAll('"', '""')}"`;
+  };
+  const csv = [
+    columns.map((column) => escape(column.label)).join(","),
+    ...rows.map((row) =>
+      columns.map((column) => escape(row[column.key])).join(","),
+    ),
+  ].join("\n");
+  downloadBlob(filename, new Blob([csv], { type: "text/csv;charset=utf-8" }));
+}
+
 function normalizeSurveyAnswer(question: SurveyQuestion, value: unknown) {
   if (value === null || value === undefined || value === "") return "";
   if (question.type === "select") {
     if (typeof value === "number" && Number.isFinite(value)) return value;
     if (typeof value === "string" && /^\d+$/.test(value)) return Number(value);
-    const index = (question.options ?? []).findIndex((option) => option === value);
+    const index = questionOptions(question).findIndex((option) => option === value);
     return index >= 0 ? index + 1 : "";
   }
 
@@ -583,7 +678,7 @@ type ExportColumn = {
   label: string;
 };
 
-const methodWorkbookColumns: ExportColumn[] = [
+const baseMethodWorkbookColumns: ExportColumn[] = [
   { key: "timestamp", label: "Dấu thời gian" },
   { key: "participant_id", label: "Mã người tham gia" },
   { key: "participant_name", label: "Tên người tham gia" },
@@ -610,15 +705,63 @@ const methodWorkbookColumns: ExportColumn[] = [
   { key: "number_of_errors", label: "Số lỗi" },
   { key: "assistance_required", label: "Cần hỗ trợ" },
   { key: "template_deleted_at", label: "Thời điểm xóa mẫu sinh trắc" },
-  ...preQuestions.map((question) => ({
-    key: `pre_${question.item_id}`,
-    label: `PRE ${question.item_id}: ${question.text}`,
-  })),
-  ...postQuestions.map((question) => ({
-    key: `post_${question.item_id}`,
-    label: `POST ${question.item_id}: ${question.text}`,
-  })),
 ];
+
+const codebookColumns: ExportColumn[] = [
+  { key: "phase", label: "Giai đoạn khảo sát" },
+  { key: "item_id", label: "Mã biến quan sát" },
+  { key: "construct", label: "Mã khái niệm" },
+  { key: "construct_label_vi", label: "Khái niệm (VI)" },
+  { key: "construct_label_en", label: "Construct (EN)" },
+  { key: "question_vi", label: "Câu hỏi đo lường (VI)" },
+  { key: "question_en", label: "Measurement item (EN)" },
+  { key: "source_text", label: "Câu gốc" },
+  { key: "scale_min", label: "Likert min" },
+  { key: "scale_max", label: "Likert max" },
+  { key: "reverse_scored", label: "Đảo chiều" },
+  { key: "required", label: "Bắt buộc" },
+];
+
+function surveyExportColumns(
+  phase: "post",
+  questions: SurveyQuestion[],
+  locale = defaultLocale,
+) {
+  return questions.map((question) => ({
+    key: `${phase}_${question.item_id}`,
+    label: [
+      phase.toUpperCase(),
+      question.item_id,
+      constructLabel(question, locale),
+      questionText(question, locale),
+      `${question.scale_min ?? 1}-${question.scale_max ?? 7}`,
+    ].join(" | "),
+  }));
+}
+
+function methodWorkbookColumns(locale = defaultLocale): ExportColumn[] {
+  return [
+    ...baseMethodWorkbookColumns,
+    ...surveyExportColumns("post", postQuestions, locale),
+  ];
+}
+
+function buildSurveyCodebookRows(): Array<Record<string, unknown>> {
+  return postQuestions.map((question) => ({
+    phase: "post",
+    item_id: question.item_id,
+    construct: question.construct,
+    construct_label_vi: constructLabel(question, "vi"),
+    construct_label_en: constructLabel(question, "en"),
+    question_vi: questionText(question, "vi"),
+    question_en: questionText(question, "en"),
+    source_text: question.source_text ?? "",
+    scale_min: question.scale_min ?? "",
+    scale_max: question.scale_max ?? "",
+    reverse_scored: question.reverse_scored ? 1 : 0,
+    required: question.required ? 1 : 0,
+  }));
+}
 
 function buildMethodWorkbookRow(session: ExperimentSession) {
   const group = session.assigned_group;
@@ -656,12 +799,6 @@ function buildMethodWorkbookRow(session: ExperimentSession) {
     template_deleted_at: session.template_deleted_at ?? "",
   };
 
-  preQuestions.forEach((question) => {
-    row[`pre_${question.item_id}`] = normalizeSurveyAnswer(
-      question,
-      session.pre_answers[question.item_id],
-    );
-  });
   postQuestions.forEach((question) => {
     row[`post_${question.item_id}`] = normalizeSurveyAnswer(
       question,
@@ -697,9 +834,11 @@ function xmlRow(values: unknown[]) {
 function downloadMethodWorkbook(
   filename: string,
   sessions: ExperimentSession[],
+  locale = defaultLocale,
 ) {
-  const headerValues = methodWorkbookColumns.map((column) => column.label);
-  const sheets = groupOrder
+  const columns = methodWorkbookColumns(locale);
+  const headerValues = columns.map((column) => column.label);
+  const responseSheets = groupOrder
     .map((group) => {
       const rows = sessions
         .filter((session) => session.assigned_group === group)
@@ -707,7 +846,7 @@ function downloadMethodWorkbook(
       const tableRows = [
         xmlRow(headerValues),
         ...rows.map((row) =>
-          xmlRow(methodWorkbookColumns.map((column) => row[column.key])),
+          xmlRow(columns.map((column) => row[column.key])),
         ),
       ].join("");
 
@@ -720,6 +859,17 @@ function downloadMethodWorkbook(
       ].join("");
     })
     .join("");
+  const codebookRows = buildSurveyCodebookRows();
+  const codebookSheet = [
+    '<Worksheet ss:Name="Codebook">',
+    "<Table>",
+    xmlRow(codebookColumns.map((column) => column.label)),
+    ...codebookRows.map((row) =>
+      xmlRow(codebookColumns.map((column) => row[column.key])),
+    ),
+    "</Table>",
+    "</Worksheet>",
+  ].join("");
 
   const workbook = [
     '<?xml version="1.0"?>',
@@ -729,7 +879,8 @@ function downloadMethodWorkbook(
     ' xmlns:x="urn:schemas-microsoft-com:office:excel"',
     ' xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"',
     ' xmlns:html="http://www.w3.org/TR/REC-html40">',
-    sheets,
+    responseSheets,
+    codebookSheet,
     "</Workbook>",
   ].join("");
 
@@ -739,6 +890,15 @@ function downloadMethodWorkbook(
       type: "application/vnd.ms-excel;charset=utf-8",
     }),
   );
+}
+
+function downloadMethodCsv(
+  filename: string,
+  sessions: ExperimentSession[],
+  locale = defaultLocale,
+) {
+  const columns = methodWorkbookColumns(locale);
+  downloadLabeledCsv(filename, columns, sessions.map(buildMethodWorkbookRow));
 }
 
 function allStoredSessions(current?: ExperimentSession | null) {
@@ -841,12 +1001,8 @@ export function DemoApp() {
     }));
   };
 
-  const startNewSession = (
-    participantName: string,
-    selectedGroup: StudyGroup,
-    enrollment: InitialEnrollment = {},
-  ) => {
-    const next = makeSession(participantName, selectedGroup, enrollment);
+  const startNewSession = (participantName: string, selectedGroup: StudyGroup) => {
+    const next = makeSession(participantName, selectedGroup);
     const history = readJson<AssignmentHistoryItem[]>(
       storageKeys.assignmentHistory,
       [],
@@ -871,11 +1027,10 @@ export function DemoApp() {
           screen_name: "admin",
           metadata: {
             assigned_group: selectedGroup,
-            face_registered: selectedGroup === "FACE_POS" && Boolean(enrollment.faceDescriptor),
             participant_name: next.participant_name,
             protocol_version: next.protocol_version,
-            qr_pin_registered: selectedGroup === "QR_PIN" && /^\d{4}$/.test(enrollment.qrPin ?? ""),
-            registration_location: "start_screen",
+            sensitive_setup_deferred: true,
+            registration_location: "participant_flow",
           },
         },
       ],
@@ -923,47 +1078,20 @@ export function DemoApp() {
   };
 
   const completeConsent = () => {
-    updateSession((current) => ({
-      ...current,
-      consent_at: nowIso(),
-      current_step: "pre",
-      session_status: "active",
-      events: [
-        ...current.events,
-        {
-          event_name: "consent_completed",
-          timestamp: nowIso(),
-          participant_id: current.participant_id,
-          screen_name: "consent",
-          metadata: {},
-        },
-        {
-          event_name: "pre_started",
-          timestamp: nowIso(),
-          participant_id: current.participant_id,
-          screen_name: "pre",
-          metadata: {},
-        },
-      ],
-    }));
-  };
-
-  const completePreSurvey = () => {
+    const timestamp = nowIso();
     updateSession((current) => {
       const hasSelectedGroup = Boolean(current.assigned_group);
       const assignedGroup =
         current.assigned_group ??
         getNextAssignment(current.participant_id, current.participant_name);
-      const timestamp = nowIso();
-      const setupTimestamp =
-        current.setup_completed_at ?? current.setup_started_at ?? current.created_at ?? timestamp;
       return {
         ...current,
+        consent_at: timestamp,
         assigned_group: assignedGroup,
-        pre_survey_completed_at: timestamp,
-        current_step: "product",
-        setup_started_at: current.setup_started_at ?? setupTimestamp,
-        setup_completed_at: current.setup_completed_at ?? setupTimestamp,
+        current_step: "setup",
+        session_status: "active",
+        setup_started_at: current.setup_started_at ?? timestamp,
+        setup_completed_at: null,
         template_ref:
           current.template_ref ??
           (assignedGroup === "FACE_POS" || assignedGroup === "PALM_VEIN"
@@ -972,11 +1100,11 @@ export function DemoApp() {
         events: [
           ...current.events,
           {
-            event_name: "pre_survey_completed",
+            event_name: "consent_completed",
             timestamp,
             participant_id: current.participant_id,
-            screen_name: "pre",
-            metadata: { items: Object.keys(current.pre_answers).length },
+            screen_name: "consent",
+            metadata: {},
           },
           {
             event_name: hasSelectedGroup
@@ -984,10 +1112,42 @@ export function DemoApp() {
               : "random_group_assigned",
             timestamp,
             participant_id: current.participant_id,
-            screen_name: "pre",
+            screen_name: "consent",
             metadata: {
               assigned_group: assignedGroup,
               block_randomized: !hasSelectedGroup,
+            },
+          },
+          {
+            event_name: "setup_started",
+            timestamp,
+            participant_id: current.participant_id,
+            screen_name: "setup",
+            metadata: { assigned_group: assignedGroup },
+          },
+        ],
+      };
+    });
+  };
+
+  const completeSetup = (metadata: Record<string, unknown> = {}) => {
+    updateSession((current) => {
+      const timestamp = nowIso();
+      return {
+        ...current,
+        current_step: "product",
+        setup_started_at: current.setup_started_at ?? timestamp,
+        setup_completed_at: timestamp,
+        events: [
+          ...current.events,
+          {
+            event_name: "setup_completed",
+            timestamp,
+            participant_id: current.participant_id,
+            screen_name: "setup",
+            metadata: {
+              assigned_group: current.assigned_group,
+              ...metadata,
             },
           },
           {
@@ -995,7 +1155,58 @@ export function DemoApp() {
             timestamp,
             participant_id: current.participant_id,
             screen_name: "product",
-            metadata: { assigned_group: assignedGroup },
+            metadata: { assigned_group: current.assigned_group },
+          },
+        ],
+      };
+    });
+  };
+
+  const updateQrPin = (pin: string) => {
+    updateSession((current) => ({
+      ...current,
+      qr_pin: pin,
+    }));
+  };
+
+  const recordBiometricConsent = () => {
+    updateSession((current) => {
+      if (current.biometric_consent_at) return current;
+      const timestamp = nowIso();
+      return {
+        ...current,
+        biometric_consent_at: timestamp,
+        events: [
+          ...current.events,
+          {
+            event_name: "biometric_consent_completed",
+            timestamp,
+            participant_id: current.participant_id,
+            screen_name: "setup",
+            metadata: { assigned_group: current.assigned_group },
+          },
+        ],
+      };
+    });
+  };
+
+  const recordFaceEnrollment = (
+    descriptor: number[],
+    metadata: Record<string, unknown>,
+  ) => {
+    updateSession((current) => {
+      const timestamp = nowIso();
+      return {
+        ...current,
+        face_descriptor: descriptor,
+        events: [
+          ...current.events,
+          {
+            event_name: "face_enrollment_completed",
+            timestamp,
+            participant_id: current.participant_id,
+            screen_name: "setup",
+            metadata,
           },
         ],
       };
@@ -1215,19 +1426,19 @@ export function DemoApp() {
           {session.current_step === "consent" && (
             <ConsentScreen onContinue={completeConsent} />
           )}
-          {session.current_step === "pre" && (
-            <SurveyScreen
-              answers={session.pre_answers}
-              eyebrow="Khảo sát trước trải nghiệm"
-              onAnswer={(itemId, value) =>
-                updateSession((current) => ({
-                  ...current,
-                  pre_answers: { ...current.pre_answers, [itemId]: value },
-                }))
-              }
-              onSubmit={completePreSurvey}
-              questions={preQuestions}
-              title="Thông tin nền"
+          {session.current_step === "setup" && session.assigned_group && (
+            <SetupScreen
+              biometricConsentAt={session.biometric_consent_at}
+              faceAccountName={session.face_account_name ?? session.participant_name}
+              faceDescriptor={session.face_descriptor}
+              group={session.assigned_group}
+              onBiometricConsent={recordBiometricConsent}
+              onComplete={completeSetup}
+              onFaceEnroll={recordFaceEnrollment}
+              onQrPinChange={updateQrPin}
+              participantName={session.participant_name}
+              qrPin={session.qr_pin ?? ""}
+              templateRef={session.template_ref}
             />
           )}
           {session.current_step === "product" && (
@@ -1292,7 +1503,7 @@ export function DemoApp() {
               }
               onSubmit={completePostSurvey}
               questions={postQuestions}
-              title="Đánh giá phương thức vừa sử dụng"
+              title="3.3. Đo lường trải nghiệm thanh toán"
             />
           )}
           {session.current_step === "debrief" && (
@@ -1301,6 +1512,12 @@ export function DemoApp() {
               onExport={() =>
                 downloadMethodWorkbook(
                   "palmpay-method-sheets.xls",
+                  allStoredSessions(session),
+                )
+              }
+              onExportCsv={() =>
+                downloadMethodCsv(
+                  "palmpay-wide.csv",
                   allStoredSessions(session),
                 )
               }
@@ -1324,7 +1541,7 @@ function LoadingScreen() {
     <div className="flex min-h-screen items-center justify-center bg-[#f6efe5]">
       <div className="inline-flex items-center gap-3 rounded-lg border border-[#ead8bf] bg-white px-4 py-3 text-sm text-stone-600 shadow-sm">
         <Loader2 className="animate-spin" size={18} aria-hidden />
-        Loading
+        Đang tải
       </div>
     </div>
   );
@@ -1493,12 +1710,15 @@ function FaceMobileConfirmation({
     setBusy(true);
     onError("");
     try {
+      const unavailable = getCameraUnavailableMessage();
+      if (unavailable) throw new Error(unavailable);
       const loadedApi = api ?? (await loadFaceApiModels());
       setApi(loadedApi);
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: false,
         video: { facingMode: "user" },
       });
+      streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
@@ -1506,9 +1726,9 @@ function FaceMobileConfirmation({
       }
       setCameraActive(true);
       setMessage("Camera đã sẵn sàng");
-    } catch {
+    } catch (cameraError) {
       setMessage("Không mở được camera");
-      onError("Không mở được camera trên điện thoại.");
+      onError(cameraErrorMessage(cameraError));
     } finally {
       setBusy(false);
     }
@@ -1589,10 +1809,16 @@ function FaceMobileConfirmation({
   return (
     <div className="mt-5 space-y-3">
       <div className="relative aspect-video overflow-hidden rounded-lg border border-[#ead8bf] bg-stone-900">
-        <video className="h-full w-full object-cover" muted playsInline ref={videoRef} />
+        <video
+          autoPlay
+          className="h-full w-full object-cover"
+          muted
+          playsInline
+          ref={videoRef}
+        />
         {!cameraActive && (
           <div className="absolute inset-0 flex items-center justify-center text-center text-sm text-white/80">
-            Face ID camera
+            Camera Face ID
           </div>
         )}
       </div>
@@ -1626,18 +1852,11 @@ function FaceMobileConfirmation({
 function AdminHome({
   onCreate,
 }: {
-  onCreate: (
-    participantName: string,
-    selectedGroup: StudyGroup,
-    enrollment?: InitialEnrollment,
-  ) => void;
+  onCreate: (participantName: string, selectedGroup: StudyGroup) => void;
 }) {
   const [history, setHistory] = useState<AssignmentHistoryItem[]>([]);
   const [completed, setCompleted] = useState<ExperimentSession[]>([]);
   const [participantName, setParticipantName] = useState("");
-  const [qrPin, setQrPin] = useState("");
-  const [faceConsentAt, setFaceConsentAt] = useState<string | null>(null);
-  const [faceDescriptor, setFaceDescriptor] = useState<number[] | null>(null);
   const [selectedGroup, setSelectedGroup] = useState<StudyGroup | null>(null);
 
   useEffect(() => {
@@ -1652,20 +1871,7 @@ function AdminHome({
     count: history.filter((item) => item.assigned_group === group).length,
   }));
   const trimmedName = participantName.trim();
-  const chooseGroup = (group: StudyGroup) => {
-    if (group !== selectedGroup) {
-      setQrPin("");
-      setFaceConsentAt(null);
-      setFaceDescriptor(null);
-    }
-    setSelectedGroup(group);
-  };
-  const credentialReady =
-    selectedGroup === "QR_PIN"
-      ? /^\d{4}$/.test(qrPin)
-      : selectedGroup === "FACE_POS"
-        ? Boolean(faceDescriptor)
-        : Boolean(selectedGroup);
+  const chooseGroup = (group: StudyGroup) => setSelectedGroup(group);
 
   return (
     <main className="min-h-screen bg-[#f6efe5] px-4 py-5 text-stone-950 sm:px-6">
@@ -1681,32 +1887,23 @@ function AdminHome({
                 src="/brand/palmpay-logo.svg"
                 width={264}
               />
-              <p className="text-sm font-medium text-[#7a4a2a]">{protocolVersion}</p>
               <h1 className="mt-1 text-2xl font-semibold tracking-normal">
-                PalmPay Coffee Experiment
+                Thí nghiệm PalmPay Coffee
               </h1>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-600">
-                Nền tảng mô phỏng thí nghiệm tại quầy cafe: người tham gia
-                đi theo luồng nghiên cứu đầy đủ, chọn món từ catalog, rồi
-                thanh toán bằng phương thức được chọn cho phiên thử nghiệm.
-              </p>
             </div>
             <form
               className="grid w-full max-w-sm gap-2"
               onSubmit={(event) => {
                 event.preventDefault();
-                if (!trimmedName || !selectedGroup || !credentialReady) return;
-                onCreate(trimmedName, selectedGroup, {
-                  biometricConsentAt: faceConsentAt,
-                  faceDescriptor,
-                  qrPin,
-                });
+                if (!trimmedName || !selectedGroup) return;
+                onCreate(trimmedName, selectedGroup);
               }}
             >
               <label className="text-sm font-medium text-stone-700" htmlFor="participant-name">
                 Tên người tham gia
               </label>
               <input
+                autoComplete="off"
                 className="h-11 rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 text-sm outline-none transition focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
                 id="participant-name"
                 onChange={(event) => setParticipantName(event.target.value)}
@@ -1715,11 +1912,11 @@ function AdminHome({
               />
               <button
                 className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-[#d6c0aa]"
-                disabled={!trimmedName || !selectedGroup || !credentialReady}
+                disabled={!trimmedName || !selectedGroup}
                 type="submit"
               >
                 <UserPlus size={17} aria-hidden />
-                Tạo phiên mới
+                Bắt đầu phiên
               </button>
             </form>
           </div>
@@ -1727,11 +1924,8 @@ function AdminHome({
           <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
             <div>
               <h2 className="text-sm font-semibold text-stone-950">
-                Chọn phương thức cho phiên
+                Chọn phương thức
               </h2>
-              <p className="mt-1 text-xs text-stone-500">
-                Mỗi phương thức sẽ mở đúng luồng đăng ký và thanh toán tương ứng.
-              </p>
             </div>
             {selectedGroup && (
               <span className="rounded-full border border-[#ead8bf] bg-[#fffaf3] px-3 py-1 text-xs font-semibold text-[#6f3f24]">
@@ -1768,100 +1962,9 @@ function AdminHome({
               );
             })}
           </div>
-
-          {selectedGroup === "QR_PIN" && (
-            <div className="mt-4 rounded-lg border border-[#ead8bf] bg-[#fffaf3] p-4">
-              <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px] lg:items-end">
-                <div>
-                  <h2 className="text-sm font-semibold text-stone-950">
-                    Đăng ký DemoBank QR
-                  </h2>
-                  <p className="mt-1 text-xs leading-5 text-stone-500">
-                    Tên người gửi sẽ dùng chính tên người tham gia đã nhập ở trên.
-                    PIN này dùng để xác nhận màn hình chuyển khoản sau khi quét QR.
-                  </p>
-                  <p className="mt-3 rounded-lg border border-[#ead8bf] bg-white px-3 py-2 text-sm font-medium text-[#6f3f24]">
-                    Người gửi: {trimmedName || "Nhập tên người tham gia"}
-                  </p>
-                </div>
-                <label className="block">
-                  <span className="mb-1 block text-sm font-medium text-stone-700">
-                    Mã PIN 4 số
-                  </span>
-                  <input
-                    className="h-11 w-full rounded-lg border border-[#ead8bf] bg-white px-3 text-center text-lg font-semibold tracking-[0.25em] outline-none transition focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
-                    inputMode="numeric"
-                    maxLength={4}
-                    onChange={(event) =>
-                      setQrPin(event.target.value.replace(/\D/g, "").slice(0, 4))
-                    }
-                    placeholder="0000"
-                    type="password"
-                    value={qrPin}
-                  />
-                </label>
-              </div>
-            </div>
-          )}
-
-          {selectedGroup === "FACE_POS" && (
-            <div className="mt-4 rounded-lg border border-[#ead8bf] bg-[#fffaf3] p-4">
-              <div className="mb-4">
-                <h2 className="text-sm font-semibold text-stone-950">
-                  Đăng ký Face ID
-                </h2>
-                <p className="mt-1 text-xs leading-5 text-stone-500">
-                  Nhập tên người tham gia trước, sau đó mở camera để ghi mẫu khuôn
-                  mặt. Face ID sẽ xác nhận thanh toán trực tiếp trên POS.
-                </p>
-              </div>
-              <label className="mb-4 flex items-start gap-3 rounded-lg border border-[#ead8bf] bg-white p-3 text-sm text-stone-700">
-                <input
-                  checked={Boolean(faceConsentAt)}
-                  className="mt-0.5 h-4 w-4 shrink-0 accent-[#6f3f24]"
-                  disabled={!trimmedName || Boolean(faceConsentAt)}
-                  onChange={(event) => {
-                    if (event.target.checked) setFaceConsentAt(nowIso());
-                  }}
-                  type="checkbox"
-                />
-                <span>
-                  Tôi đồng ý tạo mẫu đặc trưng khuôn mặt mã hóa cho phiên thử nghiệm này.
-                </span>
-              </label>
-              <FaceEnrollment
-                consentReady={Boolean(trimmedName && faceConsentAt)}
-                enrolled={Boolean(faceDescriptor)}
-                onEnroll={(descriptor) => setFaceDescriptor(descriptor)}
-              />
-            </div>
-          )}
         </section>
 
         <aside className="space-y-5">
-          <section className="rounded-lg border border-[#ead8bf] bg-white p-4 shadow-sm">
-            <h2 className="font-semibold">Thiết bị</h2>
-            <div className="mt-3 space-y-2 text-sm">
-              {[
-                "Điện thoại DemoBank",
-                "Đầu đọc thẻ NFC",
-                "Camera POS Face ID",
-                "Máy quét PalmPay",
-              ].map((item) => (
-                <div
-                  className="flex items-center justify-between rounded-lg border border-[#ead8bf] px-3 py-2"
-                  key={item}
-                >
-                  <span>{item}</span>
-                  <span className="inline-flex items-center gap-1 text-xs font-medium text-[#7a4a2a]">
-                    <CheckCircle2 size={14} aria-hidden />
-                    Sẵn sàng
-                  </span>
-                </div>
-              ))}
-            </div>
-          </section>
-
           <section className="rounded-lg border border-[#ead8bf] bg-white p-4 shadow-sm">
             <h2 className="font-semibold">Xuất dữ liệu</h2>
             <div className="mt-3 grid gap-2">
@@ -1874,7 +1977,16 @@ function AdminHome({
                 type="button"
               >
                 <Download size={16} aria-hidden />
-                Bảng 4 sheet
+                Excel theo phương thức
+              </button>
+              <button
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#ead8bf] bg-white px-3 text-sm font-semibold text-stone-700 transition hover:bg-[#fffaf3]"
+                disabled={completed.length === 0}
+                onClick={() => downloadMethodCsv("palmpay-wide.csv", completed)}
+                type="button"
+              >
+                <Download size={16} aria-hidden />
+                CSV dữ liệu
               </button>
               <button
                 className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#ead8bf] bg-white px-3 text-sm font-semibold text-stone-700 transition hover:bg-[#fffaf3]"
@@ -1921,10 +2033,10 @@ function ExperimentHeader({
           </div>
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold">
-              PalmPay Coffee Study
+              Nghiên cứu PalmPay Coffee
             </p>
             <p className="truncate text-xs text-stone-500">
-              {session.participant_id} · {session.participant_name || "Người tham gia"}
+              {session.participant_name || "Người tham gia"}
             </p>
           </div>
         </div>
@@ -1984,8 +2096,7 @@ function ProgressRail({
       </div>
       {group && (
         <div className={cn("mt-4 rounded-lg border p-3", groupCopy[group].color)}>
-          <p className="text-xs font-medium uppercase">{group}</p>
-          <p className="mt-1 text-sm font-semibold">{groupCopy[group].label}</p>
+          <p className="text-sm font-semibold">{groupCopy[group].label}</p>
         </div>
       )}
     </aside>
@@ -2042,9 +2153,214 @@ function ConsentScreen({ onContinue }: { onContinue: () => void }) {
   );
 }
 
+function SetupScreen({
+  biometricConsentAt,
+  faceAccountName,
+  faceDescriptor,
+  group,
+  onBiometricConsent,
+  onComplete,
+  onFaceEnroll,
+  onQrPinChange,
+  participantName,
+  qrPin,
+  templateRef,
+}: {
+  biometricConsentAt?: string | null;
+  faceAccountName: string;
+  faceDescriptor?: number[] | null;
+  group: StudyGroup;
+  onBiometricConsent: () => void;
+  onComplete: (metadata?: Record<string, unknown>) => void;
+  onFaceEnroll: (descriptor: number[], metadata: Record<string, unknown>) => void;
+  onQrPinChange: (pin: string) => void;
+  participantName: string;
+  qrPin: string;
+  templateRef?: string | null;
+}) {
+  const copy = groupCopy[group];
+  const Icon = copy.icon;
+  const pinReady = /^\d{4}$/.test(qrPin);
+  const biometricConsentReady = Boolean(biometricConsentAt);
+  const faceReady = biometricConsentReady && Boolean(faceDescriptor?.length);
+  const setupReady =
+    group === "QR_PIN"
+      ? pinReady
+      : group === "FACE_POS"
+        ? faceReady
+        : group === "PALM_VEIN"
+          ? biometricConsentReady
+          : true;
+
+  const finishSetup = () => {
+    if (!setupReady) return;
+    if (group === "QR_PIN") {
+      onComplete({ qr_pin_registered: true });
+      return;
+    }
+    if (group === "FACE_POS") {
+      onComplete({
+        biometric_consent_at: biometricConsentAt,
+        face_registered: true,
+        template_ref: templateRef,
+      });
+      return;
+    }
+    if (group === "PALM_VEIN") {
+      onComplete({
+        biometric_consent_at: biometricConsentAt,
+        palm_samples_registered: true,
+        sample_count: 3,
+        template_ref: templateRef,
+      });
+      return;
+    }
+    onComplete({ card_ref: "CARD-POS-042", nfc_card_ready: true });
+  };
+
+  return (
+    <Panel eyebrow="Đăng ký phương thức" icon={Icon} title={copy.label}>
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="space-y-4">
+          {group === "QR_PIN" && (
+            <div className="rounded-lg border border-[#ead8bf] bg-white p-4">
+              <h2 className="text-sm font-semibold text-stone-950">
+                DemoBank QR
+              </h2>
+              <p className="mt-1 text-xs leading-5 text-stone-500">
+                Người gửi: {participantName}
+              </p>
+              <label className="mt-4 block max-w-xs">
+                <span className="mb-1 block text-sm font-medium text-stone-700">
+                  Mã PIN 4 số
+                </span>
+                <input
+                  className="h-11 w-full rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 text-center text-lg font-semibold tracking-[0.25em] outline-none transition focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
+                  inputMode="numeric"
+                  maxLength={4}
+                  onChange={(event) =>
+                    onQrPinChange(event.target.value.replace(/\D/g, "").slice(0, 4))
+                  }
+                  placeholder="0000"
+                  type="password"
+                  value={qrPin}
+                />
+              </label>
+            </div>
+          )}
+
+          {group === "NFC_CARD" && (
+            <div className="rounded-lg border border-[#ead8bf] bg-white p-4">
+              <div className="flex items-start gap-3">
+                <Nfc className="mt-0.5 text-[#405438]" size={22} aria-hidden />
+                <div>
+                  <h2 className="text-sm font-semibold text-stone-950">
+                    Thẻ NFC thử nghiệm
+                  </h2>
+                  <p className="mt-1 text-sm leading-6 text-stone-600">
+                    Chuẩn bị thẻ test cho người tham gia. Không cần nhập thông
+                    tin định danh bổ sung.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {group === "FACE_POS" && (
+            <div className="rounded-lg border border-[#ead8bf] bg-[#fffaf3] p-4">
+              <div className="mb-4">
+                <h2 className="text-sm font-semibold text-stone-950">
+                  Đăng ký Face ID
+                </h2>
+                <p className="mt-1 text-xs leading-5 text-stone-500">
+                  Tên tài khoản: {faceAccountName || participantName}
+                </p>
+              </div>
+              <label className="mb-4 flex items-start gap-3 rounded-lg border border-[#ead8bf] bg-white p-3 text-sm text-stone-700">
+                <input
+                  checked={biometricConsentReady}
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-[#6f3f24]"
+                  disabled={biometricConsentReady}
+                  onChange={(event) => {
+                    if (event.target.checked) onBiometricConsent();
+                  }}
+                  type="checkbox"
+                />
+                <span>
+                  Tôi đồng ý tạo mẫu đặc trưng khuôn mặt cho phiên thử nghiệm
+                  này. Mẫu được mã hóa khi lưu trữ và không lưu ảnh gốc.
+                </span>
+              </label>
+              <FaceEnrollment
+                consentReady={biometricConsentReady}
+                enrolled={Boolean(faceDescriptor?.length)}
+                onEnroll={onFaceEnroll}
+              />
+            </div>
+          )}
+
+          {group === "PALM_VEIN" && (
+            <div className="rounded-lg border border-[#ead8bf] bg-white p-4">
+              <div className="mb-4 flex items-start gap-3">
+                <Hand className="mt-0.5 text-[#7a4a2a]" size={22} aria-hidden />
+                <div>
+                  <h2 className="text-sm font-semibold text-stone-950">
+                    PalmPay tĩnh mạch lòng bàn tay
+                  </h2>
+                  <p className="mt-1 text-sm leading-6 text-stone-600">
+                    Mẫu tĩnh mạch lòng bàn tay chỉ được mô phỏng trong phiên demo.
+                  </p>
+                </div>
+              </div>
+              <label className="flex items-start gap-3 rounded-lg border border-[#ead8bf] bg-[#fffaf3] p-3 text-sm text-stone-700">
+                <input
+                  checked={biometricConsentReady}
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-[#6f3f24]"
+                  disabled={biometricConsentReady}
+                  onChange={(event) => {
+                    if (event.target.checked) onBiometricConsent();
+                  }}
+                  type="checkbox"
+                />
+                <span>
+                  Tôi đồng ý tạo mẫu tĩnh mạch lòng bàn tay mô phỏng cho phiên
+                  thử nghiệm này.
+                </span>
+              </label>
+            </div>
+          )}
+        </div>
+
+        <aside className={cn("h-fit rounded-lg border p-4", copy.color)}>
+          <div className="mb-3 flex items-center gap-3">
+            <Icon size={22} aria-hidden />
+            <div>
+              <p className="text-sm font-semibold">{copy.shortLabel}</p>
+              <p className="text-xs opacity-75">{copy.device}</p>
+            </div>
+          </div>
+          <p className="text-sm leading-6 opacity-85">{copy.instruction}</p>
+        </aside>
+      </div>
+      <ActionRow>
+        <button
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-[#d6c0aa]"
+          disabled={!setupReady}
+          onClick={finishSetup}
+          type="button"
+        >
+          Hoàn tất đăng ký
+          <ArrowRight size={17} aria-hidden />
+        </button>
+      </ActionRow>
+    </Panel>
+  );
+}
+
 function SurveyScreen({
   answers,
   eyebrow,
+  locale = defaultLocale,
   onAnswer,
   onSubmit,
   questions,
@@ -2052,6 +2368,7 @@ function SurveyScreen({
 }: {
   answers: Record<string, string | number>;
   eyebrow: string;
+  locale?: Locale;
   onAnswer: (itemId: string, value: string | number) => void;
   onSubmit: () => void;
   questions: SurveyQuestion[];
@@ -2062,47 +2379,99 @@ function SurveyScreen({
       !question.required ||
       (answers[question.item_id] !== undefined && answers[question.item_id] !== ""),
   );
+  const sections = questions.reduce<
+    Array<{
+      construct: string;
+      intro: string;
+      label: string;
+      questions: SurveyQuestion[];
+    }>
+  >((groups, question) => {
+    const previous = groups.find((group) => group.construct === question.construct);
+    if (previous) {
+      previous.questions.push(question);
+      return groups;
+    }
+    return [
+      ...groups,
+      {
+        construct: question.construct,
+        intro: localizeText(question.section_intro, locale),
+        label: constructLabel(question, locale),
+        questions: [question],
+      },
+    ];
+  }, []);
+
   return (
     <Panel eyebrow={eyebrow} icon={ClipboardCheck} title={title}>
       <div className="space-y-4">
-        {questions.map((question) => {
-          const answerValue = answers[question.item_id];
-          const normalizedValue = normalizeSurveyAnswer(question, answerValue);
-          return (
-            <div
-              className="rounded-lg border border-[#ead8bf] bg-white p-4"
-              key={question.item_id}
-            >
-              <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-stone-950">
-                    {question.text}
-                  </p>
-                </div>
-              </div>
-              {question.type === "select" ? (
-                <div className="max-w-sm">
-                  <CustomSelect
-                    onChange={(value) => onAnswer(question.item_id, Number(value))}
-                    options={(question.options ?? []).map((option, index) => ({
-                      label: option,
-                      value: String(index + 1),
-                    }))}
-                    placeholder="Chọn câu trả lời"
-                    value={selectAnswerValue(question, answerValue)}
-                  />
-                </div>
-              ) : (
-                <Likert
-                  max={question.scale_max ?? 7}
-                  min={question.scale_min ?? 1}
-                  onChange={(value) => onAnswer(question.item_id, value)}
-                  value={typeof normalizedValue === "number" ? normalizedValue : null}
-                />
+        {sections.map((section) => (
+          <section
+            className="rounded-lg border border-[#ead8bf] bg-[#fffaf3] p-4"
+            key={section.construct}
+          >
+            <div className="mb-4">
+              <p className="text-xs font-semibold uppercase text-[#7a4a2a]">
+                {section.construct}
+              </p>
+              <h2 className="mt-1 text-base font-semibold text-stone-950">
+                {section.label}
+              </h2>
+              {section.intro && (
+                <p className="mt-2 text-sm leading-6 text-stone-600">
+                  {section.intro}
+                </p>
               )}
             </div>
-          );
-        })}
+            <div className="space-y-3">
+              {section.questions.map((question) => {
+                const answerValue = answers[question.item_id];
+                const normalizedValue = normalizeSurveyAnswer(question, answerValue);
+                const text = questionText(question, locale);
+                const options = questionOptions(question, locale);
+                return (
+                  <div
+                    className="rounded-lg border border-[#ead8bf] bg-white p-4"
+                    key={question.item_id}
+                  >
+                    <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold uppercase text-[#7a4a2a]">
+                          {question.item_id}
+                        </p>
+                        <p className="mt-1 text-sm font-semibold leading-6 text-stone-950">
+                          {text}
+                        </p>
+                      </div>
+                    </div>
+                    {question.type === "select" ? (
+                      <div className="max-w-sm">
+                        <CustomSelect
+                          onChange={(value) => onAnswer(question.item_id, Number(value))}
+                          options={options.map((option, index) => ({
+                            label: option,
+                            value: String(index + 1),
+                          }))}
+                          placeholder="Chọn câu trả lời"
+                          value={selectAnswerValue(question, answerValue)}
+                        />
+                      </div>
+                    ) : (
+                      <Likert
+                        locale={locale}
+                        max={question.scale_max ?? 7}
+                        min={question.scale_min ?? 1}
+                        onChange={(value) => onAnswer(question.item_id, value)}
+                        value={typeof normalizedValue === "number" ? normalizedValue : null}
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        ))}
       </div>
       <ActionRow>
         <button
@@ -2120,11 +2489,13 @@ function SurveyScreen({
 }
 
 function Likert({
+  locale = defaultLocale,
   max,
   min,
   onChange,
   value,
 }: {
+  locale?: Locale;
   max: number;
   min: number;
   onChange: (value: number) => void;
@@ -2154,8 +2525,10 @@ function Likert({
         ))}
       </div>
       <div className="mt-2 flex justify-between text-xs text-stone-500">
-        <span>Hoàn toàn không đồng ý</span>
-        <span>Hoàn toàn đồng ý</span>
+        <span>
+          {locale === "vi" ? "Hoàn toàn không đồng ý" : "Strongly disagree"}
+        </span>
+        <span>{locale === "vi" ? "Hoàn toàn đồng ý" : "Strongly agree"}</span>
       </div>
     </div>
   );
@@ -2180,6 +2553,85 @@ async function loadFaceApiModels() {
   return faceapi;
 }
 
+function getCameraUnavailableMessage() {
+  if (typeof window !== "undefined" && !window.isSecureContext) {
+    return "Camera chỉ hoạt động trên HTTPS hoặc localhost.";
+  }
+  if (!navigator.mediaDevices?.getUserMedia) {
+    return "Trình duyệt này chưa hỗ trợ mở camera từ trang web.";
+  }
+  return null;
+}
+
+function cameraErrorMessage(error: unknown) {
+  const unavailable = getCameraUnavailableMessage();
+  if (unavailable) return unavailable;
+
+  const name = error instanceof DOMException ? error.name : "";
+  if (name === "NotAllowedError" || name === "SecurityError") {
+    return "Chrome đang chặn camera. Bấm biểu tượng ổ khóa/camera trên thanh địa chỉ và cho phép camera cho trang này.";
+  }
+  if (name === "NotFoundError" || name === "OverconstrainedError") {
+    return "Không tìm thấy camera phù hợp trên thiết bị này.";
+  }
+  if (name === "NotReadableError" || name === "AbortError") {
+    return "Camera đang bị ứng dụng khác hoặc hệ điều hành giữ quyền truy cập.";
+  }
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  return "Không mở được camera.";
+}
+
+type FaceSampleDetection = {
+  detection: {
+    box: {
+      height: number;
+      width: number;
+      x: number;
+      y: number;
+    };
+    score: number;
+  };
+};
+
+const enrollmentPrompts = [
+  "Mẫu 1: nhìn thẳng vào camera, giữ mặt trong khung.",
+  "Mẫu 2: nghiêng mặt nhẹ sang trái hoặc phải.",
+  "Mẫu 3: nhìn thẳng lại, giữ ánh sáng đều trên mặt.",
+];
+
+function enrollmentPrompt(sampleCount: number, enrolled: boolean) {
+  if (enrolled) return "Đăng ký hoàn tất. Mẫu khuôn mặt đã sẵn sàng để xác nhận.";
+  return enrollmentPrompts[Math.min(sampleCount, enrollmentPrompts.length - 1)];
+}
+
+function evaluateEnrollmentSample(
+  detection: FaceSampleDetection,
+  video: HTMLVideoElement,
+) {
+  const { box, score } = detection.detection;
+  const frameWidth = video.videoWidth || video.clientWidth || 1;
+  const frameHeight = video.videoHeight || video.clientHeight || 1;
+  const faceHeightRatio = box.height / frameHeight;
+  const faceCenterX = (box.x + box.width / 2) / frameWidth;
+  const faceCenterY = (box.y + box.height / 2) / frameHeight;
+
+  if (score < 0.65) {
+    return "Mẫu chưa đủ rõ. Lau camera, tăng ánh sáng hoặc nhìn thẳng hơn rồi thử lại.";
+  }
+  if (faceHeightRatio < 0.16) {
+    return "Mặt đang quá xa camera. Đưa mặt lại gần hơn rồi ghi mẫu.";
+  }
+  if (faceHeightRatio > 0.72) {
+    return "Mặt đang quá gần camera. Lùi lại một chút rồi ghi mẫu.";
+  }
+  if (faceCenterX < 0.28 || faceCenterX > 0.72 || faceCenterY < 0.22 || faceCenterY > 0.78) {
+    return "Đưa mặt vào giữa khung hình rồi ghi mẫu.";
+  }
+  return null;
+}
+
 function FaceEnrollment({
   consentReady,
   enrolled,
@@ -2195,6 +2647,11 @@ function FaceEnrollment({
   const [busy, setBusy] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState(
+    enrolled
+      ? "Đăng ký hoàn tất. Mẫu khuôn mặt đã sẵn sàng."
+      : "Đánh dấu đồng ý, mở camera, rồi ghi 3 mẫu theo hướng dẫn.",
+  );
   const [sampleCount, setSampleCount] = useState(enrolled ? 3 : 0);
   const descriptorsRef = useRef<Float32Array[]>([]);
 
@@ -2207,25 +2664,27 @@ function FaceEnrollment({
   const startCamera = async () => {
     setBusy(true);
     setError("");
+    setNotice("Đang mở camera và tải mô hình nhận diện...");
     try {
+      const unavailable = getCameraUnavailableMessage();
+      if (unavailable) throw new Error(unavailable);
       const loadedApi = api ?? (await loadFaceApiModels());
       setApi(loadedApi);
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: false,
         video: { facingMode: "user" },
       });
+      streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
       }
       setCameraActive(true);
+      setNotice(enrollmentPrompt(sampleCount, enrolled));
     } catch (cameraError) {
-      setError(
-        cameraError instanceof Error
-          ? cameraError.message
-          : "Không mở được camera.",
-      );
+      setError(cameraErrorMessage(cameraError));
+      setNotice("Chưa mở được camera.");
     } finally {
       setBusy(false);
     }
@@ -2239,6 +2698,7 @@ function FaceEnrollment({
 
     setBusy(true);
     setError("");
+    setNotice("Đang kiểm tra chất lượng mẫu...");
     try {
       const detection = await api
         .detectSingleFace(
@@ -2253,6 +2713,14 @@ function FaceEnrollment({
 
       if (!detection) {
         setError("Không phát hiện khuôn mặt rõ. Thử nhìn thẳng vào camera.");
+        setNotice(enrollmentPrompt(sampleCount, enrolled));
+        return;
+      }
+
+      const qualityError = evaluateEnrollmentSample(detection, videoRef.current);
+      if (qualityError) {
+        setError(qualityError);
+        setNotice(enrollmentPrompt(sampleCount, enrolled));
         return;
       }
 
@@ -2261,11 +2729,15 @@ function FaceEnrollment({
       setSampleCount(nextCount);
 
       if (nextCount >= 3) {
+        setNotice("Đăng ký hoàn tất. Mẫu khuôn mặt đã sẵn sàng.");
         onEnroll(averageDescriptors(descriptorsRef.current), {
           face_model: "tiny_face_detector+face_landmark_68+face_recognition",
           raw_image_stored: false,
           sample_count: nextCount,
+          template_encrypted_at_rest: true,
         });
+      } else {
+        setNotice(`Đã ghi mẫu ${nextCount}/3. ${enrollmentPrompt(nextCount, false)}`);
       }
     } catch (captureError) {
       setError(
@@ -2273,15 +2745,53 @@ function FaceEnrollment({
           ? captureError.message
           : "Không thể ghi mẫu khuôn mặt.",
       );
+      setNotice(enrollmentPrompt(sampleCount, enrolled));
     } finally {
       setBusy(false);
     }
   };
 
+  const enrollmentComplete = enrolled || sampleCount >= 3;
+
   return (
     <div className="rounded-lg border border-[#ead8bf] bg-white p-4">
+      <ol className="mb-3 grid gap-2 text-sm text-stone-600 md:grid-cols-3">
+        {[
+          "Nhìn thẳng, mặt ở giữa khung",
+          "Nghiêng nhẹ trái hoặc phải",
+          "Nhìn thẳng lại, ánh sáng đều",
+        ].map((instruction, index) => {
+          const done = sampleCount > index;
+          const active = sampleCount === index && !enrollmentComplete;
+          return (
+            <li
+              className={cn(
+                "flex min-h-10 items-center gap-2 rounded-md px-2",
+                active && "bg-[#fffaf3] text-[#6f3f24]",
+                done && "text-emerald-700",
+              )}
+              key={instruction}
+            >
+              <span
+                className={cn(
+                  "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs font-semibold",
+                  done
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                    : active
+                      ? "border-[#d5aa84] bg-[#fffaf3] text-[#6f3f24]"
+                      : "border-[#ead8bf] text-stone-500",
+                )}
+              >
+                {done ? <Check size={14} aria-hidden /> : index + 1}
+              </span>
+              <span>{instruction}</span>
+            </li>
+          );
+        })}
+      </ol>
       <div className="relative aspect-video overflow-hidden rounded-lg border border-[#ead8bf] bg-stone-900">
         <video
+          autoPlay
           className="h-full w-full object-cover"
           muted
           playsInline
@@ -2289,7 +2799,7 @@ function FaceEnrollment({
         />
         {!cameraActive && (
           <div className="absolute inset-0 flex items-center justify-center text-center text-sm text-white/80">
-            Camera enrollment
+            Camera đăng ký
           </div>
         )}
       </div>
@@ -2297,10 +2807,22 @@ function FaceEnrollment({
         <p className="text-sm text-stone-600">
           Mẫu đã ghi: <span className="font-semibold">{sampleCount}/3</span>
         </p>
+        <div className="flex items-center gap-1">
+          {[0, 1, 2].map((index) => (
+            <span
+              aria-label={`Mẫu ${index + 1}${sampleCount > index ? " đã ghi" : " chưa ghi"}`}
+              className={cn(
+                "h-2.5 w-9 rounded-full",
+                sampleCount > index ? "bg-emerald-500" : "bg-[#ead8bf]",
+              )}
+              key={index}
+            />
+          ))}
+        </div>
         <div className="flex gap-2">
           <button
             className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#ead8bf] bg-white px-3 text-sm font-semibold text-stone-700 transition hover:bg-[#fffaf3] disabled:text-[#b8a491]"
-            disabled={!consentReady || busy}
+            disabled={!consentReady || busy || enrollmentComplete}
             onClick={startCamera}
             type="button"
           >
@@ -2309,18 +2831,34 @@ function FaceEnrollment({
           </button>
           <button
             className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-3 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-[#d6c0aa]"
-            disabled={!consentReady || busy || enrolled}
+            disabled={!consentReady || busy || !cameraActive || enrollmentComplete}
             onClick={captureFace}
             type="button"
           >
             {busy ? <Loader2 className="animate-spin" size={16} /> : <ScanFace size={16} />}
-            Ghi mẫu
+            {sampleCount === 0 ? "Ghi mẫu" : "Ghi mẫu tiếp"}
           </button>
         </div>
       </div>
+      <p
+        className={cn(
+          "mt-3 flex items-start gap-2 rounded-lg px-3 py-2 text-sm",
+          enrollmentComplete
+            ? "bg-emerald-50 text-emerald-700"
+            : "bg-[#fffaf3] text-[#6f3f24]",
+        )}
+      >
+        {enrollmentComplete ? (
+          <CheckCircle2 className="mt-0.5 shrink-0" size={16} aria-hidden />
+        ) : (
+          <ScanFace className="mt-0.5 shrink-0" size={16} aria-hidden />
+        )}
+        <span>{notice}</span>
+      </p>
       {error && (
-        <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-          {error}
+        <p className="mt-3 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <AlertTriangle className="mt-0.5 shrink-0" size={16} aria-hidden />
+          <span>{error}</span>
         </p>
       )}
     </div>
@@ -2351,7 +2889,12 @@ function ProductScreen({
         const matchesCategory = category === "All" || item.category === category;
         const matchesQuery =
           normalizedQuery.length === 0 ||
-          [item.name, item.detail, item.category, ...item.tags]
+          [
+            productName(item),
+            productDetail(item),
+            categoryLabel(item.category),
+            ...productTags(item),
+          ]
             .join(" ")
             .toLowerCase()
             .includes(normalizedQuery);
@@ -2370,7 +2913,7 @@ function ProductScreen({
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <h2 className="text-lg font-semibold text-stone-950">
-                  Coffee catalog
+                  Danh mục cafe
                 </h2>
                 <p className="mt-1 text-sm leading-6 text-stone-600">
                   Chọn một hoặc nhiều món trong giới hạn số dư thử nghiệm.
@@ -2403,7 +2946,7 @@ function ProductScreen({
                   onClick={() => setCategory(item)}
                   type="button"
                 >
-                  {item}
+                  {categoryLabel(item)}
                 </button>
               ))}
             </div>
@@ -2450,7 +2993,7 @@ function ProductScreen({
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold text-stone-950">
-                          {item.name}
+                          {productName(item)}
                         </p>
                         <p className="mt-1 text-xs text-stone-500">
                           {line.quantity} x {formatVnd(item.priceCents)}
@@ -2508,13 +3051,16 @@ function ProductCard({
   quantity: number;
 }) {
   const selected = quantity > 0;
+  const name = productName(product);
+  const detail = productDetail(product);
+  const category = categoryLabel(product.category);
   const selectProduct = () => {
     if (!selected) onAdd();
   };
 
   return (
     <article
-      aria-label={`${selected ? "Đã chọn" : "Chọn"} ${product.name}`}
+      aria-label={`${selected ? "Đã chọn" : "Chọn"} ${name}`}
       aria-pressed={selected}
       className={cn(
         "group flex h-full min-h-[460px] flex-col overflow-hidden rounded-lg border bg-white text-left shadow-sm outline-none transition focus:ring-2 focus:ring-[#9a6237]",
@@ -2533,7 +3079,7 @@ function ProductCard({
     >
       <div className="relative aspect-[4/3] bg-[#efe1cf]">
         <Image
-          alt={product.imageAlt}
+          alt={productImageAlt(product)}
           className={cn(
             "object-cover transition duration-300",
             selected ? "scale-[1.02]" : "group-hover:scale-[1.02]",
@@ -2544,7 +3090,7 @@ function ProductCard({
         />
         {product.popular && (
           <span className="absolute left-3 top-3 rounded-lg bg-[#fffaf3]/95 px-2 py-1 text-xs font-semibold text-[#6f3f24] shadow-sm">
-            Popular
+            Phổ biến
           </span>
         )}
         {selected && (
@@ -2558,13 +3104,13 @@ function ProductCard({
         <div className="flex flex-1 items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase text-[#7a4a2a]">
-              {product.category}
+              {category}
             </p>
             <h3 className="mt-1 text-base font-semibold text-stone-950">
-              {product.name}
+              {name}
             </h3>
             <p className="mt-1 text-sm leading-6 text-stone-600">
-              {product.detail}
+              {detail}
             </p>
           </div>
           <p className="shrink-0 text-sm font-semibold text-stone-900">
@@ -2580,7 +3126,7 @@ function ProductCard({
           )}
         >
           <button
-            aria-label={`Giảm ${product.name}`}
+            aria-label={`Giảm ${name}`}
             className="flex h-8 w-8 items-center justify-center rounded-md text-stone-700 transition hover:bg-white disabled:text-[#b8a491]"
             disabled={quantity === 0}
             onClick={(event) => {
@@ -2595,7 +3141,7 @@ function ProductCard({
             {quantity}
           </span>
           <button
-            aria-label={`Thêm ${product.name}`}
+            aria-label={`Thêm ${name}`}
             className="flex h-8 w-8 items-center justify-center rounded-md bg-[#6f3f24] text-white transition hover:bg-[#5a341f]"
             onClick={(event) => {
               event.stopPropagation();
@@ -2639,7 +3185,9 @@ function CheckoutScreen({
                   key={line.productId}
                 >
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-stone-950">{item.name}</p>
+                    <p className="text-sm font-semibold text-stone-950">
+                      {productName(item)}
+                    </p>
                     <p className="mt-1 text-xs text-stone-500">
                       {line.quantity} x {formatVnd(item.priceCents)}
                     </p>
@@ -2850,12 +3398,15 @@ function FacePosPayment({
     setLocalBusy(true);
     setError("");
     try {
+      const unavailable = getCameraUnavailableMessage();
+      if (unavailable) throw new Error(unavailable);
       const loadedApi = api ?? (await loadFaceApiModels());
       setApi(loadedApi);
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: false,
         video: { facingMode: "user" },
       });
+      streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
@@ -2864,9 +3415,9 @@ function FacePosPayment({
       setCameraActive(true);
       setMessage("Camera POS đã sẵn sàng");
       onLog("face_pos_camera_opened", "payment", {});
-    } catch {
+    } catch (cameraError) {
       setMessage("Không mở được camera POS");
-      setError("Không mở được camera để xác nhận Face ID.");
+      setError(cameraErrorMessage(cameraError));
     } finally {
       setLocalBusy(false);
     }
@@ -2937,10 +3488,16 @@ function FacePosPayment({
   return (
     <div className="space-y-4">
       <div className="relative aspect-video overflow-hidden rounded-lg border border-[#ead8bf] bg-stone-900">
-        <video className="h-full w-full object-cover" muted playsInline ref={videoRef} />
+        <video
+          autoPlay
+          className="h-full w-full object-cover"
+          muted
+          playsInline
+          ref={videoRef}
+        />
         {!cameraActive && (
           <div className="absolute inset-0 flex items-center justify-center text-center text-sm text-white/80">
-            Camera POS Face ID
+            Camera Face ID tại POS
           </div>
         )}
       </div>
@@ -3139,7 +3696,7 @@ function QrPosPayment({
           rel="noreferrer"
           target="_blank"
         >
-          Mở mock mobile trên máy này
+          Mở mô phỏng điện thoại trên máy này
           <ArrowRight size={16} aria-hidden />
         </a>
       )}
@@ -3169,7 +3726,9 @@ function NfcBridgePayment({
 }) {
   const handledRef = useRef(false);
   const lastTapKeyRef = useRef("");
-  const [status, setStatus] = useState("Đang đăng ký giao dịch với NFC reader bridge");
+  const [status, setStatus] = useState(
+    "Đang đăng ký giao dịch với trình kết nối đầu đọc NFC",
+  );
 
   useEffect(() => {
     if (!transactionId) return;
@@ -3186,7 +3745,7 @@ function NfcBridgePayment({
     })
       .then((response) => (response.ok ? response.json() : Promise.reject()))
       .then(() => {
-        if (active) setStatus("Đang chờ tap từ NFC reader bridge");
+        if (active) setStatus("Đang chờ thao tác chạm từ đầu đọc NFC");
       })
       .catch(() => {
         if (active) setStatus("Không đăng ký được phiên NFC đang chờ");
@@ -3221,7 +3780,7 @@ function NfcBridgePayment({
           onLog("nfc_tapped", "payment", { card_ref: data.tap.cardRef });
           onComplete(data.tap);
         })
-        .catch(() => setStatus("Không đọc được trạng thái NFC bridge"));
+        .catch(() => setStatus("Không đọc được trạng thái trình kết nối NFC"));
     }, 800);
 
     return () => window.clearInterval(interval);
@@ -3234,7 +3793,7 @@ function NfcBridgePayment({
       method: "POST",
     });
     if (!response.ok) {
-      setStatus("Nút mô phỏng bị chặn bởi bridge token production");
+      setStatus("Nút mô phỏng bị chặn bởi token production của bridge");
     }
   };
 
@@ -3255,7 +3814,7 @@ function NfcBridgePayment({
         type="button"
       >
         <Nfc size={17} aria-hidden />
-        Mô phỏng bridge tap
+        Mô phỏng chạm thẻ
       </button>
     </div>
   );
@@ -3394,10 +3953,9 @@ function SuccessScreen({
         </div>
         <h2 className="text-2xl font-semibold">Thanh toán thành công</h2>
         <div className="mt-5 space-y-2 text-sm">
-          <Row label="Đơn hàng" value={transaction?.product ?? "Coffee order"} />
+          <Row label="Đơn hàng" value={transaction?.product ?? "Đơn cafe"} />
           <Row label="Đã thanh toán" value={formatVnd(paidAmount)} />
           <Row label="Số dư còn lại" value={formatVnd(balanceAfter)} />
-          <Row label="Mã giao dịch" value={transaction?.transaction_id ?? "TX-XXXX"} />
         </div>
       </div>
       <ActionRow>
@@ -3416,11 +3974,13 @@ function SuccessScreen({
 
 function DebriefScreen({
   onExport,
+  onExportCsv,
   onExportEvents,
   onNew,
   session,
 }: {
   onExport: () => void;
+  onExportCsv: () => void;
   onExportEvents: () => void;
   onNew: () => void;
   session: ExperimentSession;
@@ -3431,8 +3991,9 @@ function DebriefScreen({
         <p>
           Phiên này so sánh trải nghiệm thanh toán tại điểm bán giữa QR + PIN,
           thẻ NFC, Face ID tại POS và PalmPay tĩnh mạch lòng bàn tay. Trọng tâm
-          là cảm nhận về sự đơn giản, thuận tiện, hữu ích, bảo mật, quyền riêng
-          tư, niềm tin và ý định sử dụng.
+          là cảm nhận về bảo mật, sự dễ sử dụng, sự hữu ích, niềm tin vào hệ
+          thống thanh toán và sự sẵn lòng tiếp tục sử dụng phương thức được phân
+          công.
         </p>
         {(session.assigned_group === "FACE_POS" ||
           session.assigned_group === "PALM_VEIN") && (
@@ -3442,14 +4003,22 @@ function DebriefScreen({
           </p>
         )}
       </div>
-      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <button
           className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-[#ead8bf] bg-white px-4 text-sm font-semibold text-stone-700 transition hover:bg-[#fffaf3]"
           onClick={onExport}
           type="button"
         >
           <Download size={17} aria-hidden />
-          Bảng 4 sheet
+          Excel theo phương thức
+        </button>
+        <button
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-[#ead8bf] bg-white px-4 text-sm font-semibold text-stone-700 transition hover:bg-[#fffaf3]"
+          onClick={onExportCsv}
+          type="button"
+        >
+          <Download size={17} aria-hidden />
+          CSV dữ liệu
         </button>
         <button
           className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-[#ead8bf] bg-white px-4 text-sm font-semibold text-stone-700 transition hover:bg-[#fffaf3]"

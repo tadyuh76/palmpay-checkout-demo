@@ -12,9 +12,9 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const siteTitle = "PalmPay Coffee Experiment";
+const siteTitle = "Thí nghiệm PalmPay Coffee";
 const siteDescription =
-  "Coffee checkout prototype for a POS payment experiment with QR + PIN, NFC card, face recognition, and PalmPay palm-vein payment.";
+  "Prototype thanh toán tại quầy cafe cho thí nghiệm POS với QR + PIN, thẻ NFC, Face ID và PalmPay tĩnh mạch lòng bàn tay.";
 
 export const metadata: Metadata = {
   title: {
@@ -22,12 +22,17 @@ export const metadata: Metadata = {
     template: "%s | PalmPay",
   },
   description: siteDescription,
-  applicationName: "PalmPay Checkout Demo",
-  authors: [{ name: "PalmPay Research Team" }],
-  creator: "PalmPay Research Team",
-  publisher: "PalmPay Research Team",
+  applicationName: "Demo thanh toán PalmPay",
+  authors: [{ name: "Nhóm nghiên cứu PalmPay" }],
+  creator: "Nhóm nghiên cứu PalmPay",
+  publisher: "Nhóm nghiên cứu PalmPay",
   keywords: [
     "PalmPay",
+    "thanh toán lòng bàn tay",
+    "thí nghiệm POS",
+    "thanh toán sinh trắc học",
+    "thanh toán QR",
+    "thẻ NFC",
     "palm vein payment",
     "coffee checkout",
     "POS experiment",
@@ -55,8 +60,8 @@ export const metadata: Metadata = {
   openGraph: {
     title: siteTitle,
     description: siteDescription,
-    siteName: "PalmPay Checkout Demo",
-    locale: "en_US",
+    siteName: "Demo thanh toán PalmPay",
+    locale: "vi_VN",
     type: "website",
   },
   twitter: {
@@ -78,7 +83,7 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
+      lang="vi"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col bg-background">{children}</body>
