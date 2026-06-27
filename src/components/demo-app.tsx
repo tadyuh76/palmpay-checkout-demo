@@ -13,6 +13,7 @@ import {
   Hand,
   Loader2,
   Minus,
+  Moon,
   Nfc,
   Plus,
   QrCode,
@@ -24,6 +25,7 @@ import {
   ShieldCheck,
   ShoppingBag,
   Smartphone,
+  Sun,
   TimerReset,
   UserPlus,
 } from "lucide-react";
@@ -48,6 +50,7 @@ import type {
 
 type StudyGroup = "QR_PIN" | "NFC_CARD" | "FACE_POS" | "PALM_VEIN";
 type Cart = Record<string, number>;
+type ThemeMode = "light" | "dark";
 type StepKey =
   | "admin"
   | "consent"
@@ -157,6 +160,7 @@ const storageKeys = {
   assignmentQueue: "palmpay.pos.assignmentQueue",
   assignmentHistory: "palmpay.pos.assignmentHistory",
 };
+const themeStorageKey = "palmpay.pos.theme";
 
 const groupOrder: StudyGroup[] = ["QR_PIN", "NFC_CARD", "FACE_POS", "PALM_VEIN"];
 const categoryOptions: Array<ProductCategory | "All"> = ["All", ...catalogCategories];
@@ -314,6 +318,11 @@ function cn(...classes: Array<string | false | null | undefined>) {
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function readTheme(): ThemeMode {
+  if (typeof window === "undefined") return "light";
+  return window.localStorage.getItem(themeStorageKey) === "dark" ? "dark" : "light";
 }
 
 function formatSeconds(start?: string | null, end?: string | null) {
@@ -920,11 +929,13 @@ export function DemoApp() {
   const [hydrated, setHydrated] = useState(false);
   const [qrPaymentId, setQrPaymentId] = useState<string | null>(null);
   const [session, setSession] = useState<ExperimentSession | null>(null);
+  const [theme, setTheme] = useState<ThemeMode>("light");
   const cartLines = useMemo(() => cartToLines(session?.cart), [session?.cart]);
   const totalCents = useMemo(() => cartTotal(cartLines), [cartLines]);
 
   useEffect(() => {
     window.queueMicrotask(async () => {
+      setTheme(readTheme());
       const paymentId = new URLSearchParams(window.location.search).get("qrPay");
       if (paymentId) {
         setQrPaymentId(paymentId);
@@ -945,6 +956,12 @@ export function DemoApp() {
       setHydrated(true);
     });
   }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    document.documentElement.dataset.palmTheme = theme;
+    window.localStorage.setItem(themeStorageKey, theme);
+  }, [hydrated, theme]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -1402,6 +1419,8 @@ export function DemoApp() {
   };
 
   const resetCurrentSession = () => setSession(null);
+  const toggleTheme = () =>
+    setTheme((current) => (current === "dark" ? "light" : "dark"));
 
   if (!hydrated) {
     return <LoadingScreen />;
@@ -1418,8 +1437,18 @@ export function DemoApp() {
   const payableAmount = session.transaction?.amount ?? totalCents;
 
   return (
-    <main className="min-h-screen bg-[#f6efe5] text-stone-950">
-      <ExperimentHeader session={session} onReset={resetCurrentSession} />
+    <main
+      className={cn(
+        "theme-scope min-h-screen bg-[#f6efe5] text-stone-950",
+        theme === "dark" && "theme-dark",
+      )}
+    >
+      <ExperimentHeader
+        session={session}
+        theme={theme}
+        onReset={resetCurrentSession}
+        onThemeToggle={toggleTheme}
+      />
       <div className="mx-auto grid max-w-[1680px] gap-5 px-4 py-5 sm:px-6 lg:grid-cols-[260px_minmax(0,1fr)]">
         <ProgressRail currentStep={session.current_step} group={session.assigned_group} />
         <section className="min-w-0">
@@ -2011,12 +2040,17 @@ function AdminHome({
 }
 
 function ExperimentHeader({
+  theme,
   session,
+  onThemeToggle,
   onReset,
 }: {
+  theme: ThemeMode;
   session: ExperimentSession;
+  onThemeToggle: () => void;
   onReset: () => void;
 }) {
+  const darkMode = theme === "dark";
   return (
     <header className="sticky top-0 z-20 border-b border-[#ead8bf] bg-[#fffaf3]/95 backdrop-blur">
       <div className="mx-auto flex max-w-[1680px] flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
@@ -2041,6 +2075,19 @@ function ExperimentHeader({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            aria-label={darkMode ? "Chuyển sang giao diện sáng" : "Chuyển sang giao diện tối"}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-[#ead8bf] bg-white text-stone-700 transition hover:bg-[#fffaf3]"
+            onClick={onThemeToggle}
+            title={darkMode ? "Giao diện sáng" : "Giao diện tối"}
+            type="button"
+          >
+            {darkMode ? (
+              <Sun size={17} aria-hidden />
+            ) : (
+              <Moon size={17} aria-hidden />
+            )}
+          </button>
           <span className="rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 py-2 text-sm font-medium text-stone-700">
             Số dư: {formatVnd(startingBalance)}
           </span>
@@ -2412,10 +2459,7 @@ function SurveyScreen({
             key={section.construct}
           >
             <div className="mb-4">
-              <p className="text-xs font-semibold uppercase text-[#7a4a2a]">
-                {section.construct}
-              </p>
-              <h2 className="mt-1 text-base font-semibold text-stone-950">
+              <h2 className="text-base font-semibold text-stone-950">
                 {section.label}
               </h2>
               {section.intro && (
@@ -2437,10 +2481,7 @@ function SurveyScreen({
                   >
                     <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="text-xs font-semibold uppercase text-[#7a4a2a]">
-                          {question.item_id}
-                        </p>
-                        <p className="mt-1 text-sm font-semibold leading-6 text-stone-950">
+                        <p className="text-sm font-semibold leading-6 text-stone-950">
                           {text}
                         </p>
                       </div>
