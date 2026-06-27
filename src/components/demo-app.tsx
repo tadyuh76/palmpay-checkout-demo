@@ -13,7 +13,6 @@ import {
   Hand,
   Loader2,
   Minus,
-  Moon,
   Nfc,
   Plus,
   QrCode,
@@ -25,7 +24,6 @@ import {
   ShieldCheck,
   ShoppingBag,
   Smartphone,
-  Sun,
   TimerReset,
   UserPlus,
 } from "lucide-react";
@@ -50,7 +48,6 @@ import type {
 
 type StudyGroup = "QR_PIN" | "NFC_CARD" | "FACE_POS" | "PALM_VEIN";
 type Cart = Record<string, number>;
-type ThemeMode = "light" | "dark";
 type StepKey =
   | "admin"
   | "consent"
@@ -160,7 +157,7 @@ const storageKeys = {
   assignmentQueue: "palmpay.pos.assignmentQueue",
   assignmentHistory: "palmpay.pos.assignmentHistory",
 };
-const themeStorageKey = "palmpay.pos.theme";
+const localeStorageKey = "palmpay.pos.locale";
 
 const groupOrder: StudyGroup[] = ["QR_PIN", "NFC_CARD", "FACE_POS", "PALM_VEIN"];
 const categoryOptions: Array<ProductCategory | "All"> = ["All", ...catalogCategories];
@@ -170,10 +167,49 @@ const surveySettings = surveyConfig as {
 };
 const defaultLocale: Locale = surveySettings.default_locale === "en" ? "en" : "vi";
 
+const uiText = {
+  admin: { vi: "Quản trị", en: "Admin" },
+  appTitle: { vi: "Nghiên cứu PalmPay Coffee", en: "PalmPay Coffee Study" },
+  balance: { vi: "Số dư", en: "Balance" },
+  cart: { vi: "Giỏ hàng", en: "Cart" },
+  checkout: { vi: "Xác nhận đơn hàng", en: "Order confirmation" },
+  chooseAnswer: { vi: "Chọn câu trả lời", en: "Choose an answer" },
+  chooseMethod: { vi: "Chọn phương thức", en: "Choose method" },
+  complete: { vi: "Hoàn thành", en: "Complete" },
+  completeSetup: { vi: "Hoàn tất đăng ký", en: "Finish setup" },
+  confirmCart: { vi: "Xác nhận giỏ hàng", en: "Confirm cart" },
+  dataCsv: { vi: "CSV dữ liệu", en: "Data CSV" },
+  exportData: { vi: "Xuất dữ liệu", en: "Export data" },
+  flowTitle: { vi: "Luồng thí nghiệm", en: "Experiment flow" },
+  language: { vi: "Ngôn ngữ", en: "Language" },
+  loading: { vi: "Đang tải", en: "Loading" },
+  logCsv: { vi: "CSV nhật ký", en: "Event log CSV" },
+  methodExcel: { vi: "Excel theo phương thức", en: "Excel by method" },
+  newSession: { vi: "Phiên mới", en: "New session" },
+  participantFallback: { vi: "Người tham gia", en: "Participant" },
+  participantName: { vi: "Tên người tham gia", en: "Participant name" },
+  participantPlaceholder: { vi: "Ví dụ: Minh Anh", en: "Example: Minh Anh" },
+  payment: { vi: "Thanh toán", en: "Payment" },
+  postSurveyEyebrow: { vi: "Khảo sát sau trải nghiệm", en: "Post-experience survey" },
+  postSurveyTitle: {
+    vi: "3.3. Đo lường trải nghiệm thanh toán",
+    en: "3.3. Payment Experience Measurement",
+  },
+  selected: { vi: "Đã chọn", en: "Selected" },
+  startSession: { vi: "Bắt đầu phiên", en: "Start session" },
+  surveyContinue: { vi: "Tiếp tục khảo sát", en: "Continue to survey" },
+} satisfies Record<string, LocalizedText>;
+
+type UiTextKey = keyof typeof uiText;
+
 function localizeText(value: string | LocalizedText | undefined, locale = defaultLocale) {
   if (!value) return "";
   if (typeof value === "string") return value;
   return value[locale] ?? value.vi ?? value.en ?? "";
+}
+
+function t(key: UiTextKey, locale = defaultLocale) {
+  return localizeText(uiText[key], locale);
 }
 
 function questionText(question: SurveyQuestion, locale = defaultLocale) {
@@ -269,6 +305,55 @@ const groupCopy: Record<
   },
 };
 
+const groupCopyEn: Record<
+  StudyGroup,
+  Pick<
+    (typeof groupCopy)[StudyGroup],
+    "device" | "instruction" | "label" | "neutralDescription" | "shortLabel"
+  >
+> = {
+  QR_PIN: {
+    label: "QR code + PIN",
+    shortLabel: "QR + PIN",
+    device: "Test phone",
+    neutralDescription:
+      "Participants use the DemoBank app on the test phone to scan the store QR code, enter the amount, and confirm with a test PIN.",
+    instruction:
+      "Open DemoBank, scan the POS QR code, enter the correct amount, and confirm with the test PIN.",
+  },
+  NFC_CARD: {
+    label: "NFC contactless card",
+    shortLabel: "NFC card",
+    device: "NFC card + reader",
+    neutralDescription:
+      "Participants use the test NFC card to tap the reader at the point of sale for a small-value transaction.",
+    instruction:
+      "Tap the test NFC card on the reader when prompted. This session does not require a PIN.",
+  },
+  FACE_POS: {
+    label: "Face ID at POS",
+    shortLabel: "Face ID",
+    device: "POS camera",
+    neutralDescription:
+      "Participants register their name and face before the session, then confirm payment directly with the POS camera.",
+    instruction:
+      "Record the face sample, then confirm with the POS camera during payment.",
+  },
+  PALM_VEIN: {
+    label: "PalmPay palm vein recognition",
+    shortLabel: "PalmPay",
+    device: "PalmPay scanner",
+    neutralDescription:
+      "Participants place their palm over the PalmPay scanner so the system can match the registered palm vein sample.",
+    instruction:
+      "Place your palm over the scanner at the guided distance until the sample is matched successfully.",
+  },
+};
+
+function groupCopyFor(group: StudyGroup, locale = defaultLocale) {
+  return locale === "en" ? { ...groupCopy[group], ...groupCopyEn[group] } : groupCopy[group];
+}
+
 const stepLabels: Record<StepKey, string> = {
   admin: "Quản trị",
   consent: "Đồng ý",
@@ -281,6 +366,23 @@ const stepLabels: Record<StepKey, string> = {
   post: "Khảo sát sau",
   debrief: "Giải thích",
 };
+
+const stepLabelsEn: Record<StepKey, string> = {
+  admin: "Admin",
+  consent: "Consent",
+  pre: "Pre-survey",
+  setup: "Setup",
+  product: "Products",
+  checkout: "Confirm",
+  payment: "Payment",
+  success: "Success",
+  post: "Post-survey",
+  debrief: "Debrief",
+};
+
+function stepLabel(step: StepKey, locale = defaultLocale) {
+  return locale === "en" ? stepLabelsEn[step] : stepLabels[step];
+}
 
 const flowSteps: StepKey[] = [
   "consent",
@@ -320,9 +422,9 @@ function nowIso() {
   return new Date().toISOString();
 }
 
-function readTheme(): ThemeMode {
-  if (typeof window === "undefined") return "light";
-  return window.localStorage.getItem(themeStorageKey) === "dark" ? "dark" : "light";
+function readLocale(): Locale {
+  if (typeof window === "undefined") return defaultLocale;
+  return window.localStorage.getItem(localeStorageKey) === "en" ? "en" : defaultLocale;
 }
 
 function formatSeconds(start?: string | null, end?: string | null) {
@@ -687,49 +789,53 @@ type ExportColumn = {
   label: string;
 };
 
-const baseMethodWorkbookColumns: ExportColumn[] = [
-  { key: "timestamp", label: "Dấu thời gian" },
-  { key: "participant_id", label: "Mã người tham gia" },
-  { key: "participant_name", label: "Tên người tham gia" },
-  { key: "qr_account_name", label: "Tên tài khoản QR" },
-  { key: "face_account_name", label: "Tên đăng ký Face ID" },
-  { key: "method_code", label: "Mã phương thức" },
-  { key: "method", label: "Phương thức" },
-  { key: "method_label", label: "Tên phương thức" },
-  { key: "protocol_version", label: "Phiên bản protocol" },
-  { key: "created_at", label: "Thời điểm tạo phiên" },
-  { key: "consent_at", label: "Thời điểm đồng ý" },
-  { key: "setup_completed_at", label: "Thời điểm hoàn tất đăng ký" },
-  { key: "checkout_completed_at", label: "Thời điểm hoàn tất thanh toán" },
-  { key: "session_status", label: "Trạng thái phiên" },
-  { key: "payment_status_code", label: "Mã trạng thái thanh toán" },
-  { key: "payment_status", label: "Trạng thái thanh toán" },
-  { key: "transaction_id", label: "Mã giao dịch" },
-  { key: "product_summary", label: "Sản phẩm đã chọn" },
-  { key: "cart_total", label: "Tổng tiền" },
-  { key: "cart_items", label: "Chi tiết giỏ hàng" },
-  { key: "setup_duration", label: "Thời lượng đăng ký (giây)" },
-  { key: "checkout_duration", label: "Thời lượng thanh toán (giây)" },
-  { key: "number_of_retries", label: "Số lần thử lại" },
-  { key: "number_of_errors", label: "Số lỗi" },
-  { key: "assistance_required", label: "Cần hỗ trợ" },
-  { key: "template_deleted_at", label: "Thời điểm xóa mẫu sinh trắc" },
-];
+function baseMethodWorkbookColumns(locale = defaultLocale): ExportColumn[] {
+  return [
+    { key: "timestamp", label: locale === "vi" ? "Dấu thời gian" : "Timestamp" },
+    { key: "participant_id", label: locale === "vi" ? "Mã người tham gia" : "Participant ID" },
+    { key: "participant_name", label: locale === "vi" ? "Tên người tham gia" : "Participant name" },
+    { key: "qr_account_name", label: locale === "vi" ? "Tên tài khoản QR" : "QR account name" },
+    { key: "face_account_name", label: locale === "vi" ? "Tên đăng ký Face ID" : "Face ID registration name" },
+    { key: "method_code", label: locale === "vi" ? "Mã phương thức" : "Method code" },
+    { key: "method", label: locale === "vi" ? "Phương thức" : "Method" },
+    { key: "method_label", label: locale === "vi" ? "Tên phương thức" : "Method label" },
+    { key: "protocol_version", label: locale === "vi" ? "Phiên bản protocol" : "Protocol version" },
+    { key: "created_at", label: locale === "vi" ? "Thời điểm tạo phiên" : "Session created at" },
+    { key: "consent_at", label: locale === "vi" ? "Thời điểm đồng ý" : "Consent at" },
+    { key: "setup_completed_at", label: locale === "vi" ? "Thời điểm hoàn tất đăng ký" : "Setup completed at" },
+    { key: "checkout_completed_at", label: locale === "vi" ? "Thời điểm hoàn tất thanh toán" : "Checkout completed at" },
+    { key: "session_status", label: locale === "vi" ? "Trạng thái phiên" : "Session status" },
+    { key: "payment_status_code", label: locale === "vi" ? "Mã trạng thái thanh toán" : "Payment status code" },
+    { key: "payment_status", label: locale === "vi" ? "Trạng thái thanh toán" : "Payment status" },
+    { key: "transaction_id", label: locale === "vi" ? "Mã giao dịch" : "Transaction ID" },
+    { key: "product_summary", label: locale === "vi" ? "Sản phẩm đã chọn" : "Selected products" },
+    { key: "cart_total", label: locale === "vi" ? "Tổng tiền" : "Cart total" },
+    { key: "cart_items", label: locale === "vi" ? "Chi tiết giỏ hàng" : "Cart details" },
+    { key: "setup_duration", label: locale === "vi" ? "Thời lượng đăng ký (giây)" : "Setup duration (seconds)" },
+    { key: "checkout_duration", label: locale === "vi" ? "Thời lượng thanh toán (giây)" : "Checkout duration (seconds)" },
+    { key: "number_of_retries", label: locale === "vi" ? "Số lần thử lại" : "Retry count" },
+    { key: "number_of_errors", label: locale === "vi" ? "Số lỗi" : "Error count" },
+    { key: "assistance_required", label: locale === "vi" ? "Cần hỗ trợ" : "Assistance required" },
+    { key: "template_deleted_at", label: locale === "vi" ? "Thời điểm xóa mẫu sinh trắc" : "Biometric template deleted at" },
+  ];
+}
 
-const codebookColumns: ExportColumn[] = [
-  { key: "phase", label: "Giai đoạn khảo sát" },
-  { key: "item_id", label: "Mã biến quan sát" },
-  { key: "construct", label: "Mã khái niệm" },
-  { key: "construct_label_vi", label: "Khái niệm (VI)" },
-  { key: "construct_label_en", label: "Construct (EN)" },
-  { key: "question_vi", label: "Câu hỏi đo lường (VI)" },
-  { key: "question_en", label: "Measurement item (EN)" },
-  { key: "source_text", label: "Câu gốc" },
-  { key: "scale_min", label: "Likert min" },
-  { key: "scale_max", label: "Likert max" },
-  { key: "reverse_scored", label: "Đảo chiều" },
-  { key: "required", label: "Bắt buộc" },
-];
+function codebookColumns(locale = defaultLocale): ExportColumn[] {
+  return [
+    { key: "phase", label: locale === "vi" ? "Giai đoạn khảo sát" : "Survey phase" },
+    { key: "item_id", label: locale === "vi" ? "Mã biến quan sát" : "Item ID" },
+    { key: "construct", label: locale === "vi" ? "Mã khái niệm" : "Construct code" },
+    { key: "construct_label_vi", label: "Khái niệm (VI)" },
+    { key: "construct_label_en", label: "Construct (EN)" },
+    { key: "question_vi", label: "Câu hỏi đo lường (VI)" },
+    { key: "question_en", label: "Measurement item (EN)" },
+    { key: "source_text", label: locale === "vi" ? "Câu gốc" : "Source text" },
+    { key: "scale_min", label: "Likert min" },
+    { key: "scale_max", label: "Likert max" },
+    { key: "reverse_scored", label: locale === "vi" ? "Đảo chiều" : "Reverse scored" },
+    { key: "required", label: locale === "vi" ? "Bắt buộc" : "Required" },
+  ];
+}
 
 function surveyExportColumns(
   phase: "post",
@@ -750,7 +856,7 @@ function surveyExportColumns(
 
 function methodWorkbookColumns(locale = defaultLocale): ExportColumn[] {
   return [
-    ...baseMethodWorkbookColumns,
+    ...baseMethodWorkbookColumns(locale),
     ...surveyExportColumns("post", postQuestions, locale),
   ];
 }
@@ -772,7 +878,7 @@ function buildSurveyCodebookRows(): Array<Record<string, unknown>> {
   }));
 }
 
-function buildMethodWorkbookRow(session: ExperimentSession) {
+function buildMethodWorkbookRow(session: ExperimentSession, locale = defaultLocale) {
   const group = session.assigned_group;
   const row: Record<string, unknown> = {
     timestamp:
@@ -785,7 +891,7 @@ function buildMethodWorkbookRow(session: ExperimentSession) {
     face_account_name: session.face_account_name ?? "",
     method_code: methodCode(group),
     method: group ?? "",
-    method_label: group ? groupCopy[group].label : "",
+    method_label: group ? groupCopyFor(group, locale).label : "",
     protocol_version: session.protocol_version,
     created_at: session.created_at,
     consent_at: session.consent_at ?? "",
@@ -851,7 +957,7 @@ function downloadMethodWorkbook(
     .map((group) => {
       const rows = sessions
         .filter((session) => session.assigned_group === group)
-        .map(buildMethodWorkbookRow);
+        .map((session) => buildMethodWorkbookRow(session, locale));
       const tableRows = [
         xmlRow(headerValues),
         ...rows.map((row) =>
@@ -872,9 +978,9 @@ function downloadMethodWorkbook(
   const codebookSheet = [
     '<Worksheet ss:Name="Codebook">',
     "<Table>",
-    xmlRow(codebookColumns.map((column) => column.label)),
+    xmlRow(codebookColumns(locale).map((column) => column.label)),
     ...codebookRows.map((row) =>
-      xmlRow(codebookColumns.map((column) => row[column.key])),
+      xmlRow(codebookColumns(locale).map((column) => row[column.key])),
     ),
     "</Table>",
     "</Worksheet>",
@@ -907,7 +1013,11 @@ function downloadMethodCsv(
   locale = defaultLocale,
 ) {
   const columns = methodWorkbookColumns(locale);
-  downloadLabeledCsv(filename, columns, sessions.map(buildMethodWorkbookRow));
+  downloadLabeledCsv(
+    filename,
+    columns,
+    sessions.map((session) => buildMethodWorkbookRow(session, locale)),
+  );
 }
 
 function allStoredSessions(current?: ExperimentSession | null) {
@@ -929,13 +1039,13 @@ export function DemoApp() {
   const [hydrated, setHydrated] = useState(false);
   const [qrPaymentId, setQrPaymentId] = useState<string | null>(null);
   const [session, setSession] = useState<ExperimentSession | null>(null);
-  const [theme, setTheme] = useState<ThemeMode>("light");
+  const [locale, setLocale] = useState<Locale>(defaultLocale);
   const cartLines = useMemo(() => cartToLines(session?.cart), [session?.cart]);
   const totalCents = useMemo(() => cartTotal(cartLines), [cartLines]);
 
   useEffect(() => {
     window.queueMicrotask(async () => {
-      setTheme(readTheme());
+      setLocale(readLocale());
       const paymentId = new URLSearchParams(window.location.search).get("qrPay");
       if (paymentId) {
         setQrPaymentId(paymentId);
@@ -959,9 +1069,9 @@ export function DemoApp() {
 
   useEffect(() => {
     if (!hydrated) return;
-    document.documentElement.dataset.palmTheme = theme;
-    window.localStorage.setItem(themeStorageKey, theme);
-  }, [hydrated, theme]);
+    document.documentElement.lang = locale;
+    window.localStorage.setItem(localeStorageKey, locale);
+  }, [hydrated, locale]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -1090,7 +1200,7 @@ export function DemoApp() {
     setStep("checkout", {
       amount: totalCents,
       item_count: cartCount(cartLines),
-      product_summary: summarizeCart(cartLines),
+      product_summary: summarizeCart(cartLines, locale),
     });
   };
 
@@ -1246,7 +1356,7 @@ export function DemoApp() {
           transaction_id: `TX-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,
           participant_id: current.participant_id,
           method: current.assigned_group ?? "QR_PIN",
-          product: summarizeCart(selectedItems),
+          product: summarizeCart(selectedItems, locale),
           items: selectedItems,
           amount,
           balance_before: startingBalance,
@@ -1271,7 +1381,7 @@ export function DemoApp() {
             metadata: {
               amount,
               item_count: cartCount(selectedItems),
-              product_summary: summarizeCart(selectedItems),
+              product_summary: summarizeCart(selectedItems, locale),
             },
           },
         ],
@@ -1419,41 +1529,44 @@ export function DemoApp() {
   };
 
   const resetCurrentSession = () => setSession(null);
-  const toggleTheme = () =>
-    setTheme((current) => (current === "dark" ? "light" : "dark"));
 
   if (!hydrated) {
-    return <LoadingScreen />;
+    return <LoadingScreen locale={locale} />;
   }
 
   if (qrPaymentId) {
-    return <QrMobilePayment transferId={qrPaymentId} />;
+    return <QrMobilePayment locale={locale} transferId={qrPaymentId} />;
   }
 
   if (!session) {
-    return <AdminHome onCreate={startNewSession} />;
+    return (
+      <AdminHome
+        locale={locale}
+        onCreate={startNewSession}
+        onLocaleChange={setLocale}
+      />
+    );
   }
 
   const payableAmount = session.transaction?.amount ?? totalCents;
 
   return (
-    <main
-      className={cn(
-        "theme-scope min-h-screen bg-[#f6efe5] text-stone-950",
-        theme === "dark" && "theme-dark",
-      )}
-    >
+    <main className="min-h-screen bg-[#f6efe5] text-stone-950">
       <ExperimentHeader
+        locale={locale}
+        onLocaleChange={setLocale}
         session={session}
-        theme={theme}
         onReset={resetCurrentSession}
-        onThemeToggle={toggleTheme}
       />
       <div className="mx-auto grid max-w-[1680px] gap-5 px-4 py-5 sm:px-6 lg:grid-cols-[260px_minmax(0,1fr)]">
-        <ProgressRail currentStep={session.current_step} group={session.assigned_group} />
+        <ProgressRail
+          currentStep={session.current_step}
+          group={session.assigned_group}
+          locale={locale}
+        />
         <section className="min-w-0">
           {session.current_step === "consent" && (
-            <ConsentScreen onContinue={completeConsent} />
+            <ConsentScreen locale={locale} onContinue={completeConsent} />
           )}
           {session.current_step === "setup" && session.assigned_group && (
             <SetupScreen
@@ -1461,6 +1574,7 @@ export function DemoApp() {
               faceAccountName={session.face_account_name ?? session.participant_name}
               faceDescriptor={session.face_descriptor}
               group={session.assigned_group}
+              locale={locale}
               onBiometricConsent={recordBiometricConsent}
               onComplete={completeSetup}
               onFaceEnroll={recordFaceEnrollment}
@@ -1474,6 +1588,7 @@ export function DemoApp() {
             <ProductScreen
               cart={session.cart ?? {}}
               cartLines={cartLines}
+              locale={locale}
               onAdd={(productId) => updateCart(productId, 1)}
               onContinue={continueToCheckout}
               onRemove={(productId) => updateCart(productId, -1)}
@@ -1484,6 +1599,7 @@ export function DemoApp() {
             <CheckoutScreen
               cartLines={cartLines}
               group={session.assigned_group}
+              locale={locale}
               onPay={startCheckout}
               totalCents={totalCents}
             />
@@ -1495,8 +1611,11 @@ export function DemoApp() {
               faceDescriptor={session.face_descriptor}
               group={session.assigned_group}
               items={session.transaction?.items ?? cartLines}
+              locale={locale}
               pin={session.qr_pin ?? ""}
-              productSummary={session.transaction?.product ?? summarizeCart(cartLines)}
+              productSummary={
+                session.transaction?.product ?? summarizeCart(cartLines, locale)
+              }
               retries={session.transaction?.number_of_retries ?? 0}
               senderName={
                 session.assigned_group === "FACE_POS"
@@ -1513,6 +1632,7 @@ export function DemoApp() {
           )}
           {session.current_step === "success" && (
             <SuccessScreen
+              locale={locale}
               transaction={session.transaction}
               onContinue={() => {
                 logEvent("post_survey_started", "post", { opened_after: "paid" });
@@ -1523,7 +1643,8 @@ export function DemoApp() {
           {session.current_step === "post" && (
             <SurveyScreen
               answers={session.post_answers}
-              eyebrow="Khảo sát sau trải nghiệm"
+              eyebrow={t("postSurveyEyebrow", locale)}
+              locale={locale}
               onAnswer={(itemId, value) =>
                 updateSession((current) => ({
                   ...current,
@@ -1532,22 +1653,25 @@ export function DemoApp() {
               }
               onSubmit={completePostSurvey}
               questions={postQuestions}
-              title="3.3. Đo lường trải nghiệm thanh toán"
+              title={t("postSurveyTitle", locale)}
             />
           )}
           {session.current_step === "debrief" && (
             <DebriefScreen
+              locale={locale}
               session={session}
               onExport={() =>
                 downloadMethodWorkbook(
                   "palmpay-method-sheets.xls",
                   allStoredSessions(session),
+                  locale,
                 )
               }
               onExportCsv={() =>
                 downloadMethodCsv(
                   "palmpay-wide.csv",
                   allStoredSessions(session),
+                  locale,
                 )
               }
               onExportEvents={() =>
@@ -1565,18 +1689,24 @@ export function DemoApp() {
   );
 }
 
-function LoadingScreen() {
+function LoadingScreen({ locale = defaultLocale }: { locale?: Locale }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#f6efe5]">
       <div className="inline-flex items-center gap-3 rounded-lg border border-[#ead8bf] bg-white px-4 py-3 text-sm text-stone-600 shadow-sm">
         <Loader2 className="animate-spin" size={18} aria-hidden />
-        Đang tải
+        {t("loading", locale)}
       </div>
     </div>
   );
 }
 
-function QrMobilePayment({ transferId }: { transferId: string }) {
+function QrMobilePayment({
+  locale = defaultLocale,
+  transferId,
+}: {
+  locale?: Locale;
+  transferId: string;
+}) {
   const [transfer, setTransfer] = useState<PublicQrTransfer | null>(null);
   const [pin, setPin] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1626,7 +1756,7 @@ function QrMobilePayment({ transferId }: { transferId: string }) {
   };
 
   if (!transfer && !error) {
-    return <LoadingScreen />;
+    return <LoadingScreen locale={locale} />;
   }
 
   return (
@@ -1644,18 +1774,21 @@ function QrMobilePayment({ transferId }: { transferId: string }) {
           {transfer ? (
             <>
               <div className="space-y-3 rounded-lg border border-[#ead8bf] bg-white p-4">
-                <Row label="Người gửi" value={transfer.senderName} />
-                <Row label="Người nhận" value={transfer.receiverName} />
-                <Row label="Sản phẩm" value={transfer.productSummary} />
-                <Row label="Số tiền" value={formatVnd(transfer.amount)} strong />
+                <Row label={locale === "vi" ? "Người gửi" : "Sender"} value={transfer.senderName} />
+                <Row label={locale === "vi" ? "Người nhận" : "Receiver"} value={transfer.receiverName} />
+                <Row label={locale === "vi" ? "Sản phẩm" : "Products"} value={transfer.productSummary} />
+                <Row label={locale === "vi" ? "Số tiền" : "Amount"} value={formatVnd(transfer.amount)} strong />
               </div>
 
               {transfer.status === "paid" ? (
                 <div className="mt-5 rounded-lg border border-[#d8b88b] bg-[#fff3df] p-5 text-center text-[#4f2f1c]">
                   <CheckCircle2 className="mx-auto mb-3" size={36} aria-hidden />
-                  <h2 className="text-xl font-semibold">Thanh toán hoàn tất</h2>
+                  <h2 className="text-xl font-semibold">
+                    {locale === "vi" ? "Thanh toán hoàn tất" : "Payment complete"}
+                  </h2>
                   <p className="mt-2 text-sm">
-                    Mã xác nhận: {transfer.authorizationCode ?? "QR-PAID"}
+                    {locale === "vi" ? "Mã xác nhận" : "Confirmation code"}:{" "}
+                    {transfer.authorizationCode ?? "QR-PAID"}
                   </p>
                 </div>
               ) : (
@@ -1669,7 +1802,7 @@ function QrMobilePayment({ transferId }: { transferId: string }) {
                   <div className="mt-5">
                     <label className="block">
                       <span className="mb-1 block text-sm font-medium text-stone-700">
-                        Nhập PIN DemoBank
+                        {locale === "vi" ? "Nhập PIN DemoBank" : "Enter DemoBank PIN"}
                       </span>
                       <input
                         className="h-12 w-full rounded-lg border border-[#ead8bf] bg-white px-3 text-center text-lg font-semibold tracking-[0.3em] outline-none focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
@@ -1690,7 +1823,9 @@ function QrMobilePayment({ transferId }: { transferId: string }) {
                       type="button"
                     >
                       {busy ? <Loader2 className="animate-spin" size={17} /> : <BadgeCheck size={17} />}
-                      {busy ? "Đang xác minh..." : "Xác nhận thanh toán"}
+                      {busy
+                        ? locale === "vi" ? "Đang xác minh..." : "Verifying..."
+                        : locale === "vi" ? "Xác nhận thanh toán" : "Confirm payment"}
                     </button>
                   </div>
                 )
@@ -1879,9 +2014,13 @@ function FaceMobileConfirmation({
 }
 
 function AdminHome({
+  locale,
   onCreate,
+  onLocaleChange,
 }: {
+  locale: Locale;
   onCreate: (participantName: string, selectedGroup: StudyGroup) => void;
+  onLocaleChange: (locale: Locale) => void;
 }) {
   const [history, setHistory] = useState<AssignmentHistoryItem[]>([]);
   const [completed, setCompleted] = useState<ExperimentSession[]>([]);
@@ -1917,7 +2056,7 @@ function AdminHome({
                 width={264}
               />
               <h1 className="mt-1 text-2xl font-semibold tracking-normal">
-                Thí nghiệm PalmPay Coffee
+                {t("appTitle", locale)}
               </h1>
             </div>
             <form
@@ -1928,15 +2067,18 @@ function AdminHome({
                 onCreate(trimmedName, selectedGroup);
               }}
             >
+              <div className="flex justify-end">
+                <LocaleSwitcher locale={locale} onChange={onLocaleChange} />
+              </div>
               <label className="text-sm font-medium text-stone-700" htmlFor="participant-name">
-                Tên người tham gia
+                {t("participantName", locale)}
               </label>
               <input
                 autoComplete="off"
                 className="h-11 rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 text-sm outline-none transition focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
                 id="participant-name"
                 onChange={(event) => setParticipantName(event.target.value)}
-                placeholder="Ví dụ: Minh Anh"
+                placeholder={t("participantPlaceholder", locale)}
                 value={participantName}
               />
               <button
@@ -1945,7 +2087,7 @@ function AdminHome({
                 type="submit"
               >
                 <UserPlus size={17} aria-hidden />
-                Bắt đầu phiên
+                {t("startSession", locale)}
               </button>
             </form>
           </div>
@@ -1953,18 +2095,18 @@ function AdminHome({
           <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
             <div>
               <h2 className="text-sm font-semibold text-stone-950">
-                Chọn phương thức
+                {t("chooseMethod", locale)}
               </h2>
             </div>
             {selectedGroup && (
               <span className="rounded-full border border-[#ead8bf] bg-[#fffaf3] px-3 py-1 text-xs font-semibold text-[#6f3f24]">
-                Đã chọn {groupCopy[selectedGroup].shortLabel}
+                {t("selected", locale)} {groupCopyFor(selectedGroup, locale).shortLabel}
               </span>
             )}
           </div>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {counts.map(({ group, count }) => {
-              const copy = groupCopy[group];
+              const copy = groupCopyFor(group, locale);
               const Icon = copy.icon;
               const selected = selectedGroup === group;
               return (
@@ -1982,7 +2124,7 @@ function AdminHome({
                   <div className="mb-3 flex items-center justify-between">
                     <Icon size={20} aria-hidden />
                     <span className="rounded-full bg-white/70 px-2 py-1 text-xs font-semibold">
-                      {count} người
+                      {count} {locale === "vi" ? "người" : "participants"}
                     </span>
                   </div>
                   <h2 className="text-sm font-semibold">{copy.shortLabel}</h2>
@@ -1995,27 +2137,27 @@ function AdminHome({
 
         <aside className="space-y-5">
           <section className="rounded-lg border border-[#ead8bf] bg-white p-4 shadow-sm">
-            <h2 className="font-semibold">Xuất dữ liệu</h2>
+            <h2 className="font-semibold">{t("exportData", locale)}</h2>
             <div className="mt-3 grid gap-2">
               <button
                 className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#ead8bf] bg-white px-3 text-sm font-semibold text-stone-700 transition hover:bg-[#fffaf3]"
                 disabled={completed.length === 0}
                 onClick={() =>
-                  downloadMethodWorkbook("palmpay-method-sheets.xls", completed)
+                  downloadMethodWorkbook("palmpay-method-sheets.xls", completed, locale)
                 }
                 type="button"
               >
                 <Download size={16} aria-hidden />
-                Excel theo phương thức
+                {t("methodExcel", locale)}
               </button>
               <button
                 className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#ead8bf] bg-white px-3 text-sm font-semibold text-stone-700 transition hover:bg-[#fffaf3]"
                 disabled={completed.length === 0}
-                onClick={() => downloadMethodCsv("palmpay-wide.csv", completed)}
+                onClick={() => downloadMethodCsv("palmpay-wide.csv", completed, locale)}
                 type="button"
               >
                 <Download size={16} aria-hidden />
-                CSV dữ liệu
+                {t("dataCsv", locale)}
               </button>
               <button
                 className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#ead8bf] bg-white px-3 text-sm font-semibold text-stone-700 transition hover:bg-[#fffaf3]"
@@ -2029,7 +2171,7 @@ function AdminHome({
                 type="button"
               >
                 <ReceiptText size={16} aria-hidden />
-                CSV nhật ký
+                {t("logCsv", locale)}
               </button>
             </div>
           </section>
@@ -2040,17 +2182,16 @@ function AdminHome({
 }
 
 function ExperimentHeader({
-  theme,
+  locale,
+  onLocaleChange,
   session,
-  onThemeToggle,
   onReset,
 }: {
-  theme: ThemeMode;
+  locale: Locale;
+  onLocaleChange: (locale: Locale) => void;
   session: ExperimentSession;
-  onThemeToggle: () => void;
   onReset: () => void;
 }) {
-  const darkMode = theme === "dark";
   return (
     <header className="sticky top-0 z-20 border-b border-[#ead8bf] bg-[#fffaf3]/95 backdrop-blur">
       <div className="mx-auto flex max-w-[1680px] flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
@@ -2067,29 +2208,17 @@ function ExperimentHeader({
           </div>
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold">
-              Nghiên cứu PalmPay Coffee
+              {t("appTitle", locale)}
             </p>
             <p className="truncate text-xs text-stone-500">
-              {session.participant_name || "Người tham gia"}
+              {session.participant_name || t("participantFallback", locale)}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            aria-label={darkMode ? "Chuyển sang giao diện sáng" : "Chuyển sang giao diện tối"}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-[#ead8bf] bg-white text-stone-700 transition hover:bg-[#fffaf3]"
-            onClick={onThemeToggle}
-            title={darkMode ? "Giao diện sáng" : "Giao diện tối"}
-            type="button"
-          >
-            {darkMode ? (
-              <Sun size={17} aria-hidden />
-            ) : (
-              <Moon size={17} aria-hidden />
-            )}
-          </button>
+          <LocaleSwitcher locale={locale} onChange={onLocaleChange} />
           <span className="rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 py-2 text-sm font-medium text-stone-700">
-            Số dư: {formatVnd(startingBalance)}
+            {t("balance", locale)}: {formatVnd(startingBalance)}
           </span>
           <button
             className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#ead8bf] bg-white px-3 text-sm font-semibold text-stone-700 transition hover:bg-[#fffaf3]"
@@ -2097,7 +2226,7 @@ function ExperimentHeader({
             type="button"
           >
             <RotateCcw size={16} aria-hidden />
-            Quản trị
+            {t("admin", locale)}
           </button>
         </div>
       </div>
@@ -2105,19 +2234,54 @@ function ExperimentHeader({
   );
 }
 
+function LocaleSwitcher({
+  locale,
+  onChange,
+}: {
+  locale: Locale;
+  onChange: (locale: Locale) => void;
+}) {
+  return (
+    <div
+      aria-label={t("language", locale)}
+      className="inline-flex h-10 items-center rounded-lg border border-[#ead8bf] bg-white p-1"
+      role="group"
+    >
+      {(["vi", "en"] as const).map((item) => (
+        <button
+          aria-pressed={locale === item}
+          className={cn(
+            "h-8 rounded-md px-2.5 text-xs font-semibold transition",
+            locale === item
+              ? "bg-[#6f3f24] text-white"
+              : "text-stone-700 hover:bg-[#fffaf3]",
+          )}
+          key={item}
+          onClick={() => onChange(item)}
+          type="button"
+        >
+          {item.toUpperCase()}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function ProgressRail({
   currentStep,
   group,
+  locale = defaultLocale,
 }: {
   currentStep: StepKey;
   group: StudyGroup | null;
+  locale?: Locale;
 }) {
   const activeIndex = flowSteps.indexOf(currentStep);
   return (
     <aside className="self-start rounded-lg border border-[#ead8bf] bg-white p-4 shadow-sm lg:sticky lg:top-20 lg:-mt-4 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
       <div className="mb-4 flex items-center gap-2">
         <ClipboardCheck size={18} aria-hidden />
-        <h2 className="font-semibold">Luồng thí nghiệm</h2>
+        <h2 className="font-semibold">{t("flowTitle", locale)}</h2>
       </div>
       <div className="space-y-2">
         {flowSteps.map((step, index) => {
@@ -2136,35 +2300,49 @@ function ProgressRail({
               key={step}
             >
               {done ? <Check size={15} aria-hidden /> : <span className="h-2 w-2 rounded-full bg-current" />}
-              {stepLabels[step]}
+              {stepLabel(step, locale)}
             </div>
           );
         })}
       </div>
       {group && (
-        <div className={cn("mt-4 rounded-lg border p-3", groupCopy[group].color)}>
-          <p className="text-sm font-semibold">{groupCopy[group].label}</p>
+        <div className={cn("mt-4 rounded-lg border p-3", groupCopyFor(group, locale).color)}>
+          <p className="text-sm font-semibold">{groupCopyFor(group, locale).label}</p>
         </div>
       )}
     </aside>
   );
 }
 
-function ConsentScreen({ onContinue }: { onContinue: () => void }) {
+function ConsentScreen({
+  locale = defaultLocale,
+  onContinue,
+}: {
+  locale?: Locale;
+  onContinue: () => void;
+}) {
   const [checked, setChecked] = useState(false);
   return (
     <Panel
-      eyebrow="Đồng ý tham gia"
+      eyebrow={locale === "vi" ? "Đồng ý tham gia" : "Participation consent"}
       icon={ShieldCheck}
-      title="Thông tin nghiên cứu"
+      title={locale === "vi" ? "Thông tin nghiên cứu" : "Study information"}
     >
       <div className="grid gap-3 text-sm leading-6 text-stone-600 sm:grid-cols-2">
-        {[
-          "Đây là nghiên cứu học thuật.",
-          "Không sử dụng tiền thật hoặc tài khoản thật.",
-          "Bạn có thể dừng tham gia bất kỳ lúc nào.",
-          "Dữ liệu chỉ được sử dụng cho mục đích nghiên cứu.",
-        ].map((item) => (
+        {(locale === "vi"
+          ? [
+              "Đây là nghiên cứu học thuật.",
+              "Không sử dụng tiền thật hoặc tài khoản thật.",
+              "Bạn có thể dừng tham gia bất kỳ lúc nào.",
+              "Dữ liệu chỉ được sử dụng cho mục đích nghiên cứu.",
+            ]
+          : [
+              "This is an academic study.",
+              "No real money or real account is used.",
+              "You may stop participating at any time.",
+              "Data is used only for research purposes.",
+            ]
+        ).map((item) => (
           <div
             className="rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 py-3"
             key={item}
@@ -2181,8 +2359,9 @@ function ConsentScreen({ onContinue }: { onContinue: () => void }) {
           type="checkbox"
         />
         <span>
-          Tôi đã đọc thông tin trên và đồng ý tiếp tục trong phiên thử nghiệm
-          này.
+          {locale === "vi"
+            ? "Tôi đã đọc thông tin trên và đồng ý tiếp tục trong phiên thử nghiệm này."
+            : "I have read the information above and agree to continue this test session."}
         </span>
       </label>
       <ActionRow>
@@ -2192,7 +2371,7 @@ function ConsentScreen({ onContinue }: { onContinue: () => void }) {
           onClick={onContinue}
           type="button"
         >
-          Tiếp tục
+          {locale === "vi" ? "Tiếp tục" : "Continue"}
           <ArrowRight size={17} aria-hidden />
         </button>
       </ActionRow>
@@ -2205,6 +2384,7 @@ function SetupScreen({
   faceAccountName,
   faceDescriptor,
   group,
+  locale = defaultLocale,
   onBiometricConsent,
   onComplete,
   onFaceEnroll,
@@ -2217,6 +2397,7 @@ function SetupScreen({
   faceAccountName: string;
   faceDescriptor?: number[] | null;
   group: StudyGroup;
+  locale?: Locale;
   onBiometricConsent: () => void;
   onComplete: (metadata?: Record<string, unknown>) => void;
   onFaceEnroll: (descriptor: number[], metadata: Record<string, unknown>) => void;
@@ -2225,11 +2406,11 @@ function SetupScreen({
   qrPin: string;
   templateRef?: string | null;
 }) {
-  const copy = groupCopy[group];
+  const copy = groupCopyFor(group, locale);
   const Icon = copy.icon;
   const pinReady = /^\d{4}$/.test(qrPin);
   const biometricConsentReady = Boolean(biometricConsentAt);
-  const faceReady = biometricConsentReady && Boolean(faceDescriptor?.length);
+  const faceReady = Boolean(faceDescriptor?.length);
   const setupReady =
     group === "QR_PIN"
       ? pinReady
@@ -2247,7 +2428,6 @@ function SetupScreen({
     }
     if (group === "FACE_POS") {
       onComplete({
-        biometric_consent_at: biometricConsentAt,
         face_registered: true,
         template_ref: templateRef,
       });
@@ -2266,7 +2446,11 @@ function SetupScreen({
   };
 
   return (
-    <Panel eyebrow="Đăng ký phương thức" icon={Icon} title={copy.label}>
+    <Panel
+      eyebrow={locale === "vi" ? "Đăng ký phương thức" : "Payment method setup"}
+      icon={Icon}
+      title={copy.label}
+    >
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-4">
           {group === "QR_PIN" && (
@@ -2275,11 +2459,11 @@ function SetupScreen({
                 DemoBank QR
               </h2>
               <p className="mt-1 text-xs leading-5 text-stone-500">
-                Người gửi: {participantName}
+                {locale === "vi" ? "Người gửi" : "Sender"}: {participantName}
               </p>
               <label className="mt-4 block max-w-xs">
                 <span className="mb-1 block text-sm font-medium text-stone-700">
-                  Mã PIN 4 số
+                  {locale === "vi" ? "Mã PIN 4 số" : "4-digit PIN"}
                 </span>
                 <input
                   className="h-11 w-full rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 text-center text-lg font-semibold tracking-[0.25em] outline-none transition focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
@@ -2302,11 +2486,12 @@ function SetupScreen({
                 <Nfc className="mt-0.5 text-[#405438]" size={22} aria-hidden />
                 <div>
                   <h2 className="text-sm font-semibold text-stone-950">
-                    Thẻ NFC thử nghiệm
+                    {locale === "vi" ? "Thẻ NFC thử nghiệm" : "Test NFC card"}
                   </h2>
                   <p className="mt-1 text-sm leading-6 text-stone-600">
-                    Chuẩn bị thẻ test cho người tham gia. Không cần nhập thông
-                    tin định danh bổ sung.
+                    {locale === "vi"
+                      ? "Chuẩn bị thẻ test cho người tham gia. Không cần nhập thông tin định danh bổ sung."
+                      : "Prepare the test card for the participant. No additional identity information is required."}
                   </p>
                 </div>
               </div>
@@ -2317,30 +2502,16 @@ function SetupScreen({
             <div className="rounded-lg border border-[#ead8bf] bg-[#fffaf3] p-4">
               <div className="mb-4">
                 <h2 className="text-sm font-semibold text-stone-950">
-                  Đăng ký Face ID
+                  {locale === "vi" ? "Đăng ký Face ID" : "Face ID setup"}
                 </h2>
                 <p className="mt-1 text-xs leading-5 text-stone-500">
-                  Tên tài khoản: {faceAccountName || participantName}
+                  {locale === "vi" ? "Tên tài khoản" : "Account name"}:{" "}
+                  {faceAccountName || participantName}
                 </p>
               </div>
-              <label className="mb-4 flex items-start gap-3 rounded-lg border border-[#ead8bf] bg-white p-3 text-sm text-stone-700">
-                <input
-                  checked={biometricConsentReady}
-                  className="mt-0.5 h-4 w-4 shrink-0 accent-[#6f3f24]"
-                  disabled={biometricConsentReady}
-                  onChange={(event) => {
-                    if (event.target.checked) onBiometricConsent();
-                  }}
-                  type="checkbox"
-                />
-                <span>
-                  Tôi đồng ý tạo mẫu đặc trưng khuôn mặt cho phiên thử nghiệm
-                  này. Mẫu được mã hóa khi lưu trữ và không lưu ảnh gốc.
-                </span>
-              </label>
               <FaceEnrollment
-                consentReady={biometricConsentReady}
                 enrolled={Boolean(faceDescriptor?.length)}
+                locale={locale}
                 onEnroll={onFaceEnroll}
               />
             </div>
@@ -2352,10 +2523,14 @@ function SetupScreen({
                 <Hand className="mt-0.5 text-[#7a4a2a]" size={22} aria-hidden />
                 <div>
                   <h2 className="text-sm font-semibold text-stone-950">
-                    PalmPay tĩnh mạch lòng bàn tay
+                    {locale === "vi"
+                      ? "PalmPay tĩnh mạch lòng bàn tay"
+                      : "PalmPay palm vein"}
                   </h2>
                   <p className="mt-1 text-sm leading-6 text-stone-600">
-                    Mẫu tĩnh mạch lòng bàn tay chỉ được mô phỏng trong phiên demo.
+                    {locale === "vi"
+                      ? "Mẫu tĩnh mạch lòng bàn tay chỉ được mô phỏng trong phiên demo."
+                      : "The palm vein sample is simulated only for this demo session."}
                   </p>
                 </div>
               </div>
@@ -2370,8 +2545,9 @@ function SetupScreen({
                   type="checkbox"
                 />
                 <span>
-                  Tôi đồng ý tạo mẫu tĩnh mạch lòng bàn tay mô phỏng cho phiên
-                  thử nghiệm này.
+                  {locale === "vi"
+                    ? "Tôi đồng ý tạo mẫu tĩnh mạch lòng bàn tay mô phỏng cho phiên thử nghiệm này."
+                    : "I agree to create a simulated palm vein sample for this test session."}
                 </span>
               </label>
             </div>
@@ -2396,7 +2572,7 @@ function SetupScreen({
           onClick={finishSetup}
           type="button"
         >
-          Hoàn tất đăng ký
+          {t("completeSetup", locale)}
           <ArrowRight size={17} aria-hidden />
         </button>
       </ActionRow>
@@ -2494,7 +2670,7 @@ function SurveyScreen({
                             label: option,
                             value: String(index + 1),
                           }))}
-                          placeholder="Chọn câu trả lời"
+                          placeholder={t("chooseAnswer", locale)}
                           value={selectAnswerValue(question, answerValue)}
                         />
                       </div>
@@ -2521,7 +2697,7 @@ function SurveyScreen({
           onClick={onSubmit}
           type="button"
         >
-          Hoàn thành
+          {t("complete", locale)}
           <ArrowRight size={17} aria-hidden />
         </button>
       </ActionRow>
@@ -2642,9 +2818,24 @@ const enrollmentPrompts = [
   "Mẫu 3: nhìn thẳng lại, giữ ánh sáng đều trên mặt.",
 ];
 
-function enrollmentPrompt(sampleCount: number, enrolled: boolean) {
-  if (enrolled) return "Đăng ký hoàn tất. Mẫu khuôn mặt đã sẵn sàng để xác nhận.";
-  return enrollmentPrompts[Math.min(sampleCount, enrollmentPrompts.length - 1)];
+const enrollmentPromptsEn = [
+  "Sample 1: look straight at the camera and keep your face in frame.",
+  "Sample 2: turn your face slightly left or right.",
+  "Sample 3: look straight again with even lighting.",
+];
+
+function enrollmentPrompt(
+  sampleCount: number,
+  enrolled: boolean,
+  locale = defaultLocale,
+) {
+  if (enrolled) {
+    return locale === "vi"
+      ? "Đăng ký hoàn tất. Mẫu khuôn mặt đã sẵn sàng để xác nhận."
+      : "Setup complete. The face sample is ready for confirmation.";
+  }
+  const prompts = locale === "vi" ? enrollmentPrompts : enrollmentPromptsEn;
+  return prompts[Math.min(sampleCount, prompts.length - 1)];
 }
 
 function evaluateEnrollmentSample(
@@ -2674,12 +2865,12 @@ function evaluateEnrollmentSample(
 }
 
 function FaceEnrollment({
-  consentReady,
   enrolled,
+  locale = defaultLocale,
   onEnroll,
 }: {
-  consentReady: boolean;
   enrolled: boolean;
+  locale?: Locale;
   onEnroll: (descriptor: number[], metadata: Record<string, unknown>) => void;
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -2690,8 +2881,12 @@ function FaceEnrollment({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState(
     enrolled
-      ? "Đăng ký hoàn tất. Mẫu khuôn mặt đã sẵn sàng."
-      : "Đánh dấu đồng ý, mở camera, rồi ghi 3 mẫu theo hướng dẫn.",
+      ? locale === "vi"
+        ? "Đăng ký hoàn tất. Mẫu khuôn mặt đã sẵn sàng."
+        : "Setup complete. The face sample is ready."
+      : locale === "vi"
+        ? "Mở camera, rồi ghi 3 mẫu theo hướng dẫn."
+        : "Open the camera, then record 3 samples using the guide.",
   );
   const [sampleCount, setSampleCount] = useState(enrolled ? 3 : 0);
   const descriptorsRef = useRef<Float32Array[]>([]);
@@ -2705,7 +2900,11 @@ function FaceEnrollment({
   const startCamera = async () => {
     setBusy(true);
     setError("");
-    setNotice("Đang mở camera và tải mô hình nhận diện...");
+    setNotice(
+      locale === "vi"
+        ? "Đang mở camera và tải mô hình nhận diện..."
+        : "Opening camera and loading recognition models...",
+    );
     try {
       const unavailable = getCameraUnavailableMessage();
       if (unavailable) throw new Error(unavailable);
@@ -2722,10 +2921,10 @@ function FaceEnrollment({
         await videoRef.current.play();
       }
       setCameraActive(true);
-      setNotice(enrollmentPrompt(sampleCount, enrolled));
+      setNotice(enrollmentPrompt(sampleCount, enrolled, locale));
     } catch (cameraError) {
       setError(cameraErrorMessage(cameraError));
-      setNotice("Chưa mở được camera.");
+      setNotice(locale === "vi" ? "Chưa mở được camera." : "Could not open camera.");
     } finally {
       setBusy(false);
     }
@@ -2739,7 +2938,11 @@ function FaceEnrollment({
 
     setBusy(true);
     setError("");
-    setNotice("Đang kiểm tra chất lượng mẫu...");
+    setNotice(
+      locale === "vi"
+        ? "Đang kiểm tra chất lượng mẫu..."
+        : "Checking sample quality...",
+    );
     try {
       const detection = await api
         .detectSingleFace(
@@ -2754,14 +2957,14 @@ function FaceEnrollment({
 
       if (!detection) {
         setError("Không phát hiện khuôn mặt rõ. Thử nhìn thẳng vào camera.");
-        setNotice(enrollmentPrompt(sampleCount, enrolled));
+        setNotice(enrollmentPrompt(sampleCount, enrolled, locale));
         return;
       }
 
       const qualityError = evaluateEnrollmentSample(detection, videoRef.current);
       if (qualityError) {
         setError(qualityError);
-        setNotice(enrollmentPrompt(sampleCount, enrolled));
+        setNotice(enrollmentPrompt(sampleCount, enrolled, locale));
         return;
       }
 
@@ -2770,7 +2973,11 @@ function FaceEnrollment({
       setSampleCount(nextCount);
 
       if (nextCount >= 3) {
-        setNotice("Đăng ký hoàn tất. Mẫu khuôn mặt đã sẵn sàng.");
+        setNotice(
+          locale === "vi"
+            ? "Đăng ký hoàn tất. Mẫu khuôn mặt đã sẵn sàng."
+            : "Setup complete. The face sample is ready.",
+        );
         onEnroll(averageDescriptors(descriptorsRef.current), {
           face_model: "tiny_face_detector+face_landmark_68+face_recognition",
           raw_image_stored: false,
@@ -2778,7 +2985,11 @@ function FaceEnrollment({
           template_encrypted_at_rest: true,
         });
       } else {
-        setNotice(`Đã ghi mẫu ${nextCount}/3. ${enrollmentPrompt(nextCount, false)}`);
+        setNotice(
+          locale === "vi"
+            ? `Đã ghi mẫu ${nextCount}/3. ${enrollmentPrompt(nextCount, false, locale)}`
+            : `Recorded sample ${nextCount}/3. ${enrollmentPrompt(nextCount, false, locale)}`,
+        );
       }
     } catch (captureError) {
       setError(
@@ -2786,7 +2997,7 @@ function FaceEnrollment({
           ? captureError.message
           : "Không thể ghi mẫu khuôn mặt.",
       );
-      setNotice(enrollmentPrompt(sampleCount, enrolled));
+      setNotice(enrollmentPrompt(sampleCount, enrolled, locale));
     } finally {
       setBusy(false);
     }
@@ -2797,11 +3008,18 @@ function FaceEnrollment({
   return (
     <div className="rounded-lg border border-[#ead8bf] bg-white p-4">
       <ol className="mb-3 grid gap-2 text-sm text-stone-600 md:grid-cols-3">
-        {[
-          "Nhìn thẳng, mặt ở giữa khung",
-          "Nghiêng nhẹ trái hoặc phải",
-          "Nhìn thẳng lại, ánh sáng đều",
-        ].map((instruction, index) => {
+        {(locale === "vi"
+          ? [
+              "Nhìn thẳng, mặt ở giữa khung",
+              "Nghiêng nhẹ trái hoặc phải",
+              "Nhìn thẳng lại, ánh sáng đều",
+            ]
+          : [
+              "Look straight, face centered",
+              "Turn slightly left or right",
+              "Look straight again, even lighting",
+            ]
+        ).map((instruction, index) => {
           const done = sampleCount > index;
           const active = sampleCount === index && !enrollmentComplete;
           return (
@@ -2840,18 +3058,23 @@ function FaceEnrollment({
         />
         {!cameraActive && (
           <div className="absolute inset-0 flex items-center justify-center text-center text-sm text-white/80">
-            Camera đăng ký
+            {locale === "vi" ? "Camera đăng ký" : "Registration camera"}
           </div>
         )}
       </div>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-stone-600">
-          Mẫu đã ghi: <span className="font-semibold">{sampleCount}/3</span>
+          {locale === "vi" ? "Mẫu đã ghi" : "Samples recorded"}:{" "}
+          <span className="font-semibold">{sampleCount}/3</span>
         </p>
         <div className="flex items-center gap-1">
           {[0, 1, 2].map((index) => (
             <span
-              aria-label={`Mẫu ${index + 1}${sampleCount > index ? " đã ghi" : " chưa ghi"}`}
+              aria-label={
+                locale === "vi"
+                  ? `Mẫu ${index + 1}${sampleCount > index ? " đã ghi" : " chưa ghi"}`
+                  : `Sample ${index + 1}${sampleCount > index ? " recorded" : " not recorded"}`
+              }
               className={cn(
                 "h-2.5 w-9 rounded-full",
                 sampleCount > index ? "bg-emerald-500" : "bg-[#ead8bf]",
@@ -2863,21 +3086,23 @@ function FaceEnrollment({
         <div className="flex gap-2">
           <button
             className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#ead8bf] bg-white px-3 text-sm font-semibold text-stone-700 transition hover:bg-[#fffaf3] disabled:text-[#b8a491]"
-            disabled={!consentReady || busy || enrollmentComplete}
+            disabled={busy || enrollmentComplete}
             onClick={startCamera}
             type="button"
           >
             <Camera size={16} aria-hidden />
-            Mở camera
+            {locale === "vi" ? "Mở camera" : "Open camera"}
           </button>
           <button
             className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-3 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-[#d6c0aa]"
-            disabled={!consentReady || busy || !cameraActive || enrollmentComplete}
+            disabled={busy || !cameraActive || enrollmentComplete}
             onClick={captureFace}
             type="button"
           >
             {busy ? <Loader2 className="animate-spin" size={16} /> : <ScanFace size={16} />}
-            {sampleCount === 0 ? "Ghi mẫu" : "Ghi mẫu tiếp"}
+            {sampleCount === 0
+              ? locale === "vi" ? "Ghi mẫu" : "Record sample"
+              : locale === "vi" ? "Ghi mẫu tiếp" : "Record next sample"}
           </button>
         </div>
       </div>
@@ -2909,6 +3134,7 @@ function FaceEnrollment({
 function ProductScreen({
   cart,
   cartLines,
+  locale = defaultLocale,
   onAdd,
   onContinue,
   onRemove,
@@ -2916,6 +3142,7 @@ function ProductScreen({
 }: {
   cart: Cart;
   cartLines: CartLine[];
+  locale?: Locale;
   onAdd: (productId: string) => void;
   onContinue: () => void;
   onRemove: (productId: string) => void;
@@ -2931,33 +3158,39 @@ function ProductScreen({
         const matchesQuery =
           normalizedQuery.length === 0 ||
           [
-            productName(item),
-            productDetail(item),
-            categoryLabel(item.category),
-            ...productTags(item),
+            productName(item, locale),
+            productDetail(item, locale),
+            categoryLabel(item.category, locale),
+            ...productTags(item, locale),
           ]
             .join(" ")
             .toLowerCase()
             .includes(normalizedQuery);
         return matchesCategory && matchesQuery;
       }),
-    [category, normalizedQuery],
+    [category, locale, normalizedQuery],
   );
   const remaining = startingBalance - totalCents;
   const canContinue = cartLines.length > 0 && remaining >= 0;
 
   return (
-    <Panel eyebrow="Mua hàng" icon={ShoppingBag} title="Chọn món tại quầy cafe">
+    <Panel
+      eyebrow={locale === "vi" ? "Mua hàng" : "Shopping"}
+      icon={ShoppingBag}
+      title={locale === "vi" ? "Chọn món tại quầy cafe" : "Choose cafe items"}
+    >
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="min-w-0 space-y-4">
           <div className="rounded-lg border border-[#ead8bf] bg-[#fffaf3] p-4">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <h2 className="text-lg font-semibold text-stone-950">
-                  Danh mục cafe
+                  {locale === "vi" ? "Danh mục cafe" : "Cafe menu"}
                 </h2>
                 <p className="mt-1 text-sm leading-6 text-stone-600">
-                  Chọn một hoặc nhiều món trong giới hạn số dư thử nghiệm.
+                  {locale === "vi"
+                    ? "Chọn một hoặc nhiều món trong giới hạn số dư thử nghiệm."
+                    : "Choose one or more items within the test balance."}
                 </p>
               </div>
               <label className="relative block w-full max-w-sm">
@@ -2969,7 +3202,7 @@ function ProductScreen({
                 <input
                   className="h-11 w-full rounded-lg border border-[#dcc6aa] bg-white pl-9 pr-3 text-sm outline-none transition focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Tìm latte, croissant..."
+                  placeholder={locale === "vi" ? "Tìm latte, croissant..." : "Search latte, croissant..."}
                   value={query}
                 />
               </label>
@@ -2987,7 +3220,7 @@ function ProductScreen({
                   onClick={() => setCategory(item)}
                   type="button"
                 >
-                  {categoryLabel(item)}
+                  {categoryLabel(item, locale)}
                 </button>
               ))}
             </div>
@@ -3000,6 +3233,7 @@ function ProductScreen({
                 onAdd={() => onAdd(item.id)}
                 onRemove={() => onRemove(item.id)}
                 product={item}
+                locale={locale}
                 quantity={cart[item.id] ?? 0}
               />
             ))}
@@ -3009,9 +3243,10 @@ function ProductScreen({
         <aside className="h-fit rounded-lg border border-[#dcc6aa] bg-[#fffaf3] p-4 shadow-sm xl:sticky xl:top-24">
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
-              <h3 className="font-semibold text-stone-950">Giỏ hàng</h3>
+              <h3 className="font-semibold text-stone-950">{t("cart", locale)}</h3>
               <p className="mt-1 text-xs text-stone-500">
-                {cartCount(cartLines)} món đã chọn
+                {cartCount(cartLines)}{" "}
+                {locale === "vi" ? "món đã chọn" : "items selected"}
               </p>
             </div>
             <ShoppingBag className="text-[#7a4a2a]" size={22} aria-hidden />
@@ -3019,7 +3254,7 @@ function ProductScreen({
 
           {cartLines.length === 0 ? (
             <div className="rounded-lg border border-dashed border-[#dcc6aa] bg-white px-3 py-6 text-center text-sm text-stone-500">
-              Chưa có món nào trong giỏ hàng.
+              {locale === "vi" ? "Chưa có món nào trong giỏ hàng." : "No items in the cart yet."}
             </div>
           ) : (
             <div className="space-y-3">
@@ -3034,7 +3269,7 @@ function ProductScreen({
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold text-stone-950">
-                          {productName(item)}
+                          {productName(item, locale)}
                         </p>
                         <p className="mt-1 text-xs text-stone-500">
                           {line.quantity} x {formatVnd(item.priceCents)}
@@ -3051,16 +3286,18 @@ function ProductScreen({
           )}
 
           <div className="mt-4 grid gap-2 text-sm">
-            <Row label="Số dư ban đầu" value={formatVnd(startingBalance)} />
-            <Row label="Tổng tiền" value={formatVnd(totalCents)} strong />
+            <Row label={locale === "vi" ? "Số dư ban đầu" : "Starting balance"} value={formatVnd(startingBalance)} />
+            <Row label={locale === "vi" ? "Tổng tiền" : "Total"} value={formatVnd(totalCents)} strong />
             <Row
-              label="Số dư sau thanh toán"
+              label={locale === "vi" ? "Số dư sau thanh toán" : "Balance after payment"}
               value={formatVnd(Math.max(remaining, 0))}
             />
           </div>
           {remaining < 0 && (
             <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
-              Tổng tiền vượt quá số dư thử nghiệm.
+              {locale === "vi"
+                ? "Tổng tiền vượt quá số dư thử nghiệm."
+                : "The total exceeds the test balance."}
             </p>
           )}
           <div className="mt-4 border-t border-[#ead8bf] pt-4">
@@ -3070,7 +3307,7 @@ function ProductScreen({
               onClick={onContinue}
               type="button"
             >
-              Xác nhận giỏ hàng
+              {t("confirmCart", locale)}
               <ArrowRight size={17} aria-hidden />
             </button>
           </div>
@@ -3081,27 +3318,29 @@ function ProductScreen({
 }
 
 function ProductCard({
+  locale = defaultLocale,
   onAdd,
   onRemove,
   product,
   quantity,
 }: {
+  locale?: Locale;
   onAdd: () => void;
   onRemove: () => void;
   product: Product;
   quantity: number;
 }) {
   const selected = quantity > 0;
-  const name = productName(product);
-  const detail = productDetail(product);
-  const category = categoryLabel(product.category);
+  const name = productName(product, locale);
+  const detail = productDetail(product, locale);
+  const category = categoryLabel(product.category, locale);
   const selectProduct = () => {
     if (!selected) onAdd();
   };
 
   return (
     <article
-      aria-label={`${selected ? "Đã chọn" : "Chọn"} ${name}`}
+      aria-label={`${selected ? t("selected", locale) : locale === "vi" ? "Chọn" : "Choose"} ${name}`}
       aria-pressed={selected}
       className={cn(
         "group flex h-full min-h-[460px] flex-col overflow-hidden rounded-lg border bg-white text-left shadow-sm outline-none transition focus:ring-2 focus:ring-[#9a6237]",
@@ -3131,13 +3370,13 @@ function ProductCard({
         />
         {product.popular && (
           <span className="absolute left-3 top-3 rounded-lg bg-[#fffaf3]/95 px-2 py-1 text-xs font-semibold text-[#6f3f24] shadow-sm">
-            Phổ biến
+            {locale === "vi" ? "Phổ biến" : "Popular"}
           </span>
         )}
         {selected && (
           <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-lg bg-[#6f3f24] px-2 py-1 text-xs font-semibold text-white shadow-sm">
             <CheckCircle2 size={14} aria-hidden />
-            Đã chọn
+            {t("selected", locale)}
           </span>
         )}
       </div>
@@ -3167,7 +3406,7 @@ function ProductCard({
           )}
         >
           <button
-            aria-label={`Giảm ${name}`}
+            aria-label={`${locale === "vi" ? "Giảm" : "Decrease"} ${name}`}
             className="flex h-8 w-8 items-center justify-center rounded-md text-stone-700 transition hover:bg-white disabled:text-[#b8a491]"
             disabled={quantity === 0}
             onClick={(event) => {
@@ -3182,7 +3421,7 @@ function ProductCard({
             {quantity}
           </span>
           <button
-            aria-label={`Thêm ${name}`}
+            aria-label={`${locale === "vi" ? "Thêm" : "Add"} ${name}`}
             className="flex h-8 w-8 items-center justify-center rounded-md bg-[#6f3f24] text-white transition hover:bg-[#5a341f]"
             onClick={(event) => {
               event.stopPropagation();
@@ -3201,19 +3440,21 @@ function ProductCard({
 function CheckoutScreen({
   cartLines,
   group,
+  locale = defaultLocale,
   onPay,
   totalCents,
 }: {
   cartLines: CartLine[];
   group: StudyGroup;
+  locale?: Locale;
   onPay: () => void;
   totalCents: number;
 }) {
-  const copy = groupCopy[group];
+  const copy = groupCopyFor(group, locale);
   const Icon = copy.icon;
   const canPay = cartLines.length > 0 && totalCents <= startingBalance;
   return (
-    <Panel eyebrow="Xác nhận đơn hàng" icon={ReceiptText} title="Giỏ hàng">
+    <Panel eyebrow={t("checkout", locale)} icon={ReceiptText} title={t("cart", locale)}>
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="rounded-lg border border-[#ead8bf] bg-white p-4">
           <div className="space-y-3">
@@ -3227,7 +3468,7 @@ function CheckoutScreen({
                 >
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-stone-950">
-                      {productName(item)}
+                      {productName(item, locale)}
                     </p>
                     <p className="mt-1 text-xs text-stone-500">
                       {line.quantity} x {formatVnd(item.priceCents)}
@@ -3241,11 +3482,11 @@ function CheckoutScreen({
             })}
           </div>
           <div className="mt-4 grid gap-2 text-sm">
-            <Row label="Số lượng món" value={String(cartCount(cartLines))} />
-            <Row label="Số dư ban đầu" value={formatVnd(startingBalance)} />
-            <Row label="Tổng tiền" value={formatVnd(totalCents)} strong />
+            <Row label={locale === "vi" ? "Số lượng món" : "Item count"} value={String(cartCount(cartLines))} />
+            <Row label={locale === "vi" ? "Số dư ban đầu" : "Starting balance"} value={formatVnd(startingBalance)} />
+            <Row label={locale === "vi" ? "Tổng tiền" : "Total"} value={formatVnd(totalCents)} strong />
             <Row
-              label="Số dư sau thanh toán"
+              label={locale === "vi" ? "Số dư sau thanh toán" : "Balance after payment"}
               value={formatVnd(startingBalance - totalCents)}
             />
           </div>
@@ -3259,7 +3500,9 @@ function CheckoutScreen({
             </div>
           </div>
           <p className="text-sm leading-6 opacity-85">
-            POS sẽ chuyển thẳng sang phương thức đã chọn cho phiên này.
+            {locale === "vi"
+              ? "POS sẽ chuyển thẳng sang phương thức đã chọn cho phiên này."
+              : "The POS will go directly to the assigned method for this session."}
           </p>
         </div>
       </div>
@@ -3270,7 +3513,7 @@ function CheckoutScreen({
           onClick={onPay}
           type="button"
         >
-          Thanh toán
+          {t("payment", locale)}
           <ArrowRight size={17} aria-hidden />
         </button>
       </ActionRow>
@@ -3284,6 +3527,7 @@ function PaymentScreen({
   faceDescriptor,
   group,
   items,
+  locale = defaultLocale,
   onComplete,
   onFailure,
   onLog,
@@ -3300,6 +3544,7 @@ function PaymentScreen({
   faceDescriptor?: number[] | null;
   group: StudyGroup;
   items: CartLine[];
+  locale?: Locale;
   onComplete: (metadata?: Record<string, unknown>) => void;
   onFailure: () => void;
   onLog: (eventName: string, screenName: StepKey, metadata?: Record<string, unknown>) => void;
@@ -3319,7 +3564,11 @@ function PaymentScreen({
   }, [onComplete]);
 
   return (
-    <Panel eyebrow="Thanh toán tại POS" icon={groupCopy[group].icon} title={groupCopy[group].label}>
+    <Panel
+      eyebrow={locale === "vi" ? "Thanh toán tại POS" : "POS payment"}
+      icon={groupCopy[group].icon}
+      title={groupCopyFor(group, locale).label}
+    >
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="rounded-lg border border-[#ead8bf] bg-white p-4">
           {group === "QR_PIN" && (
@@ -3327,6 +3576,7 @@ function PaymentScreen({
               amount={totalCents}
               authMethod="pin"
               items={items}
+              locale={locale}
               onLog={onLog}
               onPaid={(transfer) =>
                 finish({
@@ -3346,6 +3596,7 @@ function PaymentScreen({
             <NfcBridgePayment
               amount={totalCents}
               busy={busy}
+              locale={locale}
               onComplete={(tap) => finish({ channel: "nfc_card", card_ref: tap.cardRef })}
               onLog={onLog}
               onRetry={onRetry}
@@ -3358,6 +3609,7 @@ function PaymentScreen({
               amount={totalCents}
               busy={busy}
               faceDescriptor={faceDescriptor}
+              locale={locale}
               onComplete={(metadata) =>
                 finish({
                   channel: "face_pos",
@@ -3374,7 +3626,7 @@ function PaymentScreen({
             <TapPayment
               busy={busy}
               icon={Hand}
-              label="Vui lòng đặt lòng bàn tay"
+              label={locale === "vi" ? "Vui lòng đặt lòng bàn tay" : "Place your palm"}
               amount={totalCents}
               onComplete={() =>
                 finish({ channel: "palm_vein", match_score: 0.96, threshold: 0.86 })
@@ -3386,6 +3638,7 @@ function PaymentScreen({
 
         <RetryPanel
           group={group}
+          locale={locale}
           onFailure={onFailure}
           onRetry={onRetry}
           retries={retries}
@@ -3408,6 +3661,7 @@ function FacePosPayment({
   amount,
   busy,
   faceDescriptor,
+  locale = defaultLocale,
   onComplete,
   onLog,
   productSummary,
@@ -3416,6 +3670,7 @@ function FacePosPayment({
   amount: number;
   busy: boolean;
   faceDescriptor?: number[] | null;
+  locale?: Locale;
   onComplete: (metadata: Record<string, unknown>) => void;
   onLog: (eventName: string, screenName: StepKey, metadata?: Record<string, unknown>) => void;
   productSummary: string;
@@ -3543,11 +3798,11 @@ function FacePosPayment({
         )}
       </div>
       <div className="rounded-lg border border-[#ead8bf] bg-white p-4 text-sm">
-        <Row label="Người gửi" value={senderName} />
-        <Row label="Người nhận" value="Palm Pay" />
-        <Row label="Sản phẩm" value={productSummary} />
-        <Row label="Số tiền" value={formatVnd(amount)} strong />
-        <Row label="Xác thực" value="Face ID tại POS" />
+        <Row label={locale === "vi" ? "Người gửi" : "Sender"} value={senderName} />
+        <Row label={locale === "vi" ? "Người nhận" : "Receiver"} value="Palm Pay" />
+        <Row label={locale === "vi" ? "Sản phẩm" : "Products"} value={productSummary} />
+        <Row label={locale === "vi" ? "Số tiền" : "Amount"} value={formatVnd(amount)} strong />
+        <Row label={locale === "vi" ? "Xác thực" : "Authentication"} value="Face ID at POS" />
       </div>
       <p className="rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 py-2 text-sm font-medium text-[#6f3f24]">
         {message}
@@ -3560,7 +3815,7 @@ function FacePosPayment({
           type="button"
         >
           <Camera size={17} aria-hidden />
-          Mở camera POS
+          {locale === "vi" ? "Mở camera POS" : "Open POS camera"}
         </button>
         <button
           className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-[#d6c0aa]"
@@ -3569,7 +3824,7 @@ function FacePosPayment({
           type="button"
         >
           {localBusy ? <Loader2 className="animate-spin" size={17} /> : <ScanFace size={17} />}
-          Xác nhận Face ID
+          {locale === "vi" ? "Xác nhận Face ID" : "Confirm Face ID"}
         </button>
       </div>
       {error && (
@@ -3586,6 +3841,7 @@ function QrPosPayment({
   authMethod,
   faceDescriptor,
   items,
+  locale = defaultLocale,
   onLog,
   onPaid,
   pin,
@@ -3597,6 +3853,7 @@ function QrPosPayment({
   authMethod: "pin" | "face";
   faceDescriptor?: number[] | null;
   items: CartLine[];
+  locale?: Locale;
   onLog: (eventName: string, screenName: StepKey, metadata?: Record<string, unknown>) => void;
   onPaid: (transfer: PublicQrTransfer) => void;
   pin: string;
@@ -3711,23 +3968,23 @@ function QrPosPayment({
         )}
       </div>
       <div className="rounded-lg border border-[#ead8bf] bg-white p-4 text-sm">
-        <Row label="Người gửi" value={senderName} />
-        <Row label="Người nhận" value="Palm Pay" />
-        <Row label="Sản phẩm" value={productSummary} />
-        <Row label="Số tiền" value={formatVnd(amount)} strong />
+        <Row label={locale === "vi" ? "Người gửi" : "Sender"} value={senderName} />
+        <Row label={locale === "vi" ? "Người nhận" : "Receiver"} value="Palm Pay" />
+        <Row label={locale === "vi" ? "Sản phẩm" : "Products"} value={productSummary} />
+        <Row label={locale === "vi" ? "Số tiền" : "Amount"} value={formatVnd(amount)} strong />
         <Row
-          label="Xác thực"
+          label={locale === "vi" ? "Xác thực" : "Authentication"}
           value={authMethod === "face" ? "Face ID" : "PIN DemoBank"}
         />
       </div>
       <div className="rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 py-2 text-sm text-stone-600">
-        Trạng thái:{" "}
+        {locale === "vi" ? "Trạng thái" : "Status"}:{" "}
         <span className="font-semibold text-[#6f3f24]">
           {transfer?.status === "paid"
-            ? "Điện thoại đã xác nhận thanh toán"
+            ? locale === "vi" ? "Điện thoại đã xác nhận thanh toán" : "Phone confirmed payment"
             : authMethod === "face"
-              ? "Đang chờ điện thoại quét QR và xác minh khuôn mặt"
-              : "Đang chờ điện thoại quét QR"}
+              ? locale === "vi" ? "Đang chờ điện thoại quét QR và xác minh khuôn mặt" : "Waiting for phone QR scan and face verification"
+              : locale === "vi" ? "Đang chờ điện thoại quét QR" : "Waiting for phone QR scan"}
         </span>
       </div>
       {paymentUrl && (
@@ -3737,7 +3994,7 @@ function QrPosPayment({
           rel="noreferrer"
           target="_blank"
         >
-          Mở mô phỏng điện thoại trên máy này
+          {locale === "vi" ? "Mở mô phỏng điện thoại trên máy này" : "Open phone simulation on this device"}
           <ArrowRight size={16} aria-hidden />
         </a>
       )}
@@ -3753,6 +4010,7 @@ function QrPosPayment({
 function NfcBridgePayment({
   amount,
   busy,
+  locale = defaultLocale,
   onComplete,
   onLog,
   onRetry,
@@ -3760,6 +4018,7 @@ function NfcBridgePayment({
 }: {
   amount: number;
   busy: boolean;
+  locale?: Locale;
   onComplete: (tap: { cardRef: string; transactionId: string }) => void;
   onLog: (eventName: string, screenName: StepKey, metadata?: Record<string, unknown>) => void;
   onRetry: (errorCode: string) => void;
@@ -3768,7 +4027,9 @@ function NfcBridgePayment({
   const handledRef = useRef(false);
   const lastTapKeyRef = useRef("");
   const [status, setStatus] = useState(
-    "Đang đăng ký giao dịch với trình kết nối đầu đọc NFC",
+    locale === "vi"
+      ? "Đang đăng ký giao dịch với trình kết nối đầu đọc NFC"
+      : "Registering transaction with the NFC reader connector",
   );
 
   useEffect(() => {
@@ -3786,10 +4047,22 @@ function NfcBridgePayment({
     })
       .then((response) => (response.ok ? response.json() : Promise.reject()))
       .then(() => {
-        if (active) setStatus("Đang chờ thao tác chạm từ đầu đọc NFC");
+        if (active) {
+          setStatus(
+            locale === "vi"
+              ? "Đang chờ thao tác chạm từ đầu đọc NFC"
+              : "Waiting for a tap from the NFC reader",
+          );
+        }
       })
       .catch(() => {
-        if (active) setStatus("Không đăng ký được phiên NFC đang chờ");
+        if (active) {
+          setStatus(
+            locale === "vi"
+              ? "Không đăng ký được phiên NFC đang chờ"
+              : "Could not register the pending NFC session",
+          );
+        }
       });
 
     return () => {
@@ -3800,7 +4073,7 @@ function NfcBridgePayment({
         method: "DELETE",
       }).catch(() => undefined);
     };
-  }, [amount, transactionId]);
+  }, [amount, locale, transactionId]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -3812,20 +4085,30 @@ function NfcBridgePayment({
           if (tapKey === lastTapKeyRef.current) return;
           lastTapKeyRef.current = tapKey;
           if (data.tap.cardRef !== "CARD-POS-042") {
-            setStatus(`Thẻ không khớp: ${data.tap.cardRef}`);
+            setStatus(
+              locale === "vi"
+                ? `Thẻ không khớp: ${data.tap.cardRef}`
+                : `Card does not match: ${data.tap.cardRef}`,
+            );
             onRetry("wrong_card");
             return;
           }
           handledRef.current = true;
-          setStatus("Đã nhận tap NFC");
+          setStatus(locale === "vi" ? "Đã nhận tap NFC" : "NFC tap received");
           onLog("nfc_tapped", "payment", { card_ref: data.tap.cardRef });
           onComplete(data.tap);
         })
-        .catch(() => setStatus("Không đọc được trạng thái trình kết nối NFC"));
+        .catch(() =>
+          setStatus(
+            locale === "vi"
+              ? "Không đọc được trạng thái trình kết nối NFC"
+              : "Could not read NFC connector status",
+          ),
+        );
     }, 800);
 
     return () => window.clearInterval(interval);
-  }, [onComplete, onLog, onRetry, transactionId]);
+  }, [locale, onComplete, onLog, onRetry, transactionId]);
 
   const simulateTap = async () => {
     const response = await fetch("/api/nfc-taps", {
@@ -3834,7 +4117,11 @@ function NfcBridgePayment({
       method: "POST",
     });
     if (!response.ok) {
-      setStatus("Nút mô phỏng bị chặn bởi token production của bridge");
+      setStatus(
+        locale === "vi"
+          ? "Nút mô phỏng bị chặn bởi token production của bridge"
+          : "Simulation button is blocked by the bridge production token",
+      );
     }
   };
 
@@ -3843,7 +4130,9 @@ function NfcBridgePayment({
       <div className="flex min-h-64 items-center justify-center rounded-lg border border-[#ead8bf] bg-[#fffaf3]">
         <div className="text-center">
           <Nfc className="mx-auto mb-4 text-[#405438]" size={60} aria-hidden />
-          <p className="text-lg font-semibold">Chạm thẻ vào đầu đọc USB</p>
+          <p className="text-lg font-semibold">
+            {locale === "vi" ? "Chạm thẻ vào đầu đọc USB" : "Tap the card on the USB reader"}
+          </p>
           <p className="mt-1 text-sm text-stone-500">{formatVnd(amount)}</p>
           <p className="mt-3 text-sm font-medium text-[#6f3f24]">{status}</p>
         </div>
@@ -3855,7 +4144,7 @@ function NfcBridgePayment({
         type="button"
       >
         <Nfc size={17} aria-hidden />
-        Mô phỏng chạm thẻ
+        {locale === "vi" ? "Mô phỏng chạm thẻ" : "Simulate card tap"}
       </button>
     </div>
   );
@@ -3903,11 +4192,13 @@ function TapPayment({
 
 function RetryPanel({
   group,
+  locale = defaultLocale,
   onFailure,
   onRetry,
   retries,
 }: {
   group: StudyGroup;
+  locale?: Locale;
   onFailure: () => void;
   onRetry: (errorCode: string) => void;
   retries: number;
@@ -3941,11 +4232,14 @@ function RetryPanel({
     <aside className="rounded-lg border border-[#ead8bf] bg-white p-4">
       <div className="mb-3 flex items-center gap-2">
         <TimerReset size={18} aria-hidden />
-        <h3 className="font-semibold">Thử lại và lỗi</h3>
+        <h3 className="font-semibold">
+          {locale === "vi" ? "Thử lại và lỗi" : "Retries and errors"}
+        </h3>
       </div>
       <p className="text-sm leading-6 text-stone-600">
-        Tối đa hai lần thử lại. Sau đó hệ thống ghi nhận lỗi kỹ thuật và mở
-        khảo sát sau trải nghiệm.
+        {locale === "vi"
+          ? "Tối đa hai lần thử lại. Sau đó hệ thống ghi nhận lỗi kỹ thuật và mở khảo sát sau trải nghiệm."
+          : "Up to two retries are allowed. After that, the system records a technical failure and opens the post-experience survey."}
       </p>
       <div className="mt-3 space-y-2">
         {errors[group].map((error) => (
@@ -3962,7 +4256,8 @@ function RetryPanel({
         ))}
       </div>
       <div className="mt-4 rounded-lg bg-[#fffaf3] px-3 py-2 text-sm text-stone-600">
-        Số lần thử lại: <span className="font-semibold">{retries}/2</span>
+        {locale === "vi" ? "Số lần thử lại" : "Retries"}:{" "}
+        <span className="font-semibold">{retries}/2</span>
       </div>
       <button
         className="mt-3 inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:opacity-40"
@@ -3970,16 +4265,18 @@ function RetryPanel({
         onClick={onFailure}
         type="button"
       >
-        Ghi nhận lỗi kỹ thuật
+        {locale === "vi" ? "Ghi nhận lỗi kỹ thuật" : "Record technical failure"}
       </button>
     </aside>
   );
 }
 
 function SuccessScreen({
+  locale = defaultLocale,
   onContinue,
   transaction,
 }: {
+  locale?: Locale;
   onContinue: () => void;
   transaction?: TransactionRecord | null;
 }) {
@@ -3987,16 +4284,22 @@ function SuccessScreen({
   const balanceAfter = transaction?.balance_after ?? startingBalance - paidAmount;
 
   return (
-    <Panel eyebrow="Kết quả giao dịch" icon={CheckCircle2} title="Thanh toán thành công">
+    <Panel
+      eyebrow={locale === "vi" ? "Kết quả giao dịch" : "Transaction result"}
+      icon={CheckCircle2}
+      title={locale === "vi" ? "Thanh toán thành công" : "Payment successful"}
+    >
       <div className="mx-auto max-w-lg rounded-lg border border-[#d8b88b] bg-[#fff3df] p-6 text-center text-[#4f2f1c]">
         <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-lg bg-white/80">
           <CheckCircle2 size={32} aria-hidden />
         </div>
-        <h2 className="text-2xl font-semibold">Thanh toán thành công</h2>
+        <h2 className="text-2xl font-semibold">
+          {locale === "vi" ? "Thanh toán thành công" : "Payment successful"}
+        </h2>
         <div className="mt-5 space-y-2 text-sm">
-          <Row label="Đơn hàng" value={transaction?.product ?? "Đơn cafe"} />
-          <Row label="Đã thanh toán" value={formatVnd(paidAmount)} />
-          <Row label="Số dư còn lại" value={formatVnd(balanceAfter)} />
+          <Row label={locale === "vi" ? "Đơn hàng" : "Order"} value={transaction?.product ?? (locale === "vi" ? "Đơn cafe" : "Cafe order")} />
+          <Row label={locale === "vi" ? "Đã thanh toán" : "Paid"} value={formatVnd(paidAmount)} />
+          <Row label={locale === "vi" ? "Số dư còn lại" : "Remaining balance"} value={formatVnd(balanceAfter)} />
         </div>
       </div>
       <ActionRow>
@@ -4005,7 +4308,7 @@ function SuccessScreen({
           onClick={onContinue}
           type="button"
         >
-          Tiếp tục khảo sát
+          {t("surveyContinue", locale)}
           <ArrowRight size={17} aria-hidden />
         </button>
       </ActionRow>
@@ -4014,12 +4317,14 @@ function SuccessScreen({
 }
 
 function DebriefScreen({
+  locale = defaultLocale,
   onExport,
   onExportCsv,
   onExportEvents,
   onNew,
   session,
 }: {
+  locale?: Locale;
   onExport: () => void;
   onExportCsv: () => void;
   onExportEvents: () => void;
@@ -4027,20 +4332,22 @@ function DebriefScreen({
   session: ExperimentSession;
 }) {
   return (
-    <Panel eyebrow="Kết thúc phiên" icon={CheckCircle2} title="Giải thích cuối thí nghiệm">
+    <Panel
+      eyebrow={locale === "vi" ? "Kết thúc phiên" : "Session complete"}
+      icon={CheckCircle2}
+      title={locale === "vi" ? "Giải thích cuối thí nghiệm" : "End-of-study debrief"}
+    >
       <div className="rounded-lg border border-[#ead8bf] bg-white p-4 text-sm leading-6 text-stone-600">
         <p>
-          Phiên này so sánh trải nghiệm thanh toán tại điểm bán giữa QR + PIN,
-          thẻ NFC, Face ID tại POS và PalmPay tĩnh mạch lòng bàn tay. Trọng tâm
-          là cảm nhận về bảo mật, sự dễ sử dụng, sự hữu ích, niềm tin vào hệ
-          thống thanh toán và sự sẵn lòng tiếp tục sử dụng phương thức được phân
-          công.
+          {locale === "vi"
+            ? "Phiên này so sánh trải nghiệm thanh toán tại điểm bán giữa QR + PIN, thẻ NFC, Face ID tại POS và PalmPay tĩnh mạch lòng bàn tay. Trọng tâm là cảm nhận về bảo mật, sự dễ sử dụng, sự hữu ích, niềm tin vào hệ thống thanh toán và sự sẵn lòng tiếp tục sử dụng phương thức được phân công."
+            : "This session compares point-of-sale payment experiences across QR + PIN, NFC card, Face ID at POS, and PalmPay palm vein recognition. The focus is perceived security, ease of use, usefulness, trust in the payment system, and willingness to continue using the assigned method."}
         </p>
         {(session.assigned_group === "FACE_POS" ||
           session.assigned_group === "PALM_VEIN") && (
           <p className="mt-3 font-medium text-[#7a4a2a]">
-            Mẫu sinh trắc học của phiên đã được xóa lúc{" "}
-            {session.template_deleted_at ?? "kết thúc phiên"}.
+            {locale === "vi" ? "Mẫu sinh trắc học của phiên đã được xóa lúc" : "The biometric template for this session was deleted at"}{" "}
+            {session.template_deleted_at ?? (locale === "vi" ? "kết thúc phiên" : "session end")}.
           </p>
         )}
       </div>
@@ -4051,7 +4358,7 @@ function DebriefScreen({
           type="button"
         >
           <Download size={17} aria-hidden />
-          Excel theo phương thức
+          {t("methodExcel", locale)}
         </button>
         <button
           className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-[#ead8bf] bg-white px-4 text-sm font-semibold text-stone-700 transition hover:bg-[#fffaf3]"
@@ -4059,7 +4366,7 @@ function DebriefScreen({
           type="button"
         >
           <Download size={17} aria-hidden />
-          CSV dữ liệu
+          {t("dataCsv", locale)}
         </button>
         <button
           className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-[#ead8bf] bg-white px-4 text-sm font-semibold text-stone-700 transition hover:bg-[#fffaf3]"
@@ -4067,7 +4374,7 @@ function DebriefScreen({
           type="button"
         >
           <ReceiptText size={17} aria-hidden />
-          CSV nhật ký
+          {t("logCsv", locale)}
         </button>
         <button
           className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f]"
@@ -4075,7 +4382,7 @@ function DebriefScreen({
           type="button"
         >
           <UserPlus size={17} aria-hidden />
-          Phiên mới
+          {t("newSession", locale)}
         </button>
       </div>
     </Panel>
