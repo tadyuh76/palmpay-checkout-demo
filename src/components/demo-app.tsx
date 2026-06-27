@@ -4203,28 +4203,43 @@ function RetryPanel({
   onRetry: (errorCode: string) => void;
   retries: number;
 }) {
-  const errors: Record<StudyGroup, Array<{ code: string; label: string }>> = {
+  const errors: Record<StudyGroup, Array<{ code: string; label: LocalizedText }>> = {
     QR_PIN: [
-      { code: "wrong_amount", label: "Nhập sai số tiền" },
-      { code: "pin_failed", label: "Nhập sai PIN" },
+      { code: "wrong_amount", label: { vi: "Nhập sai số tiền", en: "Wrong amount entered" } },
+      { code: "pin_failed", label: { vi: "Nhập sai PIN", en: "Incorrect PIN" } },
     ],
     NFC_CARD: [
-      { code: "nfc_read_error", label: "Lỗi đọc thẻ" },
-      { code: "wrong_card", label: "Thẻ không khớp phiên" },
+      { code: "nfc_read_error", label: { vi: "Lỗi đọc thẻ", en: "Card read error" } },
+      { code: "wrong_card", label: { vi: "Thẻ không khớp phiên", en: "Card does not match session" } },
     ],
     FACE_POS: [
-      { code: "no_face", label: "Camera POS không thấy khuôn mặt" },
-      { code: "multiple_faces", label: "Có nhiều khuôn mặt" },
-      { code: "low_quality", label: "Hình ảnh camera POS chưa đủ rõ" },
-      { code: "face_no_match", label: "Face ID không khớp mẫu" },
-      { code: "camera_disconnected", label: "Camera POS mất kết nối" },
+      {
+        code: "no_face",
+        label: { vi: "Camera POS không thấy khuôn mặt", en: "POS camera cannot see a face" },
+      },
+      { code: "multiple_faces", label: { vi: "Có nhiều khuôn mặt", en: "Multiple faces detected" } },
+      {
+        code: "low_quality",
+        label: { vi: "Hình ảnh camera POS chưa đủ rõ", en: "POS camera image is not clear enough" },
+      },
+      { code: "face_no_match", label: { vi: "Face ID không khớp mẫu", en: "Face ID does not match sample" } },
+      {
+        code: "camera_disconnected",
+        label: { vi: "Camera POS mất kết nối", en: "POS camera disconnected" },
+      },
     ],
     PALM_VEIN: [
-      { code: "no_hand", label: "Không phát hiện bàn tay" },
-      { code: "bad_distance", label: "Khoảng cách không phù hợp" },
-      { code: "low_quality", label: "Mẫu không đủ chất lượng" },
-      { code: "palm_no_match", label: "Không khớp mẫu" },
-      { code: "scanner_disconnected", label: "Thiết bị mất kết nối" },
+      { code: "no_hand", label: { vi: "Không phát hiện bàn tay", en: "No hand detected" } },
+      { code: "bad_distance", label: { vi: "Khoảng cách không phù hợp", en: "Distance is not suitable" } },
+      {
+        code: "low_quality",
+        label: { vi: "Mẫu không đủ chất lượng", en: "Sample quality is not sufficient" },
+      },
+      { code: "palm_no_match", label: { vi: "Không khớp mẫu", en: "Palm sample does not match" } },
+      {
+        code: "scanner_disconnected",
+        label: { vi: "Thiết bị mất kết nối", en: "Scanner disconnected" },
+      },
     ],
   };
 
@@ -4244,14 +4259,14 @@ function RetryPanel({
       <div className="mt-3 space-y-2">
         {errors[group].map((error) => (
           <button
-            className="inline-flex h-10 w-full items-center justify-start gap-2 rounded-lg border border-[#ead8bf] bg-white px-3 text-left text-sm font-medium text-stone-700 transition hover:bg-[#fffaf3] disabled:text-[#b8a491]"
+            className="inline-flex min-h-11 w-full items-start justify-start gap-2 rounded-lg border border-[#ead8bf] bg-white px-3 py-2.5 text-left text-sm font-medium leading-5 text-stone-700 transition hover:bg-[#fffaf3] disabled:text-[#b8a491]"
             disabled={retries >= 2}
             key={error.code}
             onClick={() => onRetry(error.code)}
             type="button"
           >
-            <AlertTriangle size={15} aria-hidden />
-            {error.label}
+            <AlertTriangle className="mt-0.5 shrink-0" size={15} aria-hidden />
+            <span className="min-w-0 flex-1 break-words">{localizeText(error.label, locale)}</span>
           </button>
         ))}
       </div>
