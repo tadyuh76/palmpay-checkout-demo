@@ -1,8 +1,4 @@
 import { appDb, ensureAppTables } from "@/lib/db";
-import {
-  decryptBiometricTemplates,
-  encryptBiometricTemplates,
-} from "@/lib/biometric-crypto";
 
 export type ExperimentState = {
   assignmentHistory: unknown[];
@@ -31,9 +27,7 @@ type StateRow = {
 
 function parseStateValue(key: keyof ExperimentState, value: string) {
   try {
-    return decryptBiometricTemplates(
-      JSON.parse(value),
-    ) as ExperimentState[typeof key];
+    return JSON.parse(value) as ExperimentState[typeof key];
   } catch {
     return defaultState[key];
   }
@@ -94,7 +88,7 @@ export async function updateExperimentState(patch: ExperimentStatePatch) {
          VALUES ($1, $2, CURRENT_TIMESTAMP)
          ON CONFLICT (key)
          DO UPDATE SET value_json = EXCLUDED.value_json, updated_at = CURRENT_TIMESTAMP`,
-        [key, JSON.stringify(encryptBiometricTemplates(value))],
+        [key, JSON.stringify(value)],
       );
     }
     return getExperimentState();
@@ -114,7 +108,7 @@ export async function updateExperimentState(patch: ExperimentStatePatch) {
       >,
     ) => {
       for (const [key, value] of values) {
-        statement.run(key, JSON.stringify(encryptBiometricTemplates(value)));
+        statement.run(key, JSON.stringify(value));
       }
     },
   );

@@ -1,6 +1,6 @@
 # PalmPay Coffee Experiment
 
-Coffee-themed point-of-sale prototype for the PalmPay experiment. The demo app now keeps only the enrollment and buying flow: named session creation, consent, method setup, coffee catalog selection, checkout, assigned payment, receipt, a link to the external research form, and CSV export.
+Coffee-themed point-of-sale prototype for the PalmPay experiment. The app keeps the full research sequence visible to the researcher and participant: named session creation, consent, pre-survey, randomized method assignment, method setup, coffee catalog selection, checkout, assigned payment, receipt, post-survey, debrief, and CSV export.
 
 ## Experiment Groups
 
@@ -13,14 +13,16 @@ The NFC condition is intentionally a physical card, not a phone, so it stays sep
 
 ## Main Flow
 
-1. Researcher enters the participant name and selects the test method.
+1. Researcher creates a participant session with a display name.
 2. Participant confirms consent.
-3. Participant completes setup for the selected method.
-4. Participant selects one or more coffee catalog items within the test balance.
-5. Participant reviews the cart and pays with only the assigned method.
-6. Receipt shows the selected order, paid amount, remaining test balance, and transaction status.
-7. Participant opens the external Google Form linked from the purchase-complete screen.
-8. Biometric templates are marked deleted when biometric sessions complete.
+3. Participant completes the pre-survey.
+4. App assigns one of the four payment groups by shuffled blocks.
+5. Participant completes setup for the assigned method.
+6. Participant selects one or more coffee catalog items within the test balance.
+7. Participant reviews the cart and pays with only the assigned method.
+8. Receipt shows the selected order, paid amount, remaining test balance, and transaction id.
+9. Participant completes the post-survey and goes straight to the debrief/export screen.
+10. Biometric templates are marked deleted at the end of biometric sessions.
 
 ## QR Phone Flows
 
@@ -40,107 +42,68 @@ Mobile browser camera access for Face ID may require HTTPS when testing from a r
 
 ## NFC Reader Bridge
 
-Browsers cannot read most USB NFC readers directly, so the POS uses a small
-Node bridge script. Run the web app and the bridge in two terminals with the
-same bridge token.
+Desktop browsers do not directly expose most USB-A NFC readers to normal web pages. To sync a real reader, run a small local bridge process that listens to your reader with PC/SC or the vendor SDK, then POSTs a tap to this app:
 
-### macOS
+```bash
+curl -X POST http://localhost:7999/api/nfc-taps \
+  -H "Content-Type: application/json" \
+  -d '{"transactionId":"TX-EXAMPLE","cardRef":"CARD-POS-042"}'
+```
 
-Install Node 20 and the NFC bridge package:
+The production bridge flow is automated:
+
+1. The POS NFC payment screen registers the current active NFC transaction at `/api/nfc-session`.
+2. The local bridge script polls `/api/nfc-session`.
+3. When the USB reader detects a tag/card, the bridge posts that tap to `/api/nfc-taps`.
+4. The POS screen polls `/api/nfc-taps` and completes when `CARD-POS-042` is posted for the active transaction.
+
+On the Mac connected to the USB reader:
 
 ```bash
 brew install node@20
-cd "/path/to/palmpay/demo-experiment"
-PATH="/opt/homebrew/opt/node@20/bin:$PATH" npm install
+cd "/Users/tadyuh/Documents/Coding Projects/ueh/research/palmpay/demo-experiment"
 PATH="/opt/homebrew/opt/node@20/bin:$PATH" npm install --no-save nfc-pcsc
-```
-
-Terminal 1: run the web app.
-
-```bash
 PATH="/opt/homebrew/opt/node@20/bin:$PATH" \
-PALMPAY_NFC_BRIDGE_TOKEN=local-reader-token \
-npm run dev -- -p 7999
+  PALMPAY_NFC_BRIDGE_TOKEN=local-reader-token \
+  npm run nfc:bridge
 ```
 
-Terminal 2: run the NFC bridge on the Mac connected to the reader.
+Run the web app with the same token in another terminal:
 
 ```bash
-PATH="/opt/homebrew/opt/node@20/bin:$PATH" \
-PALMPAY_APP_URL=http://localhost:7999 \
-PALMPAY_NFC_BRIDGE_TOKEN=local-reader-token \
-npm run nfc:bridge
+PALMPAY_NFC_BRIDGE_TOKEN=local-reader-token npm run dev -- -p 7999
 ```
 
-### Windows
-
-Install Node.js 20 LTS, then install the NFC reader driver from the reader
-vendor if Windows does not detect it automatically.
-
-In PowerShell:
-
-```powershell
-cd "C:\path\to\palmpay\demo-experiment"
-npm install
-npm install --no-save nfc-pcsc
-```
-
-Terminal 1: run the web app.
-
-```powershell
-$env:PALMPAY_NFC_BRIDGE_TOKEN="local-reader-token"
-npm run dev -- -p 7999
-```
-
-Terminal 2: run the NFC bridge on the Windows PC connected to the reader.
-
-```powershell
-$env:PALMPAY_APP_URL="http://localhost:7999"
-$env:PALMPAY_NFC_BRIDGE_TOKEN="local-reader-token"
-npm run nfc:bridge
-```
-
-### Test Without Hardware
-
-Open the app, choose the NFC method, and wait on the NFC payment screen. In a
-second terminal, run:
+To run the bridge as a background macOS launchd job for the reader station:
 
 ```bash
-PALMPAY_NFC_BRIDGE_TOKEN=local-reader-token npm run nfc:bridge:mock
+launchctl remove com.palmpay.nfc-bridge 2>/dev/null || true
+launchctl submit -l com.palmpay.nfc-bridge -- /bin/zsh -lc \
+  'cd "/Users/tadyuh/Documents/Coding Projects/ueh/research/palmpay/demo-experiment" && PALMPAY_APP_URL=http://localhost:7999 PALMPAY_NFC_BRIDGE_TOKEN=local-reader-token exec /opt/homebrew/opt/node@20/bin/node scripts/nfc-bridge.mjs >> /tmp/palmpay-nfc-bridge.log 2>&1'
 ```
 
-PowerShell version:
+Check the service with `launchctl list | grep palmpay` and `tail -f /tmp/palmpay-nfc-bridge.log`.
 
-```powershell
-$env:PALMPAY_NFC_BRIDGE_TOKEN="local-reader-token"
+For a real card UID mapping, set:
+
+```bash
+PALMPAY_NFC_CARD_MAP='{"04AABBCCDD":"CARD-POS-042"}'
+```
+
+For a no-hardware smoke test while the POS is waiting on the NFC payment screen:
+
+```bash
 npm run nfc:bridge:mock
 ```
 
-### Optional Card Mapping
-
-By default, any detected card maps to the demo card reference. To map a real
-card UID yourself:
-
-macOS/Linux:
-
-```bash
-PALMPAY_NFC_CARD_MAP='{"04AABBCCDD":"CARD-POS-042"}' npm run nfc:bridge
-```
-
-Windows PowerShell:
-
-```powershell
-$env:PALMPAY_NFC_CARD_MAP='{"04AABBCCDD":"CARD-POS-042"}'
-npm run nfc:bridge
-```
-
-Keep the bridge token the same in the web app and bridge terminal.
+Do not encode a public payment-success URL that directly marks the order paid. If you write a URL or token to an NFC tag, make it a card token such as `CARD-POS-042` or `https://local-palmpay/nfc?cardRef=CARD-POS-042`; the local bridge still decides whether there is an active waiting transaction.
 
 ## Stack
 
 - Next.js + React + TypeScript
 - `qrcode.react` for QR payment payloads
 - Local browser storage for prototype persistence and CSV export
+- Survey questions in `src/data/survey-questions.json`
 - Coffee catalog imagery in `public/menu`
 
 ## Run
@@ -154,4 +117,4 @@ Open `http://localhost:7999`.
 
 ## Data
 
-The prototype records participant id, assigned group, setup and checkout timing, selected cart items, transaction total, retries/errors, biometric deletion timestamp, and event logs. Export `palmpay-wide.csv` and `palmpay-events.csv` from the purchase-complete screen or admin screen. The research questionnaire is handled outside the app at [this Google Form](https://docs.google.com/forms/d/1pYmhACf0Wx1OrOFsVFZSctAhfpcce85E2D2MWceLTEc).
+The prototype records participant id, assigned group, setup and checkout timing, selected cart items, transaction total, retries/errors, survey answers, biometric deletion timestamp, and event logs. Export `palmpay-wide.csv` and `palmpay-events.csv` from the final debrief screen or admin screen.

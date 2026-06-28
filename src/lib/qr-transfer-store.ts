@@ -1,9 +1,4 @@
 import { getProduct } from "@/lib/catalog";
-import {
-  decryptFaceDescriptor,
-  encryptFaceDescriptor,
-} from "@/lib/biometric-crypto";
-import { appDb, ensureAppTables } from "@/lib/db";
 import type { CartLine } from "@/lib/types";
 
 export type QrTransferStatus = "pending" | "paid";
@@ -29,71 +24,15 @@ export type QrTransfer = {
   paidAt: string | null;
 };
 
-type DbTimestamp = string | Date | null;
-
-type QrTransferRow = {
-  id: string;
-  transaction_id: string;
-  sender_name: string;
-  receiver_name: string;
-  amount: number;
-  product_summary: string;
-  items_json: string;
-  auth_method: QrTransferAuthMethod;
-  pin: string | null;
-  face_descriptor_json: string | null;
-  match_distance: number | null;
-  status: QrTransferStatus;
-  authorization_code: string | null;
-  created_at: DbTimestamp;
-  paid_at: DbTimestamp;
+const globalForQrTransfers = globalThis as unknown as {
+  palmpayQrTransfers?: Map<string, QrTransfer>;
 };
 
-function asText(value: DbTimestamp) {
-  if (!value) return null;
-  return value instanceof Date ? value.toISOString() : value;
-}
-
-function parseItems(value: string) {
-  try {
-    const parsed = JSON.parse(value || "[]");
-    return Array.isArray(parsed) ? (parsed as CartLine[]) : [];
-  } catch {
-    return [];
+function transfers() {
+  if (!globalForQrTransfers.palmpayQrTransfers) {
+    globalForQrTransfers.palmpayQrTransfers = new Map();
   }
-}
-
-function parseFaceDescriptor(value: string | null) {
-  if (!value) return null;
-  try {
-    return decryptFaceDescriptor(JSON.parse(value));
-  } catch {
-    return null;
-  }
-}
-
-function toTransfer(row: QrTransferRow): QrTransfer {
-  return {
-    id: row.id,
-    transactionId: row.transaction_id,
-    senderName: row.sender_name,
-    receiverName: row.receiver_name,
-    amount: row.amount,
-    productSummary: row.product_summary,
-    items: parseItems(row.items_json),
-    authMethod: row.auth_method,
-    pin: row.pin,
-    faceDescriptor: parseFaceDescriptor(row.face_descriptor_json),
-    matchDistance: row.match_distance,
-    status: row.status,
-    authorizationCode: row.authorization_code,
-    createdAt: asText(row.created_at) ?? "",
-    paidAt: asText(row.paid_at),
-  };
-}
-
-function createTransferId() {
-  return crypto.randomUUID().replaceAll("-", "").slice(0, 16);
+  return globalForQrTransfers.palmpayQrTransfers;
 }
 
 export function summarizeItems(items: CartLine[]) {
@@ -105,7 +44,7 @@ export function summarizeItems(items: CartLine[]) {
     .join("; ");
 }
 
-export async function createQrTransfer(input: {
+export function createQrTransfer(input: {
   amount: number;
   authMethod?: QrTransferAuthMethod;
   faceDescriptor?: number[] | null;
@@ -115,11 +54,14 @@ export async function createQrTransfer(input: {
   senderName: string;
   transactionId: string;
 }) {
-  await ensureAppTables();
+  const existing = [...transfers().values()].find(
+    (transfer) => transfer.transactionId === input.transactionId,
+  );
+  if (existing) return existing;
 
   const authMethod = input.authMethod ?? "pin";
   const transfer: QrTransfer = {
-    id: createTransferId(),
+    id: crypto.randomUUID().replaceAll("-", "").slice(0, 16),
     transactionId: input.transactionId,
     senderName: input.senderName,
     receiverName: "Palm Pay",
@@ -136,93 +78,12 @@ export async function createQrTransfer(input: {
     paidAt: null,
   };
 
-  const itemsJson = JSON.stringify(transfer.items);
-  const faceDescriptorJson = transfer.faceDescriptor
-    ? JSON.stringify(encryptFaceDescriptor(transfer.faceDescriptor))
-    : null;
-
-  if (appDb.kind === "postgres") {
-    const result = await appDb.pool.query<QrTransferRow>(
-      `INSERT INTO qr_transfers
-        (id, transaction_id, sender_name, receiver_name, amount, product_summary,
-         items_json, auth_method, pin, face_descriptor_json, match_distance,
-         status, authorization_code, created_at, paid_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-       ON CONFLICT (transaction_id)
-       DO UPDATE SET transaction_id = EXCLUDED.transaction_id
-       RETURNING *`,
-      [
-        transfer.id,
-        transfer.transactionId,
-        transfer.senderName,
-        transfer.receiverName,
-        transfer.amount,
-        transfer.productSummary,
-        itemsJson,
-        transfer.authMethod,
-        transfer.pin,
-        faceDescriptorJson,
-        transfer.matchDistance,
-        transfer.status,
-        transfer.authorizationCode,
-        transfer.createdAt,
-        transfer.paidAt,
-      ],
-    );
-
-    return toTransfer(result.rows[0]);
-  }
-
-  appDb.sqlite
-    .prepare(
-      `INSERT INTO qr_transfers
-        (id, transaction_id, sender_name, receiver_name, amount, product_summary,
-         items_json, auth_method, pin, face_descriptor_json, match_distance,
-         status, authorization_code, created_at, paid_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(transaction_id) DO NOTHING`,
-    )
-    .run(
-      transfer.id,
-      transfer.transactionId,
-      transfer.senderName,
-      transfer.receiverName,
-      transfer.amount,
-      transfer.productSummary,
-      itemsJson,
-      transfer.authMethod,
-      transfer.pin,
-      faceDescriptorJson,
-      transfer.matchDistance,
-      transfer.status,
-      transfer.authorizationCode,
-      transfer.createdAt,
-      transfer.paidAt,
-    );
-
-  const row = appDb.sqlite
-    .prepare("SELECT * FROM qr_transfers WHERE transaction_id = ?")
-    .get(transfer.transactionId) as QrTransferRow;
-
-  return toTransfer(row);
+  transfers().set(transfer.id, transfer);
+  return transfer;
 }
 
-export async function getQrTransfer(id: string) {
-  await ensureAppTables();
-
-  if (appDb.kind === "postgres") {
-    const result = await appDb.pool.query<QrTransferRow>(
-      "SELECT * FROM qr_transfers WHERE id = $1 LIMIT 1",
-      [id],
-    );
-    return result.rows[0] ? toTransfer(result.rows[0]) : null;
-  }
-
-  const row = appDb.sqlite
-    .prepare("SELECT * FROM qr_transfers WHERE id = ? LIMIT 1")
-    .get(id) as QrTransferRow | undefined;
-
-  return row ? toTransfer(row) : null;
+export function getQrTransfer(id: string) {
+  return transfers().get(id) ?? null;
 }
 
 function euclideanDistance(left: number[], right: number[]) {
@@ -234,11 +95,11 @@ function euclideanDistance(left: number[], right: number[]) {
   return Math.sqrt(squared);
 }
 
-export async function confirmQrTransfer(
+export function confirmQrTransfer(
   id: string,
   credentials: { faceDescriptor?: number[]; pin?: string },
 ) {
-  const transfer = await getQrTransfer(id);
+  const transfer = getQrTransfer(id);
   if (!transfer) {
     return { error: "not_found" as const, transfer: null };
   }
@@ -289,55 +150,12 @@ export async function confirmQrTransfer(
     paidAt: transfer.paidAt ?? new Date().toISOString(),
   };
 
-  if (appDb.kind === "postgres") {
-    const result = await appDb.pool.query<QrTransferRow>(
-      `UPDATE qr_transfers
-       SET face_descriptor_json = NULL,
-           match_distance = $1,
-           status = 'paid',
-           authorization_code = $2,
-           paid_at = $3
-       WHERE id = $4
-       RETURNING *`,
-      [
-        paidTransfer.matchDistance,
-        paidTransfer.authorizationCode,
-        paidTransfer.paidAt,
-        paidTransfer.id,
-      ],
-    );
-
-    return {
-      error: null,
-      matchDistance,
-      threshold: transfer.authMethod === "face" ? faceMatchThreshold : undefined,
-      transfer: toTransfer(result.rows[0]),
-    };
-  }
-
-  appDb.sqlite
-    .prepare(
-      `UPDATE qr_transfers
-       SET face_descriptor_json = NULL,
-           match_distance = ?,
-           status = 'paid',
-           authorization_code = ?,
-           paid_at = ?
-       WHERE id = ?`,
-    )
-    .run(
-      paidTransfer.matchDistance,
-      paidTransfer.authorizationCode,
-      paidTransfer.paidAt,
-      paidTransfer.id,
-    );
-
-  const updated = await getQrTransfer(paidTransfer.id);
+  transfers().set(id, paidTransfer);
   return {
     error: null,
     matchDistance,
     threshold: transfer.authMethod === "face" ? faceMatchThreshold : undefined,
-    transfer: updated ?? paidTransfer,
+    transfer: paidTransfer,
   };
 }
 

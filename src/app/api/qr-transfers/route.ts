@@ -65,7 +65,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "Invalid QR transfer" }, { status: 400 });
   }
 
-  const transfer = await createQrTransfer({
+  const transfer = createQrTransfer({
     amount: body.amount,
     authMethod,
     faceDescriptor,
