@@ -16,6 +16,7 @@ html {
 }
 
 @theme inline {
+  --breakpoint-2xl: 1600px;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);

@@ -1674,7 +1674,7 @@ export function DemoApp() {
         session={session}
         onReset={resetCurrentSession}
       />
-      <div className="mx-auto grid max-w-[1540px] gap-5 px-4 py-5 sm:px-6 lg:grid-cols-[280px_minmax(0,1fr)]">
+      <div className="mx-auto grid max-w-[1200px] gap-5 px-4 py-5 sm:px-6 lg:grid-cols-[280px_minmax(0,1fr)] 2xl:max-w-[1540px]">
         <ProgressRail
           currentStep={session.current_step}
           group={session.assigned_group}
@@ -2181,7 +2181,7 @@ function AdminHome({
 
   return (
     <main className="min-h-screen bg-[#fbf7f1] p-4 text-stone-950 sm:p-6">
-      <div className="mx-auto min-h-[calc(100vh-3rem)] max-w-[1540px] rounded-lg border border-[#ead8bf] bg-white px-5 py-6 sm:px-8 lg:px-10">
+      <div className="mx-auto min-h-[calc(100vh-3rem)] max-w-[1200px] rounded-lg border border-[#ead8bf] bg-white px-5 py-6 sm:px-8 lg:px-10 2xl:max-w-[1540px]">
         <header className="mb-6 flex flex-wrap items-center justify-between gap-4">
           <BrandLockup subtitle={locale === "vi" ? "Nghiên cứu" : "Research"} />
           <LocaleSwitcher locale={locale} onChange={onLocaleChange} />
@@ -2344,7 +2344,7 @@ function ExperimentHeader({
 }) {
   return (
     <header className="sticky top-0 z-20 border-b border-[#ead8bf] bg-[#fffaf5]/95 backdrop-blur">
-      <div className="mx-auto flex min-h-[72px] max-w-[1540px] flex-wrap items-center justify-between gap-3 px-4 sm:px-6">
+      <div className="mx-auto flex min-h-[72px] max-w-[1200px] flex-wrap items-center justify-between gap-3 px-4 sm:px-6 2xl:max-w-[1540px]">
         <BrandLockup
           compact
           subtitle={
@@ -3940,7 +3940,7 @@ function PaymentScreen({
       icon={groupCopy[group].icon}
       title={groupCopyFor(group, locale).label}
     >
-      <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_260px] xl:grid-cols-[minmax(0,1fr)_310px] 2xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="min-w-0">
           {group === "QR_PIN" && (
             <QrPosPayment
@@ -4499,16 +4499,16 @@ function NfcBridgePayment({
   return (
     <div className="space-y-4">
       <div className="relative flex min-h-[380px] items-center justify-center overflow-hidden rounded-lg border border-[#ead8bf] bg-[#fff8ed] px-5 py-7">
-        <div className="absolute inset-0 flex items-center justify-center text-[#ead8bf]">
-          <span className="absolute h-[310px] w-[310px] rounded-full border border-current opacity-45" />
-          <span className="absolute h-[240px] w-[240px] rounded-full border border-current opacity-60" />
-          <span className="absolute h-[170px] w-[170px] rounded-full border border-current opacity-75" />
-        </div>
-        <div className="relative z-10 w-full max-w-[460px] text-center">
-          <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full border border-[#ead8bf] bg-white text-[#52693d]">
-            <NfcSignalMark size={54} />
+        <div className="relative z-10 flex w-full max-w-[460px] flex-col items-center text-center">
+          <div className="relative h-[220px] w-[220px] text-[#ead8bf] sm:h-[240px] sm:w-[240px]">
+            <span className="absolute left-1/2 top-1/2 h-full w-full -translate-x-1/2 -translate-y-1/2 rounded-full border border-current opacity-45" />
+            <span className="absolute left-1/2 top-1/2 h-[76%] w-[76%] -translate-x-1/2 -translate-y-1/2 rounded-full border border-current opacity-60" />
+            <span className="absolute left-1/2 top-1/2 h-[52%] w-[52%] -translate-x-1/2 -translate-y-1/2 rounded-full border border-current opacity-75" />
+            <div className="absolute left-1/2 top-1/2 flex h-20 w-20 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-[#ead8bf] bg-white text-[#52693d] sm:h-24 sm:w-24">
+              <NfcSignalMark size={54} />
+            </div>
           </div>
-          <p className="mt-8 text-2xl font-extrabold text-stone-950">
+          <p className="mt-2 text-2xl font-extrabold text-stone-950">
             {locale === "vi" ? "Chạm thẻ vào đầu đọc" : "Tap card on the reader"}
           </p>
           <p className="mt-3 text-xl font-medium text-stone-600">
