@@ -201,8 +201,8 @@
         "en": "YOUR PERCEPTION OF SECURITY"
       },
       "section_intro": {
-        "vi": "SECTION 1: ĐÁNH GIÁ CỦA BẠN VỀ TRẢI NGHIỆM VỪA RỒI\n\nVui lòng đánh giá mức độ đồng ý của bạn theo thang từ 1 - 7 với:\n1. Hoàn toàn không đồng ý\n2. Không đồng ý\n3. Hơi không đồng ý\n4. Trung lập\n5. Hơi đồng ý\n6. Đồng ý\n7. Hoàn toàn đồng ý",
-        "en": "SECTION 1: YOUR EVALUATION OF THE EXPERIENCE\n\nPlease rate your level of agreement on a scale from 1 to 7:\n1. Strongly disagree\n2. Disagree\n3. Slightly disagree\n4. Neutral\n5. Slightly agree\n6. Agree\n7. Strongly agree"
+        "vi": "Vui lòng đánh giá mức độ đồng ý của bạn theo thang từ 1 - 7 với:\n1. Hoàn toàn không đồng ý\n2. Không đồng ý\n3. Hơi không đồng ý\n4. Trung lập\n5. Hơi đồng ý\n6. Đồng ý\n7. Hoàn toàn đồng ý",
+        "en": "Please rate your level of agreement on a scale from 1 to 7:\n1. Strongly disagree\n2. Disagree\n3. Slightly disagree\n4. Neutral\n5. Slightly agree\n6. Agree\n7. Strongly agree"
       },
       "source_text": "PS1: I perceive EPS as secure.",
       "text": {

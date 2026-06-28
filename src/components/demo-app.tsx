@@ -2,18 +2,28 @@
 
 import {
   AlertTriangle,
+  ArrowLeft,
   ArrowRight,
   BadgeCheck,
+  Ban,
   Camera,
   Check,
   CheckCircle2,
   ChevronDown,
+  CircleHelp,
   ClipboardCheck,
+  Coffee,
   Download,
+  ExternalLink,
+  FileSpreadsheet,
+  GraduationCap,
   Hand,
+  Leaf,
   Loader2,
+  LockKeyhole,
   Minus,
   Nfc,
+  PlayCircle,
   Plus,
   QrCode,
   ReceiptText,
@@ -23,9 +33,14 @@ import {
   Search,
   ShieldCheck,
   ShoppingBag,
+  ShoppingCart,
+  Sparkles,
   Smartphone,
   TimerReset,
+  User,
   UserPlus,
+  WalletCards,
+  Zap,
 } from "lucide-react";
 import Image from "next/image";
 import { QRCodeSVG } from "qrcode.react";
@@ -195,6 +210,12 @@ const uiText = {
     vi: "KHẢO SÁT TRẢI NGHIỆM THANH TOÁN ĐIỆN TỬ",
     en: "ELECTRONIC PAYMENT EXPERIENCE SURVEY",
   },
+  postSurveyExperienceEyebrow: { vi: "Phần 2 / 3", en: "Part 2 / 3" },
+  postSurveyExperienceTitle: {
+    vi: "SECTION 1: ĐÁNH GIÁ CỦA BẠN VỀ TRẢI NGHIỆM VỪA RỒI",
+    en: "SECTION 1: YOUR EVALUATION OF THE EXPERIENCE",
+  },
+  previous: { vi: "Quay lại", en: "Back" },
   selected: { vi: "Đã chọn", en: "Selected" },
   startSession: { vi: "Bắt đầu phiên", en: "Start session" },
   surveyContinue: { vi: "Tiếp tục khảo sát", en: "Continue to survey" },
@@ -396,6 +417,7 @@ const flowSteps: StepKey[] = [
 ];
 
 const postQuestions = surveySettings.post;
+const profileSurveyConstruct = "RESPONDENT_PROFILE";
 
 type FaceApi = typeof import("@vladmandic/face-api");
 
@@ -2033,7 +2055,7 @@ function AdminHome({
   const [history, setHistory] = useState<AssignmentHistoryItem[]>([]);
   const [completed, setCompleted] = useState<ExperimentSession[]>([]);
   const [participantName, setParticipantName] = useState("");
-  const [selectedGroup, setSelectedGroup] = useState<StudyGroup | null>(null);
+  const [selectedGroup, setSelectedGroup] = useState<StudyGroup>(groupOrder[0]);
 
   useEffect(() => {
     window.queueMicrotask(() => {
@@ -2048,142 +2070,188 @@ function AdminHome({
   }));
   const trimmedName = participantName.trim();
   const chooseGroup = (group: StudyGroup) => setSelectedGroup(group);
+  const disabledExport = completed.length === 0;
+  const exportActions = [
+    {
+      Icon: FileSpreadsheet,
+      label: locale === "vi" ? "Xuất Excel" : "Export Excel",
+      onClick: () => downloadMethodWorkbook("palmpay-method-sheets.xls", completed, locale),
+    },
+    {
+      Icon: Download,
+      label: locale === "vi" ? "Xuất CSV" : "Export CSV",
+      onClick: () => downloadMethodCsv("palmpay-wide.csv", completed, locale),
+    },
+    {
+      Icon: ReceiptText,
+      label: locale === "vi" ? "Xuất nhật ký" : "Export log",
+      onClick: () =>
+        downloadCsv(
+          "palmpay-events.csv",
+          completed.flatMap((item) => item.events),
+        ),
+    },
+  ];
 
   return (
-    <main className="min-h-screen bg-[#f6efe5] px-4 py-5 text-stone-950 sm:px-6">
-      <div className="mx-auto grid max-w-[1680px] gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <section className="rounded-lg border border-[#ead8bf] bg-white p-5 shadow-sm">
-          <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-            <div>
+    <main className="min-h-screen bg-[#f6efe5] p-4 text-stone-950 sm:p-5">
+      <div className="mx-auto min-h-[calc(100vh-2.5rem)] max-w-[1680px] rounded-xl bg-white/90 px-6 py-9 shadow-[0_18px_55px_rgba(69,43,24,0.10)] ring-1 ring-[#ead8bf]/60 sm:px-10 lg:px-14">
+        <header className="mb-10 flex items-center justify-between gap-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <Image
+              alt=""
+              aria-hidden
+              className="h-10 w-10 shrink-0"
+              height={44}
+              priority
+              src="/brand/palmpay-mark.svg"
+              width={44}
+            />
+            <p className="min-w-0 text-2xl leading-tight tracking-normal text-stone-950 sm:text-3xl">
+              <span className="font-extrabold text-[#6f3f24]">PalmPay</span>{" "}
+              Coffee
+            </p>
+          </div>
+          <LocaleSwitcher locale={locale} onChange={onLocaleChange} />
+        </header>
+
+        <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_440px]">
+          <div className="space-y-8">
+            <section className="relative min-h-[340px] overflow-hidden rounded-lg border border-[#ead8bf] bg-white shadow-sm">
               <Image
-                alt="PalmPay"
-                className="mb-3 h-auto w-40"
-                height={64}
+                alt="Latte art coffee cup on a saucer"
+                className="object-cover object-center"
+                fill
                 priority
-                src="/brand/palmpay-logo.svg"
-                width={264}
+                sizes="(min-width: 1280px) 1060px, 100vw"
+                src="/brand/coffee-hero-banner.png"
               />
-              <h1 className="mt-1 text-2xl font-semibold tracking-normal">
-                {t("appTitle", locale)}
-              </h1>
-            </div>
+              <div className="relative z-10 flex min-h-[340px] max-w-[690px] flex-col justify-center px-7 py-10 sm:px-12 lg:px-16">
+                <div className="inline-flex w-fit items-center gap-2 rounded-full bg-[#f6efe5] px-4 py-2 text-sm font-medium text-[#8a5736]">
+                  <Coffee size={15} aria-hidden />
+                  Behavioral research for better payments
+                </div>
+                <h1 className="mt-8 max-w-[660px] text-4xl font-extrabold leading-[1.05] tracking-normal text-[#21160f] sm:text-5xl">
+                  Research session setup
+                </h1>
+                <p className="mt-7 max-w-[570px] text-lg leading-8 text-stone-600">
+                  Configure a new research session and choose the payment method to test.
+                </p>
+              </div>
+            </section>
+
+            <section className="rounded-lg border border-[#ead8bf] bg-white px-7 py-8 shadow-sm sm:px-8">
+              <div className="mb-7 flex items-center gap-3">
+                <ClipboardCheck size={20} aria-hidden />
+                <h2 className="text-lg font-semibold">
+                  {locale === "vi"
+                    ? "Chọn phương thức thanh toán để nghiên cứu"
+                    : "Choose the payment method to research"}
+                </h2>
+              </div>
+              <div className="grid gap-7 sm:grid-cols-2 2xl:grid-cols-4">
+                {counts.map(({ group, count }) => {
+                  const copy = groupCopyFor(group, locale);
+                  const Icon = copy.icon;
+                  const selected = selectedGroup === group;
+                  return (
+                    <button
+                      aria-pressed={selected}
+                      className={cn(
+                        "relative flex min-h-[240px] flex-col items-center justify-center rounded-lg border p-5 text-center transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#b78352]",
+                        copy.color,
+                        selected && "border-[#8a4d2a] shadow-sm ring-1 ring-[#8a4d2a]",
+                      )}
+                      key={group}
+                      onClick={() => chooseGroup(group)}
+                      type="button"
+                    >
+                      {selected && (
+                        <span className="absolute right-4 top-4 inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#8a4d2a] text-white">
+                          <Check size={18} aria-hidden />
+                        </span>
+                      )}
+                      <Icon className="mb-5" size={40} aria-hidden />
+                      <h3 className="text-lg font-semibold">{copy.shortLabel}</h3>
+                      <p className="mt-2 text-sm leading-5 opacity-75">{copy.device}</p>
+                      <span className="mt-8 inline-flex min-w-36 items-center justify-center gap-2 rounded-full border border-current/20 bg-white/55 px-4 py-2 text-sm font-semibold">
+                        <User size={15} aria-hidden />
+                        {count} {locale === "vi" ? "người" : "participants"}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          </div>
+
+          <aside className="space-y-8">
             <form
-              className="grid w-full max-w-sm gap-2"
+              className="rounded-lg border border-[#ead8bf] bg-white p-7 shadow-sm sm:p-8"
               onSubmit={(event) => {
                 event.preventDefault();
-                if (!trimmedName || !selectedGroup) return;
+                if (!trimmedName) return;
                 onCreate(trimmedName, selectedGroup);
               }}
             >
-              <div className="flex justify-end">
-                <LocaleSwitcher locale={locale} onChange={onLocaleChange} />
-              </div>
-              <label className="text-sm font-medium text-stone-700" htmlFor="participant-name">
+              <h2 className="text-xl font-semibold">
+                {locale === "vi" ? "Thông tin người tham gia" : "Participant information"}
+              </h2>
+              <label
+                className="mt-8 block text-sm font-medium text-stone-600"
+                htmlFor="participant-name"
+              >
                 {t("participantName", locale)}
               </label>
-              <input
-                autoComplete="off"
-                className="h-11 rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 text-sm outline-none transition focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
-                id="participant-name"
-                onChange={(event) => setParticipantName(event.target.value)}
-                placeholder={t("participantPlaceholder", locale)}
-                value={participantName}
-              />
+              <div className="relative mt-3">
+                <User
+                  className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2 text-[#a67b60]"
+                  size={20}
+                  aria-hidden
+                />
+                <input
+                  autoComplete="off"
+                  className="h-16 w-full rounded-lg border border-[#ead8bf] bg-white px-12 text-base outline-none transition placeholder:text-stone-400 focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
+                  id="participant-name"
+                  onChange={(event) => setParticipantName(event.target.value)}
+                  placeholder={t("participantPlaceholder", locale)}
+                  value={participantName}
+                />
+              </div>
               <button
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-[#d6c0aa]"
-                disabled={!trimmedName || !selectedGroup}
+                className="mt-8 inline-flex h-[72px] w-full items-center justify-center gap-3 rounded-lg bg-[#7b4325] px-5 text-lg font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18)] transition hover:bg-[#65371f] disabled:bg-[#d6c0aa]"
+                disabled={!trimmedName}
                 type="submit"
               >
-                <UserPlus size={17} aria-hidden />
+                <PlayCircle size={27} aria-hidden />
                 {t("startSession", locale)}
               </button>
             </form>
-          </div>
 
-          <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
-            <div>
-              <h2 className="text-sm font-semibold text-stone-950">
-                {t("chooseMethod", locale)}
-              </h2>
-            </div>
-            {selectedGroup && (
-              <span className="rounded-full border border-[#ead8bf] bg-[#fffaf3] px-3 py-1 text-xs font-semibold text-[#6f3f24]">
-                {t("selected", locale)} {groupCopyFor(selectedGroup, locale).shortLabel}
-              </span>
-            )}
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {counts.map(({ group, count }) => {
-              const copy = groupCopyFor(group, locale);
-              const Icon = copy.icon;
-              const selected = selectedGroup === group;
-              return (
-                <button
-                  aria-pressed={selected}
-                  className={cn(
-                    "rounded-lg border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-[#b78352]",
-                    copy.color,
-                    selected && "border-[#6f3f24] ring-2 ring-[#6f3f24]/25",
-                  )}
-                  key={group}
-                  onClick={() => chooseGroup(group)}
-                  type="button"
-                >
-                  <div className="mb-3 flex items-center justify-between">
-                    <Icon size={20} aria-hidden />
-                    <span className="rounded-full bg-white/70 px-2 py-1 text-xs font-semibold">
-                      {count} {locale === "vi" ? "người" : "participants"}
+            <section className="rounded-lg border border-[#ead8bf] bg-white p-7 shadow-sm sm:p-8">
+              <div className="flex items-center gap-4">
+                <ExternalLink size={21} aria-hidden />
+                <h2 className="text-xl font-semibold">Export data</h2>
+              </div>
+              <div className="mt-8 grid gap-3">
+                {exportActions.map(({ Icon, label, onClick }) => (
+                  <button
+                    className="inline-flex h-16 items-center gap-5 rounded-lg border border-[#ead8bf] bg-white px-5 text-left text-base font-medium text-stone-800 transition hover:bg-[#fffaf3] disabled:text-stone-400"
+                    disabled={disabledExport}
+                    key={label}
+                    onClick={onClick}
+                    type="button"
+                  >
+                    <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#f7f1e9] text-[#6f3f24]">
+                      <Icon size={21} aria-hidden />
                     </span>
-                  </div>
-                  <h2 className="text-sm font-semibold">{copy.shortLabel}</h2>
-                  <p className="mt-1 text-xs leading-5 opacity-80">{copy.device}</p>
-                </button>
-              );
-            })}
-          </div>
-        </section>
-
-        <aside className="space-y-5">
-          <section className="rounded-lg border border-[#ead8bf] bg-white p-4 shadow-sm">
-            <h2 className="font-semibold">{t("exportData", locale)}</h2>
-            <div className="mt-3 grid gap-2">
-              <button
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#ead8bf] bg-white px-3 text-sm font-semibold text-stone-700 transition hover:bg-[#fffaf3]"
-                disabled={completed.length === 0}
-                onClick={() =>
-                  downloadMethodWorkbook("palmpay-method-sheets.xls", completed, locale)
-                }
-                type="button"
-              >
-                <Download size={16} aria-hidden />
-                {t("methodExcel", locale)}
-              </button>
-              <button
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#ead8bf] bg-white px-3 text-sm font-semibold text-stone-700 transition hover:bg-[#fffaf3]"
-                disabled={completed.length === 0}
-                onClick={() => downloadMethodCsv("palmpay-wide.csv", completed, locale)}
-                type="button"
-              >
-                <Download size={16} aria-hidden />
-                {t("dataCsv", locale)}
-              </button>
-              <button
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#ead8bf] bg-white px-3 text-sm font-semibold text-stone-700 transition hover:bg-[#fffaf3]"
-                disabled={completed.length === 0}
-                onClick={() =>
-                  downloadCsv(
-                    "palmpay-events.csv",
-                    completed.flatMap((item) => item.events),
-                  )
-                }
-                type="button"
-              >
-                <ReceiptText size={16} aria-hidden />
-                {t("logCsv", locale)}
-              </button>
-            </div>
-          </section>
-        </aside>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </section>
+          </aside>
+        </div>
       </div>
     </main>
   );
@@ -2605,11 +2673,11 @@ function SurveyScreen({
   questions: SurveyQuestion[];
   title: string;
 }) {
-  const complete = questions.every(
-    (question) =>
-      !question.required ||
-      (answers[question.item_id] !== undefined && answers[question.item_id] !== ""),
-  );
+  const [surveyStep, setSurveyStep] = useState<"profile" | "experience">("profile");
+  const isProfileStep = surveyStep === "profile";
+  const isAnswered = (question: SurveyQuestion) =>
+    !question.required ||
+    normalizeSurveyAnswer(question, answers[question.item_id]) !== "";
   const sections = questions.reduce<
     Array<{
       construct: string;
@@ -2633,11 +2701,87 @@ function SurveyScreen({
       },
     ];
   }, []);
+  const profileSections = sections.filter(
+    (section) => section.construct === profileSurveyConstruct,
+  );
+  const experienceSections = sections.filter(
+    (section) => section.construct !== profileSurveyConstruct,
+  );
+  const activeSections = isProfileStep ? profileSections : experienceSections;
+  const activeQuestions = activeSections.flatMap((section) => section.questions);
+  const activeComplete = activeQuestions.every(isAnswered);
+  const hasExperienceStep = experienceSections.length > 0;
+  const profileComplete = profileSections
+    .flatMap((section) => section.questions)
+    .every(isAnswered);
+  const panelEyebrow = isProfileStep
+    ? eyebrow
+    : t("postSurveyExperienceEyebrow", locale);
+  const panelTitle = isProfileStep ? title : t("postSurveyExperienceTitle", locale);
+  const profileLabel =
+    profileSections[0]?.label ??
+    (locale === "vi" ? "Thông tin người tham gia" : "Respondent profile");
+  const experienceLabel =
+    locale === "vi" ? "Đánh giá trải nghiệm" : "Experience evaluation";
+  const goToSurveyStep = (step: "profile" | "experience") => {
+    setSurveyStep(step);
+    window.requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  };
 
   return (
-    <Panel eyebrow={eyebrow} icon={ClipboardCheck} title={title}>
+    <Panel eyebrow={panelEyebrow} icon={ClipboardCheck} title={panelTitle}>
+      {hasExperienceStep && (
+        <div className="mb-4 grid gap-2 sm:grid-cols-2">
+          {[
+            {
+              key: "profile" as const,
+              label: profileLabel,
+              number: 1,
+              complete: profileComplete,
+            },
+            {
+              key: "experience" as const,
+              label: experienceLabel,
+              number: 2,
+              complete: experienceSections
+                .flatMap((section) => section.questions)
+                .every(isAnswered),
+            },
+          ].map((step) => {
+            const active = surveyStep === step.key;
+            return (
+              <button
+                className={cn(
+                  "flex items-center gap-3 rounded-lg border p-3 text-left transition",
+                  active
+                    ? "border-[#6f3f24] bg-[#fffaf3] text-stone-950"
+                    : "border-[#ead8bf] bg-white text-stone-600 hover:border-[#c9955d]",
+                )}
+                disabled={step.key === "experience" && !profileComplete}
+                key={step.key}
+                onClick={() => goToSurveyStep(step.key)}
+                type="button"
+              >
+                <span
+                  className={cn(
+                    "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-sm font-semibold",
+                    active ? "bg-[#6f3f24] text-white" : "bg-[#f6efe5] text-[#7a4a2a]",
+                  )}
+                >
+                  {step.complete ? <Check size={15} aria-hidden /> : step.number}
+                </span>
+                <span className="min-w-0 text-sm font-semibold leading-5">
+                  {step.label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
       <div className="space-y-4">
-        {sections.map((section) => (
+        {activeSections.map((section) => (
           <section
             className="rounded-lg border border-[#ead8bf] bg-[#fffaf3] p-4"
             key={section.construct}
@@ -2658,6 +2802,9 @@ function SurveyScreen({
                 const normalizedValue = normalizeSurveyAnswer(question, answerValue);
                 const text = questionText(question, locale);
                 const options = questionOptions(question, locale);
+                const useRadioChoices =
+                  section.construct === profileSurveyConstruct &&
+                  question.type === "select";
                 return (
                   <div
                     className="rounded-lg border border-[#ead8bf] bg-white p-4"
@@ -2670,7 +2817,14 @@ function SurveyScreen({
                         </p>
                       </div>
                     </div>
-                    {question.type === "select" ? (
+                    {useRadioChoices ? (
+                      <RadioChoiceGroup
+                        itemId={question.item_id}
+                        onChange={(value) => onAnswer(question.item_id, value)}
+                        options={options}
+                        value={selectAnswerValue(question, answerValue)}
+                      />
+                    ) : question.type === "select" ? (
                       <div className="max-w-sm">
                         <CustomSelect
                           onChange={(value) => onAnswer(question.item_id, Number(value))}
@@ -2699,17 +2853,84 @@ function SurveyScreen({
         ))}
       </div>
       <ActionRow>
-        <button
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-[#d6c0aa]"
-          disabled={!complete}
-          onClick={onSubmit}
-          type="button"
-        >
-          {t("complete", locale)}
-          <ArrowRight size={17} aria-hidden />
-        </button>
+        <div className="flex w-full flex-wrap justify-between gap-3">
+          {!isProfileStep ? (
+            <button
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-[#ead8bf] bg-white px-4 text-sm font-semibold text-stone-700 transition hover:border-[#c9955d]"
+              onClick={() => goToSurveyStep("profile")}
+              type="button"
+            >
+              <ArrowLeft size={17} aria-hidden />
+              {t("previous", locale)}
+            </button>
+          ) : (
+            <span aria-hidden />
+          )}
+          <button
+            className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-[#d6c0aa]"
+            disabled={!activeComplete}
+            onClick={() => {
+              if (isProfileStep && hasExperienceStep) {
+                goToSurveyStep("experience");
+                return;
+              }
+              onSubmit();
+            }}
+            type="button"
+          >
+            {isProfileStep && hasExperienceStep
+              ? t("surveyContinue", locale)
+              : t("complete", locale)}
+            <ArrowRight size={17} aria-hidden />
+          </button>
+        </div>
       </ActionRow>
     </Panel>
+  );
+}
+
+function RadioChoiceGroup({
+  itemId,
+  onChange,
+  options,
+  value,
+}: {
+  itemId: string;
+  onChange: (value: number) => void;
+  options: string[];
+  value: string;
+}) {
+  return (
+    <div className="grid gap-2 md:grid-cols-2">
+      {options.map((option, index) => {
+        const optionValue = String(index + 1);
+        const optionId = `survey-${itemId}-${optionValue}`;
+        const checked = value === optionValue;
+        return (
+          <label
+            className={cn(
+              "flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border p-3 text-sm leading-5 transition",
+              checked
+                ? "border-[#6f3f24] bg-[#fffaf3] text-stone-950"
+                : "border-[#ead8bf] bg-white text-stone-700 hover:border-[#c9955d]",
+            )}
+            htmlFor={optionId}
+            key={optionValue}
+          >
+            <input
+              checked={checked}
+              className="mt-0.5 h-4 w-4 shrink-0 accent-[#6f3f24]"
+              id={optionId}
+              name={`survey-${itemId}`}
+              onChange={() => onChange(Number(optionValue))}
+              type="radio"
+              value={optionValue}
+            />
+            <span className="min-w-0">{option}</span>
+          </label>
+        );
+      })}
+    </div>
   );
 }
 
