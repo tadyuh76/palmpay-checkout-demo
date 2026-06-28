@@ -2301,20 +2301,20 @@ function AdminHome({
                 {locale === "vi" ? "Thông tin người tham gia" : "Participant information"}
               </h2>
               <label
-                className="mt-6 block text-sm font-medium text-stone-600"
+                className="mt-5 block text-sm font-medium leading-5 text-stone-600"
                 htmlFor="participant-name"
               >
                 {t("participantName", locale)}
               </label>
-              <div className="relative mt-3">
+              <div className="relative mt-2">
                 <User
-                  className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2 text-[#a67b60]"
-                  size={20}
+                  className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#a67b60]"
+                  size={18}
                   aria-hidden
                 />
                 <input
                   autoComplete="off"
-                  className="h-12 w-full rounded-lg border border-[#ead8bf] bg-white px-10 text-sm outline-none transition placeholder:text-stone-400 focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
+                  className="h-11 w-full rounded-lg border border-[#ead8bf] bg-white pl-10 pr-4 text-sm outline-none transition placeholder:text-stone-400 focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
                   id="participant-name"
                   onChange={(event) => setParticipantName(event.target.value)}
                   placeholder={t("participantPlaceholder", locale)}
@@ -2670,129 +2670,231 @@ function SetupScreen({
     onComplete({ card_ref: "CARD-POS-042", nfc_card_ready: true });
   };
 
+  const readyLabel = setupReady
+    ? locale === "vi" ? "Sẵn sàng tiếp tục" : "Ready to continue"
+    : locale === "vi" ? "Cần hoàn tất đăng ký" : "Setup required";
+  const detailLabel =
+    group === "QR_PIN"
+      ? locale === "vi" ? "Tạo mã PIN thử nghiệm" : "Create test PIN"
+      : group === "NFC_CARD"
+        ? locale === "vi" ? "Chuẩn bị thẻ thử nghiệm" : "Prepare test card"
+        : group === "FACE_POS"
+          ? locale === "vi" ? "Ghi mẫu khuôn mặt" : "Record face sample"
+          : locale === "vi" ? "Xác nhận mẫu mô phỏng" : "Confirm simulated sample";
+
   return (
     <Panel
       eyebrow={locale === "vi" ? "Đăng ký phương thức" : "Payment method setup"}
       icon={Icon}
       title={copy.label}
     >
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="space-y-4">
-          {group === "QR_PIN" && (
-            <div className="rounded-lg border border-[#ead8bf] bg-white p-4">
-              <h2 className="text-sm font-semibold text-stone-950">
-                DemoBank QR
-              </h2>
-              <p className="mt-1 text-xs leading-5 text-stone-500">
-                {locale === "vi" ? "Người gửi" : "Sender"}: {participantName}
+      <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_320px]">
+        <section className="overflow-hidden rounded-lg border border-[#ead8bf] bg-[#fffaf7]">
+          <div className="grid lg:grid-cols-[240px_minmax(0,1fr)]">
+            <div className="relative flex min-h-[260px] flex-col items-center justify-center overflow-hidden border-b border-[#ead8bf] bg-[#fff3df] p-6 text-center lg:border-b-0 lg:border-r">
+              <div className="pointer-events-none absolute -right-10 -top-12 h-36 w-36 opacity-30" aria-hidden>
+                <CoffeeLeafGraphic
+                  className="h-full w-full"
+                  coffeeClassName="bottom-1 left-0 h-24 w-24"
+                  leavesClassName="right-0 top-0 h-28 w-28 rotate-12"
+                />
+              </div>
+              <div className="relative flex h-28 w-28 items-center justify-center rounded-full border border-[#ead8bf] bg-white text-[#7b4325]">
+                {group === "NFC_CARD" ? (
+                  <NfcSignalMark size={58} />
+                ) : (
+                  <Icon size={54} strokeWidth={1.8} aria-hidden />
+                )}
+              </div>
+              <p className="mt-5 text-sm font-semibold text-[#9a4f1f]">
+                {copy.device}
               </p>
-              <label className="mt-4 block max-w-xs">
-                <span className="mb-1 block text-sm font-medium text-stone-700">
-                  {locale === "vi" ? "Mã PIN 4 số" : "4-digit PIN"}
-                </span>
-                <input
-                  className="h-11 w-full rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 text-center text-lg font-semibold tracking-[0.25em] outline-none transition focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
-                  inputMode="numeric"
-                  maxLength={4}
-                  onChange={(event) =>
-                    onQrPinChange(event.target.value.replace(/\D/g, "").slice(0, 4))
-                  }
-                  placeholder="0000"
-                  type="password"
-                  value={qrPin}
-                />
-              </label>
+              <p className="mt-2 max-w-[180px] text-xl font-extrabold leading-7 text-[#17120f]">
+                {copy.shortLabel}
+              </p>
             </div>
-          )}
 
-          {group === "NFC_CARD" && (
-            <div className="rounded-lg border border-[#ead8bf] bg-white p-4">
-              <div className="flex items-start gap-3">
-                <Nfc className="mt-0.5 text-[#405438]" size={22} aria-hidden />
-                <div>
-                  <h2 className="text-sm font-semibold text-stone-950">
-                    {locale === "vi" ? "Thẻ NFC thử nghiệm" : "Test NFC card"}
+            <div className="p-5 sm:p-6">
+              <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-[#9a4f1f]">
+                    {detailLabel}
+                  </p>
+                  <h2 className="mt-1 text-2xl font-extrabold leading-tight text-stone-950">
+                    {copy.label}
                   </h2>
-                  <p className="mt-1 text-sm leading-6 text-stone-600">
-                    {locale === "vi"
-                      ? "Chuẩn bị thẻ test cho người tham gia. Không cần nhập thông tin định danh bổ sung."
-                      : "Prepare the test card for the participant. No additional identity information is required."}
+                  <p className="mt-3 max-w-[720px] text-sm leading-6 text-stone-600">
+                    {copy.neutralDescription}
                   </p>
                 </div>
-              </div>
-            </div>
-          )}
-
-          {group === "FACE_POS" && (
-            <div className="rounded-lg border border-[#ead8bf] bg-[#fffaf3] p-4">
-              <div className="mb-4">
-                <h2 className="text-sm font-semibold text-stone-950">
-                  {locale === "vi" ? "Đăng ký Face ID" : "Face ID setup"}
-                </h2>
-                <p className="mt-1 text-xs leading-5 text-stone-500">
-                  {locale === "vi" ? "Tên tài khoản" : "Account name"}:{" "}
-                  {faceAccountName || participantName}
-                </p>
-              </div>
-              <FaceEnrollment
-                enrolled={Boolean(faceDescriptor?.length)}
-                locale={locale}
-                onEnroll={onFaceEnroll}
-              />
-            </div>
-          )}
-
-          {group === "PALM_VEIN" && (
-            <div className="rounded-lg border border-[#ead8bf] bg-white p-4">
-              <div className="mb-4 flex items-start gap-3">
-                <Hand className="mt-0.5 text-[#7a4a2a]" size={22} aria-hidden />
-                <div>
-                  <h2 className="text-sm font-semibold text-stone-950">
-                    {locale === "vi"
-                      ? "PalmPay tĩnh mạch lòng bàn tay"
-                      : "PalmPay palm vein"}
-                  </h2>
-                  <p className="mt-1 text-sm leading-6 text-stone-600">
-                    {locale === "vi"
-                      ? "Mẫu tĩnh mạch lòng bàn tay chỉ được mô phỏng trong phiên demo."
-                      : "The palm vein sample is simulated only for this demo session."}
-                  </p>
+                <div
+                  className={cn(
+                    "inline-flex h-10 shrink-0 items-center gap-2 rounded-lg border px-3 text-sm font-semibold",
+                    setupReady
+                      ? "border-[#dbe6d2] bg-[#f1f6ed] text-[#365d32]"
+                      : "border-[#ead8bf] bg-white text-[#7b4325]",
+                  )}
+                >
+                  {setupReady ? (
+                    <CheckCircle2 size={18} aria-hidden />
+                  ) : (
+                    <TimerReset size={18} aria-hidden />
+                  )}
+                  {readyLabel}
                 </div>
               </div>
-              <label className="flex items-start gap-3 rounded-lg border border-[#ead8bf] bg-[#fffaf3] p-3 text-sm text-stone-700">
-                <input
-                  checked={biometricConsentReady}
-                  className="mt-0.5 h-4 w-4 shrink-0 accent-[#6f3f24]"
-                  disabled={biometricConsentReady}
-                  onChange={(event) => {
-                    if (event.target.checked) onBiometricConsent();
-                  }}
-                  type="checkbox"
-                />
-                <span>
-                  {locale === "vi"
-                    ? "Tôi đồng ý tạo mẫu tĩnh mạch lòng bàn tay mô phỏng cho phiên thử nghiệm này."
-                    : "I agree to create a simulated palm vein sample for this test session."}
-                </span>
-              </label>
-            </div>
-          )}
-        </div>
 
-        <aside className={cn("h-fit rounded-lg border p-4", copy.color)}>
-          <div className="mb-3 flex items-center gap-3">
-            <Icon size={22} aria-hidden />
-            <div>
-              <p className="text-sm font-semibold">{copy.shortLabel}</p>
-              <p className="text-xs opacity-75">{copy.device}</p>
+              {group === "QR_PIN" && (
+                <div className="rounded-lg border border-[#ead8bf] bg-white p-5">
+                  <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h3 className="text-lg font-extrabold text-stone-950">
+                        DemoBank QR
+                      </h3>
+                      <p className="mt-2 text-sm leading-6 text-stone-600">
+                        {locale === "vi" ? "Người gửi" : "Sender"}:{" "}
+                        <span className="font-semibold text-stone-900">{participantName}</span>
+                      </p>
+                    </div>
+                    <label className="block w-full max-w-[280px]">
+                      <span className="mb-2 block text-sm font-semibold text-stone-700">
+                        {locale === "vi" ? "Mã PIN 4 số" : "4-digit PIN"}
+                      </span>
+                      <input
+                        className="h-14 w-full rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-4 text-center text-2xl font-extrabold tracking-[0.3em] text-[#6f3f24] outline-none transition placeholder:text-[#d0b69c] focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
+                        inputMode="numeric"
+                        maxLength={4}
+                        onChange={(event) =>
+                          onQrPinChange(event.target.value.replace(/\D/g, "").slice(0, 4))
+                        }
+                        placeholder="0000"
+                        type="password"
+                        value={qrPin}
+                      />
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {group === "NFC_CARD" && (
+                <div className="rounded-lg border border-[#dbe6d2] bg-white p-5">
+                  <div className="flex items-center gap-5">
+                    <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-[#f1f6ed] text-[#365d32]">
+                      <NfcSignalMark size={42} />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-extrabold text-stone-950">
+                        {locale === "vi" ? "Thẻ NFC thử nghiệm đã sẵn sàng" : "Test NFC card is ready"}
+                      </h3>
+                      <p className="mt-2 max-w-[560px] text-sm leading-6 text-stone-600">
+                        {locale === "vi"
+                          ? "Chuẩn bị thẻ test cho người tham gia. Không cần nhập thông tin định danh bổ sung."
+                          : "Prepare the test card for the participant. No additional identity information is required."}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {group === "FACE_POS" && (
+                <div className="space-y-4">
+                  <div className="rounded-lg border border-[#ead8bf] bg-white p-4">
+                    <p className="text-sm font-semibold text-stone-500">
+                      {locale === "vi" ? "Tên tài khoản" : "Account name"}
+                    </p>
+                    <p className="mt-1 text-lg font-extrabold text-stone-950">
+                      {faceAccountName || participantName}
+                    </p>
+                  </div>
+                  <FaceEnrollment
+                    enrolled={Boolean(faceDescriptor?.length)}
+                    locale={locale}
+                    onEnroll={onFaceEnroll}
+                  />
+                </div>
+              )}
+
+              {group === "PALM_VEIN" && (
+                <div className="rounded-lg border border-[#ead8bf] bg-white p-5">
+                  <div className="flex items-center gap-5">
+                    <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-[#fff3df] text-[#7a4a2a]">
+                      <Hand size={36} strokeWidth={1.8} aria-hidden />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-extrabold text-stone-950">
+                        {locale === "vi"
+                          ? "Mẫu lòng bàn tay mô phỏng"
+                          : "Simulated palm sample"}
+                      </h3>
+                      <p className="mt-2 text-sm leading-6 text-stone-600">
+                        {locale === "vi"
+                          ? "Mẫu tĩnh mạch lòng bàn tay chỉ được mô phỏng trong phiên demo."
+                          : "The palm vein sample is simulated only for this demo session."}
+                      </p>
+                    </div>
+                  </div>
+                  <label className="mt-5 flex min-h-16 items-start gap-3 rounded-lg border border-[#ead8bf] bg-[#fffaf3] p-4 text-sm leading-6 text-stone-700">
+                    <input
+                      checked={biometricConsentReady}
+                      className="mt-1 h-4 w-4 shrink-0 accent-[#6f3f24]"
+                      disabled={biometricConsentReady}
+                      onChange={(event) => {
+                        if (event.target.checked) onBiometricConsent();
+                      }}
+                      type="checkbox"
+                    />
+                    <span>
+                      {locale === "vi"
+                        ? "Tôi đồng ý tạo mẫu tĩnh mạch lòng bàn tay mô phỏng cho phiên thử nghiệm này."
+                        : "I agree to create a simulated palm vein sample for this test session."}
+                    </span>
+                  </label>
+                </div>
+              )}
             </div>
           </div>
-          <p className="text-sm leading-6 opacity-85">{copy.instruction}</p>
+        </section>
+
+        <aside className="hidden self-start rounded-lg border border-[#dbe6d2] bg-[#f9fbf7] p-5 text-[#365d32] 2xl:block">
+          <div className="mb-5 flex items-center gap-3">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-white">
+              {group === "NFC_CARD" ? (
+                <NfcSignalMark size={30} />
+              ) : (
+                <Icon size={26} aria-hidden />
+              )}
+            </div>
+            <div>
+              <p className="text-base font-extrabold text-stone-950">
+                {copy.shortLabel}
+              </p>
+              <p className="mt-1 text-sm text-stone-600">{copy.device}</p>
+            </div>
+          </div>
+          <div className="border-t border-[#dbe6d2] pt-4">
+            <p className="text-sm font-semibold text-[#365d32]">
+              {locale === "vi" ? "Hướng dẫn phiên" : "Session guidance"}
+            </p>
+            <p className="mt-2 text-sm leading-6 text-stone-600">{copy.instruction}</p>
+          </div>
+          <div className="mt-5 rounded-lg border border-[#dbe6d2] bg-white p-4">
+            <p className="text-sm text-stone-500">
+              {locale === "vi" ? "Trạng thái" : "Status"}
+            </p>
+            <p className="mt-1 flex items-center gap-2 text-base font-extrabold text-[#365d32]">
+              {setupReady ? (
+                <CheckCircle2 size={18} aria-hidden />
+              ) : (
+                <TimerReset size={18} aria-hidden />
+              )}
+              {readyLabel}
+            </p>
+          </div>
         </aside>
       </div>
       <ActionRow>
         <button
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-[#d6c0aa]"
+          className={cn(primaryButtonClass, "h-12 min-w-[260px] text-base")}
           disabled={!setupReady}
           onClick={finishSetup}
           type="button"
@@ -4711,10 +4813,10 @@ function RetryPanel({
         <Image
           alt=""
           aria-hidden
-          className="ml-auto mt-3 h-auto w-24"
-          height={112}
-          src="/brand/coffee-sprig.svg"
-          width={148}
+          className="ml-auto mt-2 h-auto w-28 opacity-85"
+          height={1254}
+          src="/leaves.png"
+          width={1254}
         />
       </div>
       <button
