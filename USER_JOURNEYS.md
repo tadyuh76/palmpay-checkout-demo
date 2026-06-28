@@ -1,28 +1,27 @@
 # Prototype User Journeys
 
-The prototype is a full experiment walkthrough wrapped in a coffee shop checkout. Research steps remain part of the flow, while the buying task uses a catalog and cart instead of a forced single product.
+The prototype is a coffee shop checkout demo focused on enrollment and buying. Research questions are handled outside the app through the linked Google Form after purchase completion.
 
 ## Shared Experiment Flow
 
-1. Researcher creates a new participant session with a display name.
+1. Researcher enters the participant name and selects the test method.
 2. Participant reviews consent and continues.
-3. Participant completes the pre-survey without seeing internal item ids or construct labels.
-4. App randomly assigns `QR_PIN`, `NFC_CARD`, `FACE_POS`, or `PALM_VEIN`.
-5. Participant completes the setup task for the assigned method.
-6. Participant browses the coffee catalog and adds one or more products to the cart.
-7. Participant reviews the cart total and remaining test balance.
-8. POS opens only the assigned payment method.
-9. Receipt confirms the selected order and transaction id.
-10. Participant completes the post-survey, sees the debrief, and exports data if needed.
+3. Participant completes the setup task for the selected method.
+4. Participant browses the coffee catalog and adds one or more products to the cart.
+5. Participant reviews the cart total and remaining test balance.
+6. POS opens only the selected payment method.
+7. Receipt confirms the selected order and transaction status.
+8. Participant opens the external Google Form from the purchase-complete screen.
 
 ## QR_PIN
 
-1. Open the DemoBank phone mock.
-2. Create a sender name and four-digit test PIN.
-3. At payment, scan the POS QR code with a phone.
-4. Review the mobile mock transfer screen: sender, receiver, amount, and product summary.
-5. Enter the test PIN on the phone.
-6. Confirm payment and watch the POS screen complete automatically.
+1. Enter participant name on the first screen.
+2. Confirm consent.
+3. Create a four-digit test PIN in setup.
+4. At payment, scan the POS QR code with a phone.
+5. Review the mobile mock transfer screen: sender, receiver, amount, and product summary.
+6. Enter the test PIN on the phone.
+7. Confirm payment and watch the POS screen complete automatically.
 
 ## NFC_CARD
 
@@ -34,13 +33,14 @@ The prototype is a full experiment walkthrough wrapped in a coffee shop checkout
 
 ## FACE_POS
 
-1. Confirm biometric data consent in setup.
-2. Register a Face ID account name.
-3. Enroll three real webcam face samples.
-4. At payment, scan the POS QR code with a phone.
-5. Review the mobile mock transfer screen: sender, receiver, amount, and product summary.
-6. Confirm the transfer with the phone camera face check.
-7. Watch the POS screen complete automatically.
+1. Enter participant name on the first screen.
+2. Confirm study consent.
+3. Confirm biometric data consent in setup.
+4. Enroll three real webcam face samples.
+5. At payment, scan the POS QR code with a phone.
+6. Review the mobile mock transfer screen: sender, receiver, amount, and product summary.
+7. Confirm the transfer with the phone camera face check.
+8. Watch the POS screen complete automatically.
 
 ## PALM_VEIN
 
@@ -54,4 +54,5 @@ The prototype is a full experiment walkthrough wrapped in a coffee shop checkout
 - Setup duration and checkout duration are stored separately.
 - Retry count and error type are logged from the payment screen.
 - CSV export includes the current session and completed browser-local sessions.
-- Biometric template deletion is recorded during the debrief step for face and palm groups.
+- Biometric template deletion is recorded when face and palm sessions complete.
+- Research responses are collected in the external Google Form linked after purchase completion.

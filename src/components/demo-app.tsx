@@ -7,7 +7,6 @@ import {
   Camera,
   Check,
   CheckCircle2,
-  ChevronDown,
   ClipboardCheck,
   Download,
   Hand,
@@ -30,7 +29,6 @@ import {
 import Image from "next/image";
 import { QRCodeSVG } from "qrcode.react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import surveyConfig from "@/data/survey-questions.json";
 import {
   catalog,
   catalogCategories,
@@ -51,29 +49,11 @@ type Cart = Record<string, number>;
 type StepKey =
   | "admin"
   | "consent"
-  | "pre"
   | "setup"
   | "product"
   | "checkout"
   | "payment"
-  | "success"
-  | "post"
-  | "debrief";
-
-type SurveyQuestion = {
-  item_id: string;
-  construct: string;
-  construct_label?: string | LocalizedText;
-  section_intro?: string | LocalizedText;
-  source_text?: string;
-  text: string | LocalizedText;
-  scale_min?: number;
-  scale_max?: number;
-  type?: "select";
-  options?: string[] | Record<Locale, string[]>;
-  reverse_scored: boolean;
-  required: boolean;
-};
+  | "success";
 
 type EventLog = {
   event_name: string;
@@ -108,8 +88,6 @@ type ExperimentSession = {
   assigned_group: StudyGroup | null;
   created_at: string;
   consent_at: string | null;
-  pre_survey_completed_at: string | null;
-  post_survey_completed_at: string | null;
   session_status: "created" | "active" | "completed" | "technical_failure";
   current_step: StepKey;
   face_descriptor?: number[] | null;
@@ -125,8 +103,6 @@ type ExperimentSession = {
   checkout_completed_at?: string | null;
   cart: Cart;
   transaction?: TransactionRecord | null;
-  pre_answers: Record<string, string | number>;
-  post_answers: Record<string, string | number>;
   events: EventLog[];
 };
 
@@ -149,6 +125,8 @@ type ExperimentStateSnapshot = {
 const protocolVersion = "PALMPAY-POS-2026.06";
 const startingBalance = 100000;
 const faceMatchThreshold = 0.55;
+const researchFormUrl =
+  "https://docs.google.com/forms/d/1pYmhACf0Wx1OrOFsVFZSctAhfpcce85E2D2MWceLTEc";
 
 const storageKeys = {
   currentSession: "palmpay.pos.currentSession",
@@ -161,11 +139,7 @@ const localeStorageKey = "palmpay.pos.locale";
 
 const groupOrder: StudyGroup[] = ["QR_PIN", "NFC_CARD", "FACE_POS", "PALM_VEIN"];
 const categoryOptions: Array<ProductCategory | "All"> = ["All", ...catalogCategories];
-const surveySettings = surveyConfig as {
-  default_locale?: Locale;
-  post: SurveyQuestion[];
-};
-const defaultLocale: Locale = surveySettings.default_locale === "en" ? "en" : "vi";
+const defaultLocale: Locale = "vi";
 
 const uiText = {
   admin: { vi: "Quản trị", en: "Admin" },
@@ -173,9 +147,7 @@ const uiText = {
   balance: { vi: "Số dư", en: "Balance" },
   cart: { vi: "Giỏ hàng", en: "Cart" },
   checkout: { vi: "Xác nhận đơn hàng", en: "Order confirmation" },
-  chooseAnswer: { vi: "Chọn câu trả lời", en: "Choose an answer" },
   chooseMethod: { vi: "Chọn phương thức", en: "Choose method" },
-  complete: { vi: "Hoàn thành", en: "Complete" },
   completeSetup: { vi: "Hoàn tất đăng ký", en: "Finish setup" },
   confirmCart: { vi: "Xác nhận giỏ hàng", en: "Confirm cart" },
   dataCsv: { vi: "CSV dữ liệu", en: "Data CSV" },
@@ -190,14 +162,9 @@ const uiText = {
   participantName: { vi: "Tên người tham gia", en: "Participant name" },
   participantPlaceholder: { vi: "Ví dụ: Minh Anh", en: "Example: Minh Anh" },
   payment: { vi: "Thanh toán", en: "Payment" },
-  postSurveyEyebrow: { vi: "Khảo sát sau trải nghiệm", en: "Post-experience survey" },
-  postSurveyTitle: {
-    vi: "3.3. Đo lường trải nghiệm thanh toán",
-    en: "3.3. Payment Experience Measurement",
-  },
+  researchForm: { vi: "Mở biểu mẫu nghiên cứu", en: "Open research form" },
   selected: { vi: "Đã chọn", en: "Selected" },
   startSession: { vi: "Bắt đầu phiên", en: "Start session" },
-  surveyContinue: { vi: "Tiếp tục khảo sát", en: "Continue to survey" },
 } satisfies Record<string, LocalizedText>;
 
 type UiTextKey = keyof typeof uiText;
@@ -210,20 +177,6 @@ function localizeText(value: string | LocalizedText | undefined, locale = defaul
 
 function t(key: UiTextKey, locale = defaultLocale) {
   return localizeText(uiText[key], locale);
-}
-
-function questionText(question: SurveyQuestion, locale = defaultLocale) {
-  return localizeText(question.text, locale);
-}
-
-function constructLabel(question: SurveyQuestion, locale = defaultLocale) {
-  return localizeText(question.construct_label, locale) || question.construct;
-}
-
-function questionOptions(question: SurveyQuestion, locale = defaultLocale) {
-  const options = question.options ?? [];
-  if (Array.isArray(options)) return options;
-  return options[locale] ?? options.vi ?? options.en ?? [];
 }
 
 function productName(product: Product, locale = defaultLocale) {
@@ -357,27 +310,21 @@ function groupCopyFor(group: StudyGroup, locale = defaultLocale) {
 const stepLabels: Record<StepKey, string> = {
   admin: "Quản trị",
   consent: "Đồng ý",
-  pre: "Khảo sát trước",
   setup: "Đăng ký",
   product: "Sản phẩm",
   checkout: "Xác nhận",
   payment: "Thanh toán",
   success: "Thành công",
-  post: "Khảo sát sau",
-  debrief: "Giải thích",
 };
 
 const stepLabelsEn: Record<StepKey, string> = {
   admin: "Admin",
   consent: "Consent",
-  pre: "Pre-survey",
   setup: "Setup",
   product: "Products",
   checkout: "Confirm",
   payment: "Payment",
   success: "Success",
-  post: "Post-survey",
-  debrief: "Debrief",
 };
 
 function stepLabel(step: StepKey, locale = defaultLocale) {
@@ -391,11 +338,7 @@ const flowSteps: StepKey[] = [
   "checkout",
   "payment",
   "success",
-  "post",
-  "debrief",
 ];
-
-const postQuestions = surveySettings.post;
 
 type FaceApi = typeof import("@vladmandic/face-api");
 
@@ -649,8 +592,6 @@ function makeSession(
     assigned_group: selectedGroup,
     created_at: createdAt,
     consent_at: null,
-    pre_survey_completed_at: null,
-    post_survey_completed_at: null,
     session_status: "created",
     current_step: "consent",
     biometric_consent_at: null,
@@ -669,8 +610,6 @@ function makeSession(
     checkout_completed_at: null,
     cart: {},
     transaction: null,
-    pre_answers: {},
-    post_answers: {},
     events: [],
   };
 }
@@ -679,14 +618,14 @@ function normalizeSession(session: ExperimentSession | null) {
   if (!session) return null;
   const participantName = session.participant_name?.trim() ?? "";
   const rawStep = session.current_step as string;
-  if ((session.current_step as string) === "ranking") {
+  if (rawStep === "ranking" || rawStep === "post" || rawStep === "debrief") {
     return {
       ...session,
       face_descriptor: session.face_descriptor ?? null,
       face_account_name: session.face_account_name || participantName,
       participant_name: participantName,
       qr_account_name: session.qr_account_name || participantName,
-      current_step: "debrief" as StepKey,
+      current_step: "success" as StepKey,
     };
   }
   return {
@@ -755,24 +694,6 @@ function downloadLabeledCsv(
   downloadBlob(filename, new Blob([csv], { type: "text/csv;charset=utf-8" }));
 }
 
-function normalizeSurveyAnswer(question: SurveyQuestion, value: unknown) {
-  if (value === null || value === undefined || value === "") return "";
-  if (question.type === "select") {
-    if (typeof value === "number" && Number.isFinite(value)) return value;
-    if (typeof value === "string" && /^\d+$/.test(value)) return Number(value);
-    const index = questionOptions(question).findIndex((option) => option === value);
-    return index >= 0 ? index + 1 : "";
-  }
-
-  const numericValue = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(numericValue) ? numericValue : "";
-}
-
-function selectAnswerValue(question: SurveyQuestion, value: unknown) {
-  const normalized = normalizeSurveyAnswer(question, value);
-  return typeof normalized === "number" ? String(normalized) : "";
-}
-
 function methodCode(group?: StudyGroup | null) {
   if (!group) return "";
   const index = groupOrder.indexOf(group);
@@ -820,71 +741,14 @@ function baseMethodWorkbookColumns(locale = defaultLocale): ExportColumn[] {
   ];
 }
 
-function codebookColumns(locale = defaultLocale): ExportColumn[] {
-  return [
-    { key: "phase", label: locale === "vi" ? "Giai đoạn khảo sát" : "Survey phase" },
-    { key: "item_id", label: locale === "vi" ? "Mã biến quan sát" : "Item ID" },
-    { key: "construct", label: locale === "vi" ? "Mã khái niệm" : "Construct code" },
-    { key: "construct_label_vi", label: "Khái niệm (VI)" },
-    { key: "construct_label_en", label: "Construct (EN)" },
-    { key: "question_vi", label: "Câu hỏi đo lường (VI)" },
-    { key: "question_en", label: "Measurement item (EN)" },
-    { key: "source_text", label: locale === "vi" ? "Câu gốc" : "Source text" },
-    { key: "scale_min", label: "Likert min" },
-    { key: "scale_max", label: "Likert max" },
-    { key: "reverse_scored", label: locale === "vi" ? "Đảo chiều" : "Reverse scored" },
-    { key: "required", label: locale === "vi" ? "Bắt buộc" : "Required" },
-  ];
-}
-
-function surveyExportColumns(
-  phase: "post",
-  questions: SurveyQuestion[],
-  locale = defaultLocale,
-) {
-  return questions.map((question) => ({
-    key: `${phase}_${question.item_id}`,
-    label: [
-      phase.toUpperCase(),
-      question.item_id,
-      constructLabel(question, locale),
-      questionText(question, locale),
-      `${question.scale_min ?? 1}-${question.scale_max ?? 7}`,
-    ].join(" | "),
-  }));
-}
-
 function methodWorkbookColumns(locale = defaultLocale): ExportColumn[] {
-  return [
-    ...baseMethodWorkbookColumns(locale),
-    ...surveyExportColumns("post", postQuestions, locale),
-  ];
-}
-
-function buildSurveyCodebookRows(): Array<Record<string, unknown>> {
-  return postQuestions.map((question) => ({
-    phase: "post",
-    item_id: question.item_id,
-    construct: question.construct,
-    construct_label_vi: constructLabel(question, "vi"),
-    construct_label_en: constructLabel(question, "en"),
-    question_vi: questionText(question, "vi"),
-    question_en: questionText(question, "en"),
-    source_text: question.source_text ?? "",
-    scale_min: question.scale_min ?? "",
-    scale_max: question.scale_max ?? "",
-    reverse_scored: question.reverse_scored ? 1 : 0,
-    required: question.required ? 1 : 0,
-  }));
+  return baseMethodWorkbookColumns(locale);
 }
 
 function buildMethodWorkbookRow(session: ExperimentSession, locale = defaultLocale) {
   const group = session.assigned_group;
   const row: Record<string, unknown> = {
-    timestamp:
-      session.post_survey_completed_at ??
-      session.checkout_completed_at ??
-      session.created_at,
+    timestamp: session.checkout_completed_at ?? session.created_at,
     participant_id: session.participant_id,
     participant_name: session.participant_name,
     qr_account_name: session.qr_account_name ?? "",
@@ -913,13 +777,6 @@ function buildMethodWorkbookRow(session: ExperimentSession, locale = defaultLoca
     assistance_required: session.transaction?.assistance_required ? 1 : 0,
     template_deleted_at: session.template_deleted_at ?? "",
   };
-
-  postQuestions.forEach((question) => {
-    row[`post_${question.item_id}`] = normalizeSurveyAnswer(
-      question,
-      session.post_answers[question.item_id],
-    );
-  });
 
   return row;
 }
@@ -974,18 +831,6 @@ function downloadMethodWorkbook(
       ].join("");
     })
     .join("");
-  const codebookRows = buildSurveyCodebookRows();
-  const codebookSheet = [
-    '<Worksheet ss:Name="Codebook">',
-    "<Table>",
-    xmlRow(codebookColumns(locale).map((column) => column.label)),
-    ...codebookRows.map((row) =>
-      xmlRow(codebookColumns(locale).map((column) => row[column.key])),
-    ),
-    "</Table>",
-    "</Worksheet>",
-  ].join("");
-
   const workbook = [
     '<?xml version="1.0"?>',
     '<?mso-application progid="Excel.Sheet"?>',
@@ -995,7 +840,6 @@ function downloadMethodWorkbook(
     ' xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"',
     ' xmlns:html="http://www.w3.org/TR/REC-html40">',
     responseSheets,
-    codebookSheet,
     "</Workbook>",
   ].join("");
 
@@ -1018,6 +862,28 @@ function downloadMethodCsv(
     columns,
     sessions.map((session) => buildMethodWorkbookRow(session, locale)),
   );
+}
+
+function isBiometricGroup(group?: StudyGroup | null) {
+  return group === "FACE_POS" || group === "PALM_VEIN";
+}
+
+function saveCompletedSession(session: ExperimentSession) {
+  const completed = readJson<ExperimentSession[]>(
+    storageKeys.completedSessions,
+    [],
+  );
+  const currentIndex = completed.findIndex(
+    (item) => item.participant_id === session.participant_id,
+  );
+  const nextCompleted =
+    currentIndex === -1
+      ? [...completed, session]
+      : completed.map((item, index) =>
+          index === currentIndex ? session : item,
+        );
+
+  writeJson(storageKeys.completedSessions, nextCompleted);
 }
 
 function allStoredSessions(current?: ExperimentSession | null) {
@@ -1416,10 +1282,12 @@ export function DemoApp() {
   const completePayment = (metadata: Record<string, unknown> = {}) => {
     updateSession((current) => {
       const timestamp = nowIso();
-      return {
+      const biometric = isBiometricGroup(current.assigned_group);
+      const completedSession: ExperimentSession = {
         ...current,
         current_step: "success",
         checkout_completed_at: timestamp,
+        session_status: "completed",
         transaction: current.transaction
           ? {
               ...current.transaction,
@@ -1427,6 +1295,9 @@ export function DemoApp() {
               payment_status: "paid",
             }
           : current.transaction,
+        template_ref: biometric ? null : current.template_ref,
+        template_deleted_at: biometric ? timestamp : current.template_deleted_at,
+        face_descriptor: biometric ? null : current.face_descriptor,
         events: [
           ...current.events,
           {
@@ -1437,17 +1308,32 @@ export function DemoApp() {
             screen_name: "payment",
             metadata,
           },
+          ...(biometric
+            ? [
+                {
+                  event_name: "biometric_template_deleted",
+                  timestamp,
+                  participant_id: current.participant_id,
+                  transaction_id: current.transaction?.transaction_id,
+                  screen_name: "success" as StepKey,
+                  metadata: { method: current.assigned_group },
+                },
+              ]
+            : []),
         ],
       };
+      saveCompletedSession(completedSession);
+      return completedSession;
     });
   };
 
   const markTechnicalFailure = () => {
     updateSession((current) => {
       const timestamp = nowIso();
-      return {
+      const biometric = isBiometricGroup(current.assigned_group);
+      const completedSession: ExperimentSession = {
         ...current,
-        current_step: "post",
+        current_step: "success",
         session_status: "technical_failure",
         checkout_completed_at: timestamp,
         transaction: current.transaction
@@ -1458,6 +1344,9 @@ export function DemoApp() {
               assistance_required: true,
             }
           : current.transaction,
+        template_ref: biometric ? null : current.template_ref,
+        template_deleted_at: biometric ? timestamp : current.template_deleted_at,
+        face_descriptor: biometric ? null : current.face_descriptor,
         events: [
           ...current.events,
           {
@@ -1468,43 +1357,6 @@ export function DemoApp() {
             screen_name: "payment",
             metadata: { assigned_group: current.assigned_group },
           },
-          {
-            event_name: "post_survey_started",
-            timestamp,
-            participant_id: current.participant_id,
-            transaction_id: current.transaction?.transaction_id,
-            screen_name: "post",
-            metadata: { opened_after: "technical_failure" },
-          },
-        ],
-      };
-    });
-  };
-
-  const completePostSurvey = () => {
-    updateSession((current) => {
-      const timestamp = nowIso();
-      const biometric =
-        current.assigned_group === "FACE_POS" || current.assigned_group === "PALM_VEIN";
-      const completedSession: ExperimentSession = {
-        ...current,
-        current_step: "debrief",
-        post_survey_completed_at: timestamp,
-        session_status:
-          current.session_status === "technical_failure" ? "technical_failure" : "completed",
-        template_ref: biometric ? null : current.template_ref,
-        template_deleted_at: biometric ? timestamp : current.template_deleted_at,
-        face_descriptor: biometric ? null : current.face_descriptor,
-        events: [
-          ...current.events,
-          {
-            event_name: "post_survey_completed",
-            timestamp,
-            participant_id: current.participant_id,
-            transaction_id: current.transaction?.transaction_id,
-            screen_name: "post",
-            metadata: { items: Object.keys(current.post_answers).length },
-          },
           ...(biometric
             ? [
                 {
@@ -1512,18 +1364,14 @@ export function DemoApp() {
                   timestamp,
                   participant_id: current.participant_id,
                   transaction_id: current.transaction?.transaction_id,
-                  screen_name: "debrief" as StepKey,
+                  screen_name: "success" as StepKey,
                   metadata: { method: current.assigned_group },
                 },
               ]
             : []),
         ],
       };
-      const completed = readJson<ExperimentSession[]>(
-        storageKeys.completedSessions,
-        [],
-      );
-      writeJson(storageKeys.completedSessions, [...completed, completedSession]);
+      saveCompletedSession(completedSession);
       return completedSession;
     });
   };
@@ -1633,32 +1481,8 @@ export function DemoApp() {
           {session.current_step === "success" && (
             <SuccessScreen
               locale={locale}
+              onNew={resetCurrentSession}
               transaction={session.transaction}
-              onContinue={() => {
-                logEvent("post_survey_started", "post", { opened_after: "paid" });
-                setStep("post");
-              }}
-            />
-          )}
-          {session.current_step === "post" && (
-            <SurveyScreen
-              answers={session.post_answers}
-              eyebrow={t("postSurveyEyebrow", locale)}
-              locale={locale}
-              onAnswer={(itemId, value) =>
-                updateSession((current) => ({
-                  ...current,
-                  post_answers: { ...current.post_answers, [itemId]: value },
-                }))
-              }
-              onSubmit={completePostSurvey}
-              questions={postQuestions}
-              title={t("postSurveyTitle", locale)}
-            />
-          )}
-          {session.current_step === "debrief" && (
-            <DebriefScreen
-              locale={locale}
               session={session}
               onExport={() =>
                 downloadMethodWorkbook(
@@ -1680,7 +1504,6 @@ export function DemoApp() {
                   allStoredSessions(session).flatMap((item) => item.events),
                 )
               }
-              onNew={resetCurrentSession}
             />
           )}
         </section>
@@ -2577,177 +2400,6 @@ function SetupScreen({
         </button>
       </ActionRow>
     </Panel>
-  );
-}
-
-function SurveyScreen({
-  answers,
-  eyebrow,
-  locale = defaultLocale,
-  onAnswer,
-  onSubmit,
-  questions,
-  title,
-}: {
-  answers: Record<string, string | number>;
-  eyebrow: string;
-  locale?: Locale;
-  onAnswer: (itemId: string, value: string | number) => void;
-  onSubmit: () => void;
-  questions: SurveyQuestion[];
-  title: string;
-}) {
-  const complete = questions.every(
-    (question) =>
-      !question.required ||
-      (answers[question.item_id] !== undefined && answers[question.item_id] !== ""),
-  );
-  const sections = questions.reduce<
-    Array<{
-      construct: string;
-      intro: string;
-      label: string;
-      questions: SurveyQuestion[];
-    }>
-  >((groups, question) => {
-    const previous = groups.find((group) => group.construct === question.construct);
-    if (previous) {
-      previous.questions.push(question);
-      return groups;
-    }
-    return [
-      ...groups,
-      {
-        construct: question.construct,
-        intro: localizeText(question.section_intro, locale),
-        label: constructLabel(question, locale),
-        questions: [question],
-      },
-    ];
-  }, []);
-
-  return (
-    <Panel eyebrow={eyebrow} icon={ClipboardCheck} title={title}>
-      <div className="space-y-4">
-        {sections.map((section) => (
-          <section
-            className="rounded-lg border border-[#ead8bf] bg-[#fffaf3] p-4"
-            key={section.construct}
-          >
-            <div className="mb-4">
-              <h2 className="text-base font-semibold text-stone-950">
-                {section.label}
-              </h2>
-              {section.intro && (
-                <p className="mt-2 text-sm leading-6 text-stone-600">
-                  {section.intro}
-                </p>
-              )}
-            </div>
-            <div className="space-y-3">
-              {section.questions.map((question) => {
-                const answerValue = answers[question.item_id];
-                const normalizedValue = normalizeSurveyAnswer(question, answerValue);
-                const text = questionText(question, locale);
-                const options = questionOptions(question, locale);
-                return (
-                  <div
-                    className="rounded-lg border border-[#ead8bf] bg-white p-4"
-                    key={question.item_id}
-                  >
-                    <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold leading-6 text-stone-950">
-                          {text}
-                        </p>
-                      </div>
-                    </div>
-                    {question.type === "select" ? (
-                      <div className="max-w-sm">
-                        <CustomSelect
-                          onChange={(value) => onAnswer(question.item_id, Number(value))}
-                          options={options.map((option, index) => ({
-                            label: option,
-                            value: String(index + 1),
-                          }))}
-                          placeholder={t("chooseAnswer", locale)}
-                          value={selectAnswerValue(question, answerValue)}
-                        />
-                      </div>
-                    ) : (
-                      <Likert
-                        locale={locale}
-                        max={question.scale_max ?? 7}
-                        min={question.scale_min ?? 1}
-                        onChange={(value) => onAnswer(question.item_id, value)}
-                        value={typeof normalizedValue === "number" ? normalizedValue : null}
-                      />
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        ))}
-      </div>
-      <ActionRow>
-        <button
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-[#d6c0aa]"
-          disabled={!complete}
-          onClick={onSubmit}
-          type="button"
-        >
-          {t("complete", locale)}
-          <ArrowRight size={17} aria-hidden />
-        </button>
-      </ActionRow>
-    </Panel>
-  );
-}
-
-function Likert({
-  locale = defaultLocale,
-  max,
-  min,
-  onChange,
-  value,
-}: {
-  locale?: Locale;
-  max: number;
-  min: number;
-  onChange: (value: number) => void;
-  value: number | null;
-}) {
-  const values = Array.from({ length: max - min + 1 }, (_, index) => min + index);
-  return (
-    <div>
-      <div
-        className="grid gap-2"
-        style={{ gridTemplateColumns: `repeat(${values.length}, minmax(0, 1fr))` }}
-      >
-        {values.map((item) => (
-          <button
-            className={cn(
-              "h-11 rounded-lg border text-sm font-semibold transition",
-              value === item
-                ? "border-[#6f3f24] bg-[#6f3f24] text-white"
-                : "border-[#ead8bf] bg-[#fffaf3] text-stone-700 hover:border-[#c9955d]",
-            )}
-            key={item}
-            onClick={() => onChange(item)}
-            type="button"
-          >
-            {item}
-          </button>
-        ))}
-      </div>
-      <div className="mt-2 flex justify-between text-xs text-stone-500">
-        <span>
-          {locale === "vi" ? "Hoàn toàn không đồng ý" : "Strongly disagree"}
-        </span>
-        <span>{locale === "vi" ? "Hoàn toàn đồng ý" : "Strongly agree"}</span>
-      </div>
-    </div>
   );
 }
 
@@ -4253,8 +3905,8 @@ function RetryPanel({
       </div>
       <p className="text-sm leading-6 text-stone-600">
         {locale === "vi"
-          ? "Tối đa hai lần thử lại. Sau đó hệ thống ghi nhận lỗi kỹ thuật và mở khảo sát sau trải nghiệm."
-          : "Up to two retries are allowed. After that, the system records a technical failure and opens the post-experience survey."}
+          ? "Tối đa hai lần thử lại. Sau đó hệ thống ghi nhận lỗi kỹ thuật và kết thúc phiên mua hàng."
+          : "Up to two retries are allowed. After that, the system records a technical failure and ends the purchase session."}
       </p>
       <div className="mt-3 space-y-2">
         {errors[group].map((error) => (
@@ -4288,56 +3940,12 @@ function RetryPanel({
 
 function SuccessScreen({
   locale = defaultLocale,
-  onContinue,
-  transaction,
-}: {
-  locale?: Locale;
-  onContinue: () => void;
-  transaction?: TransactionRecord | null;
-}) {
-  const paidAmount = transaction?.amount ?? 0;
-  const balanceAfter = transaction?.balance_after ?? startingBalance - paidAmount;
-
-  return (
-    <Panel
-      eyebrow={locale === "vi" ? "Kết quả giao dịch" : "Transaction result"}
-      icon={CheckCircle2}
-      title={locale === "vi" ? "Thanh toán thành công" : "Payment successful"}
-    >
-      <div className="mx-auto max-w-lg rounded-lg border border-[#d8b88b] bg-[#fff3df] p-6 text-center text-[#4f2f1c]">
-        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-lg bg-white/80">
-          <CheckCircle2 size={32} aria-hidden />
-        </div>
-        <h2 className="text-2xl font-semibold">
-          {locale === "vi" ? "Thanh toán thành công" : "Payment successful"}
-        </h2>
-        <div className="mt-5 space-y-2 text-sm">
-          <Row label={locale === "vi" ? "Đơn hàng" : "Order"} value={transaction?.product ?? (locale === "vi" ? "Đơn cafe" : "Cafe order")} />
-          <Row label={locale === "vi" ? "Đã thanh toán" : "Paid"} value={formatVnd(paidAmount)} />
-          <Row label={locale === "vi" ? "Số dư còn lại" : "Remaining balance"} value={formatVnd(balanceAfter)} />
-        </div>
-      </div>
-      <ActionRow>
-        <button
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f]"
-          onClick={onContinue}
-          type="button"
-        >
-          {t("surveyContinue", locale)}
-          <ArrowRight size={17} aria-hidden />
-        </button>
-      </ActionRow>
-    </Panel>
-  );
-}
-
-function DebriefScreen({
-  locale = defaultLocale,
   onExport,
   onExportCsv,
   onExportEvents,
   onNew,
   session,
+  transaction,
 }: {
   locale?: Locale;
   onExport: () => void;
@@ -4345,28 +3953,81 @@ function DebriefScreen({
   onExportEvents: () => void;
   onNew: () => void;
   session: ExperimentSession;
+  transaction?: TransactionRecord | null;
 }) {
+  const paidAmount = transaction?.amount ?? 0;
+  const balanceAfter = transaction?.balance_after ?? startingBalance - paidAmount;
+  const failed = transaction?.payment_status === "technical_failure";
+
   return (
     <Panel
-      eyebrow={locale === "vi" ? "Kết thúc phiên" : "Session complete"}
+      eyebrow={locale === "vi" ? "Kết quả giao dịch" : "Transaction result"}
       icon={CheckCircle2}
-      title={locale === "vi" ? "Giải thích cuối thí nghiệm" : "End-of-study debrief"}
+      title={
+        failed
+          ? locale === "vi"
+            ? "Đã ghi nhận lỗi kỹ thuật"
+            : "Technical failure recorded"
+          : locale === "vi"
+            ? "Thanh toán thành công"
+            : "Payment successful"
+      }
     >
-      <div className="rounded-lg border border-[#ead8bf] bg-white p-4 text-sm leading-6 text-stone-600">
-        <p>
+      <div className="mx-auto max-w-lg rounded-lg border border-[#d8b88b] bg-[#fff3df] p-6 text-center text-[#4f2f1c]">
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-lg bg-white/80">
+          <CheckCircle2 size={32} aria-hidden />
+        </div>
+        <h2 className="text-2xl font-semibold">
+          {failed
+            ? locale === "vi"
+              ? "Phiên mua hàng đã kết thúc"
+              : "Purchase session ended"
+            : locale === "vi"
+              ? "Thanh toán thành công"
+              : "Payment successful"}
+        </h2>
+        <p className="mt-2 text-sm leading-6">
           {locale === "vi"
-            ? "Phiên này so sánh trải nghiệm thanh toán tại điểm bán giữa QR + PIN, thẻ NFC, Face ID tại POS và PalmPay tĩnh mạch lòng bàn tay. Trọng tâm là cảm nhận về bảo mật, sự dễ sử dụng, sự hữu ích, niềm tin vào hệ thống thanh toán và sự sẵn lòng tiếp tục sử dụng phương thức được phân công."
-            : "This session compares point-of-sale payment experiences across QR + PIN, NFC card, Face ID at POS, and PalmPay palm vein recognition. The focus is perceived security, ease of use, usefulness, trust in the payment system, and willingness to continue using the assigned method."}
+            ? "Tiếp tục phần nghiên cứu bằng biểu mẫu Google bên ngoài sau khi hoàn tất mua hàng."
+            : "Continue the research portion in the external Google Form after completing the purchase."}
         </p>
+        <div className="mt-5 space-y-2 text-sm">
+          <Row label={locale === "vi" ? "Đơn hàng" : "Order"} value={transaction?.product ?? (locale === "vi" ? "Đơn cafe" : "Cafe order")} />
+          <Row
+            label={locale === "vi" ? "Trạng thái" : "Status"}
+            value={
+              failed
+                ? locale === "vi"
+                  ? "Lỗi kỹ thuật"
+                  : "Technical failure"
+                : locale === "vi"
+                  ? "Đã thanh toán"
+                  : "Paid"
+            }
+          />
+          <Row label={locale === "vi" ? "Số tiền" : "Amount"} value={formatVnd(paidAmount)} />
+          <Row label={locale === "vi" ? "Số dư còn lại" : "Remaining balance"} value={formatVnd(balanceAfter)} />
+        </div>
         {(session.assigned_group === "FACE_POS" ||
           session.assigned_group === "PALM_VEIN") && (
-          <p className="mt-3 font-medium text-[#7a4a2a]">
-            {locale === "vi" ? "Mẫu sinh trắc học của phiên đã được xóa lúc" : "The biometric template for this session was deleted at"}{" "}
+          <p className="mt-4 rounded-lg bg-white/70 px-3 py-2 text-sm font-medium">
+            {locale === "vi"
+              ? "Mẫu sinh trắc học của phiên đã được xóa lúc"
+              : "The biometric template for this session was deleted at"}{" "}
             {session.template_deleted_at ?? (locale === "vi" ? "kết thúc phiên" : "session end")}.
           </p>
         )}
       </div>
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <a
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] sm:col-span-2"
+          href={researchFormUrl}
+          rel="noreferrer"
+          target="_blank"
+        >
+          {t("researchForm", locale)}
+          <ArrowRight size={17} aria-hidden />
+        </a>
         <button
           className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-[#ead8bf] bg-white px-4 text-sm font-semibold text-stone-700 transition hover:bg-[#fffaf3]"
           onClick={onExport}
@@ -4392,7 +4053,7 @@ function DebriefScreen({
           {t("logCsv", locale)}
         </button>
         <button
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f]"
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-[#ead8bf] bg-white px-4 text-sm font-semibold text-stone-700 transition hover:bg-[#fffaf3] xl:col-start-5"
           onClick={onNew}
           type="button"
         >
@@ -4435,107 +4096,6 @@ function ActionRow({ children }: { children: React.ReactNode }) {
   return (
     <div className="mt-5 flex justify-end border-t border-[#ead8bf] pt-4">
       {children}
-    </div>
-  );
-}
-
-type CustomSelectOption = {
-  disabled?: boolean;
-  label: string;
-  value: string;
-};
-
-function CustomSelect({
-  onChange,
-  options,
-  placeholder,
-  size = "md",
-  value,
-}: {
-  onChange: (value: string) => void;
-  options: CustomSelectOption[];
-  placeholder: string;
-  size?: "sm" | "md";
-  value: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const selected = options.find((option) => option.value === value);
-
-  return (
-    <div
-      className="relative"
-      onBlur={(event) => {
-        const nextFocus = event.relatedTarget as Node | null;
-        if (!event.currentTarget.contains(nextFocus)) {
-          setOpen(false);
-        }
-      }}
-    >
-      <button
-        aria-expanded={open}
-        aria-haspopup="listbox"
-        className={cn(
-          "flex w-full items-center justify-between gap-3 rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 text-left text-sm outline-none transition hover:border-[#c9955d] focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]",
-          size === "sm" ? "h-10" : "h-11",
-        )}
-        onClick={() => setOpen((current) => !current)}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") {
-            setOpen(false);
-          }
-        }}
-        type="button"
-      >
-        <span className={cn(selected ? "text-stone-950" : "text-stone-500")}>
-          {selected?.label ?? placeholder}
-        </span>
-        <ChevronDown
-          className={cn(
-            "shrink-0 text-stone-400 transition",
-            open && "rotate-180 text-[#7a4a2a]",
-          )}
-          size={16}
-          aria-hidden
-        />
-      </button>
-
-      {open && (
-        <div
-          className="absolute left-0 right-0 z-30 mt-2 overflow-hidden rounded-lg border border-[#d6b896] bg-[#fffaf3] p-1 shadow-lg shadow-stone-900/10"
-          role="listbox"
-        >
-          {options.map((option) => {
-            const active = option.value === value;
-            return (
-              <button
-                aria-selected={active}
-                className={cn(
-                  "flex min-h-10 w-full items-center gap-2 rounded-md px-3 text-left text-sm transition",
-                  active
-                    ? "font-semibold text-[#6f3f24]"
-                    : "text-stone-700 hover:bg-[#fff3df]",
-                  option.disabled && "cursor-not-allowed text-[#b8a491] hover:bg-transparent",
-                )}
-                disabled={option.disabled}
-                key={option.value}
-                onClick={() => {
-                  onChange(option.value);
-                  setOpen(false);
-                }}
-                role="option"
-                type="button"
-              >
-                <Check
-                  className={cn("shrink-0", !active && "opacity-0")}
-                  size={15}
-                  aria-hidden
-                />
-                {option.label}
-              </button>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 }
