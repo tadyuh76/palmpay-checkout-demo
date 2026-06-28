@@ -5,6 +5,16 @@
   --foreground: #21160f;
 }
 
+html {
+  font-size: 14px;
+}
+
+@media (max-width: 640px) {
+  html {
+    font-size: 13px;
+  }
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
