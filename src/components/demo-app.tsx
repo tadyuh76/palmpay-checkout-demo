@@ -190,10 +190,10 @@ const uiText = {
   participantName: { vi: "Tên người tham gia", en: "Participant name" },
   participantPlaceholder: { vi: "Ví dụ: Minh Anh", en: "Example: Minh Anh" },
   payment: { vi: "Thanh toán", en: "Payment" },
-  postSurveyEyebrow: { vi: "Khảo sát sau trải nghiệm", en: "Post-experience survey" },
+  postSurveyEyebrow: { vi: "Phần 1 / 3", en: "Part 1 / 3" },
   postSurveyTitle: {
-    vi: "3.3. Đo lường trải nghiệm thanh toán",
-    en: "3.3. Payment Experience Measurement",
+    vi: "KHẢO SÁT TRẢI NGHIỆM THANH TOÁN ĐIỆN TỬ",
+    en: "ELECTRONIC PAYMENT EXPERIENCE SURVEY",
   },
   selected: { vi: "Đã chọn", en: "Selected" },
   startSession: { vi: "Bắt đầu phiên", en: "Start session" },
@@ -830,6 +830,9 @@ function codebookColumns(locale = defaultLocale): ExportColumn[] {
     { key: "question_vi", label: "Câu hỏi đo lường (VI)" },
     { key: "question_en", label: "Measurement item (EN)" },
     { key: "source_text", label: locale === "vi" ? "Câu gốc" : "Source text" },
+    { key: "type", label: locale === "vi" ? "Loại câu hỏi" : "Question type" },
+    { key: "options_vi", label: "Lựa chọn (VI)" },
+    { key: "options_en", label: "Options (EN)" },
     { key: "scale_min", label: "Likert min" },
     { key: "scale_max", label: "Likert max" },
     { key: "reverse_scored", label: locale === "vi" ? "Đảo chiều" : "Reverse scored" },
@@ -849,7 +852,9 @@ function surveyExportColumns(
       question.item_id,
       constructLabel(question, locale),
       questionText(question, locale),
-      `${question.scale_min ?? 1}-${question.scale_max ?? 7}`,
+      question.type === "select"
+        ? questionOptions(question, locale).join(" / ")
+        : `${question.scale_min ?? 1}-${question.scale_max ?? 7}`,
     ].join(" | "),
   }));
 }
@@ -871,6 +876,9 @@ function buildSurveyCodebookRows(): Array<Record<string, unknown>> {
     question_vi: questionText(question, "vi"),
     question_en: questionText(question, "en"),
     source_text: question.source_text ?? "",
+    type: question.type ?? "likert",
+    options_vi: questionOptions(question, "vi").join(" | "),
+    options_en: questionOptions(question, "en").join(" | "),
     scale_min: question.scale_min ?? "",
     scale_max: question.scale_max ?? "",
     reverse_scored: question.reverse_scored ? 1 : 0,
@@ -2639,7 +2647,7 @@ function SurveyScreen({
                 {section.label}
               </h2>
               {section.intro && (
-                <p className="mt-2 text-sm leading-6 text-stone-600">
+                <p className="mt-2 whitespace-pre-line text-sm leading-6 text-stone-600">
                   {section.intro}
                 </p>
               )}
@@ -4348,15 +4356,15 @@ function DebriefScreen({
 }) {
   return (
     <Panel
-      eyebrow={locale === "vi" ? "Kết thúc phiên" : "Session complete"}
+      eyebrow={locale === "vi" ? "Phần 3 / 3" : "Part 3 / 3"}
       icon={CheckCircle2}
-      title={locale === "vi" ? "Giải thích cuối thí nghiệm" : "End-of-study debrief"}
+      title={locale === "vi" ? "PHẦN KẾT" : "CONCLUSION"}
     >
       <div className="rounded-lg border border-[#ead8bf] bg-white p-4 text-sm leading-6 text-stone-600">
-        <p>
+        <p className="whitespace-pre-line">
           {locale === "vi"
-            ? "Phiên này so sánh trải nghiệm thanh toán tại điểm bán giữa QR + PIN, thẻ NFC, Face ID tại POS và PalmPay tĩnh mạch lòng bàn tay. Trọng tâm là cảm nhận về bảo mật, sự dễ sử dụng, sự hữu ích, niềm tin vào hệ thống thanh toán và sự sẵn lòng tiếp tục sử dụng phương thức được phân công."
-            : "This session compares point-of-sale payment experiences across QR + PIN, NFC card, Face ID at POS, and PalmPay palm vein recognition. The focus is perceived security, ease of use, usefulness, trust in the payment system, and willingness to continue using the assigned method."}
+            ? "Xin chân thành cảm ơn Anh chị/các bạn đã dành thời gian quý báu để trải nghiệm và thực hiện bài thí nghiệm sản phẩm demo của nhóm chúng tôi.\n\nMọi ý kiến đóng góp và thông tin bạn cung cấp là những dữ liệu vô cùng giá trị, giúp nhóm cải thiện và hoàn thiện sản phẩm tốt hơn trong tương lai. Chúng tôi xin cam kết toàn bộ thông tin thu thập được sẽ được bảo mật tuyệt đối và chỉ sử dụng duy nhất cho mục đích nghiên cứu phát triển sản phẩm, không dùng cho bất kỳ hoạt động thương mại nào khác.\n\nMột lần nữa, xin trân trọng cảm ơn sự hỗ trợ của các bạn!"
+            : "Thank you sincerely for taking your valuable time to experience and complete our group's demo product experiment.\n\nAll feedback and information you provide are highly valuable data that help our group improve and complete the product in the future. We commit that all collected information will be kept strictly confidential and used only for product development research purposes, not for any other commercial activities.\n\nOnce again, thank you sincerely for your support!"}
         </p>
         {(session.assigned_group === "FACE_POS" ||
           session.assigned_group === "PALM_VEIN") && (
