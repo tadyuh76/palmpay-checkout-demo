@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f6efe5;
+  --background: #fbf7f1;
   --foreground: #21160f;
 }
 
@@ -15,11 +15,13 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
 
 button,
-input {
+input,
+select,
+textarea {
   font: inherit;
 }
 
@@ -29,4 +31,8 @@ button {
 
 button:disabled {
   cursor: not-allowed;
+}
+
+* {
+  box-sizing: border-box;
 }

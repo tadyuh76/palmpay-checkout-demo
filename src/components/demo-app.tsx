@@ -5,7 +5,6 @@ import {
   ArrowLeft,
   ArrowRight,
   BadgeCheck,
-  Ban,
   Camera,
   Check,
   CheckCircle2,
@@ -18,7 +17,6 @@ import {
   FileSpreadsheet,
   GraduationCap,
   Hand,
-  Leaf,
   Loader2,
   LockKeyhole,
   Minus,
@@ -438,6 +436,87 @@ type PublicQrTransfer = {
 
 function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
+}
+
+const primaryButtonClass =
+  "inline-flex items-center justify-center gap-3 rounded-lg bg-[#7b4325] px-5 font-semibold text-white transition hover:bg-[#65371f] disabled:bg-[#d9c6b5]";
+const secondaryButtonClass =
+  "inline-flex items-center justify-center gap-2 rounded-lg border border-[#e5d2bb] bg-white px-4 font-semibold text-stone-700 transition hover:border-[#c99862] hover:bg-[#fffaf7] disabled:text-[#b8a491]";
+
+function BrandLockup({
+  compact = false,
+  subtitle,
+}: {
+  compact?: boolean;
+  subtitle?: string;
+}) {
+  return (
+    <div className="flex min-w-0 items-center gap-3">
+      <Image
+        alt=""
+        aria-hidden
+        className={cn("shrink-0", compact ? "h-8 w-8" : "h-10 w-10")}
+        height={compact ? 32 : 40}
+        priority
+        src="/brand/palmpay-mark.svg"
+        width={compact ? 32 : 40}
+      />
+      <div className="min-w-0">
+        <p
+          className={cn(
+            "truncate leading-tight tracking-normal",
+            compact ? "text-xl" : "text-2xl",
+          )}
+        >
+          <span className="font-extrabold text-[#7b4325]">PalmPay</span>{" "}
+          <span className="font-medium text-[#21160f]">Coffee</span>
+        </p>
+        {subtitle && (
+          <p className="mt-0.5 truncate text-xs font-medium text-stone-500">
+            {subtitle}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function NfcSignalMark({
+  className,
+  size = 56,
+}: {
+  className?: string;
+  size?: number;
+}) {
+  return (
+    <svg
+      aria-hidden
+      className={className}
+      fill="none"
+      height={size}
+      viewBox="0 0 56 56"
+      width={size}
+    >
+      <path
+        d="M18 21c3.6 3.8 3.6 10.2 0 14"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="4"
+      />
+      <path
+        d="M27 16c6.2 6.5 6.2 17.5 0 24"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="4"
+      />
+      <path
+        d="M36 11c8.8 9.1 8.8 24.9 0 34"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="4"
+      />
+    </svg>
+  );
 }
 
 function nowIso() {
@@ -1112,6 +1191,13 @@ export function DemoApp() {
     }
   }, [hydrated, session]);
 
+  useEffect(() => {
+    if (!hydrated || !session?.current_step) return;
+    window.requestAnimationFrame(() => {
+      window.scrollTo({ left: 0, top: 0 });
+    });
+  }, [hydrated, session?.current_step]);
+
   const updateSession = (
     updater: (current: ExperimentSession) => ExperimentSession,
   ) => {
@@ -1581,14 +1667,14 @@ export function DemoApp() {
   const payableAmount = session.transaction?.amount ?? totalCents;
 
   return (
-    <main className="min-h-screen bg-[#f6efe5] text-stone-950">
+    <main className="min-h-screen bg-[#fbf7f1] text-stone-950">
       <ExperimentHeader
         locale={locale}
         onLocaleChange={setLocale}
         session={session}
         onReset={resetCurrentSession}
       />
-      <div className="mx-auto grid max-w-[1680px] gap-5 px-4 py-5 sm:px-6 lg:grid-cols-[260px_minmax(0,1fr)]">
+      <div className="mx-auto grid max-w-[1760px] gap-6 px-5 py-7 sm:px-8 lg:grid-cols-[320px_minmax(0,1fr)]">
         <ProgressRail
           currentStep={session.current_step}
           group={session.assigned_group}
@@ -1721,8 +1807,8 @@ export function DemoApp() {
 
 function LoadingScreen({ locale = defaultLocale }: { locale?: Locale }) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#f6efe5]">
-      <div className="inline-flex items-center gap-3 rounded-lg border border-[#ead8bf] bg-white px-4 py-3 text-sm text-stone-600 shadow-sm">
+    <div className="flex min-h-screen items-center justify-center bg-[#fbf7f1]">
+      <div className="inline-flex items-center gap-3 rounded-lg border border-[#ead8bf] bg-white px-4 py-3 text-sm text-stone-600">
         <Loader2 className="animate-spin" size={18} aria-hidden />
         {t("loading", locale)}
       </div>
@@ -1790,9 +1876,9 @@ function QrMobilePayment({
   }
 
   return (
-    <main className="min-h-screen bg-[#f6efe5] px-4 py-6 text-stone-950">
-      <section className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-sm flex-col rounded-[28px] border-4 border-stone-900 bg-stone-950 p-3 shadow-xl">
-        <div className="flex flex-1 flex-col rounded-[22px] bg-[#fffaf3] p-5">
+    <main className="min-h-screen bg-[#fbf7f1] px-4 py-6 text-stone-950">
+      <section className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-sm flex-col rounded-lg border border-[#ead8bf] bg-white p-4">
+        <div className="flex flex-1 flex-col rounded-lg bg-[#fffaf3] p-5">
           <div className="mb-6 flex items-center justify-between">
             <div>
               <p className="text-sm font-semibold text-[#7a4a2a]">DemoBank</p>
@@ -2094,30 +2180,16 @@ function AdminHome({
   ];
 
   return (
-    <main className="min-h-screen bg-[#f6efe5] p-4 text-stone-950 sm:p-5">
-      <div className="mx-auto min-h-[calc(100vh-2.5rem)] max-w-[1680px] rounded-xl bg-white/90 px-6 py-9 shadow-[0_18px_55px_rgba(69,43,24,0.10)] ring-1 ring-[#ead8bf]/60 sm:px-10 lg:px-14">
-        <header className="mb-10 flex items-center justify-between gap-4">
-          <div className="flex min-w-0 items-center gap-3">
-            <Image
-              alt=""
-              aria-hidden
-              className="h-10 w-10 shrink-0"
-              height={44}
-              priority
-              src="/brand/palmpay-mark.svg"
-              width={44}
-            />
-            <p className="min-w-0 text-2xl leading-tight tracking-normal text-stone-950 sm:text-3xl">
-              <span className="font-extrabold text-[#6f3f24]">PalmPay</span>{" "}
-              Coffee
-            </p>
-          </div>
+    <main className="min-h-screen bg-[#fbf7f1] p-5 text-stone-950 sm:p-8">
+      <div className="mx-auto min-h-[calc(100vh-4rem)] max-w-[1760px] rounded-lg border border-[#ead8bf] bg-white px-6 py-8 sm:px-10 lg:px-12">
+        <header className="mb-8 flex flex-wrap items-center justify-between gap-4">
+          <BrandLockup subtitle={locale === "vi" ? "Nghiên cứu" : "Research"} />
           <LocaleSwitcher locale={locale} onChange={onLocaleChange} />
         </header>
 
-        <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_440px]">
-          <div className="space-y-8">
-            <section className="relative min-h-[340px] overflow-hidden rounded-lg border border-[#ead8bf] bg-white shadow-sm">
+        <div className="grid gap-7 xl:grid-cols-[minmax(0,1fr)_420px]">
+          <div className="space-y-7">
+            <section className="relative min-h-[320px] overflow-hidden rounded-lg border border-[#ead8bf] bg-[#fffaf5]">
               <Image
                 alt="Latte art coffee cup on a saucer"
                 className="object-cover object-center"
@@ -2126,21 +2198,23 @@ function AdminHome({
                 sizes="(min-width: 1280px) 1060px, 100vw"
                 src="/brand/coffee-hero-banner.png"
               />
-              <div className="relative z-10 flex min-h-[340px] max-w-[690px] flex-col justify-center px-7 py-10 sm:px-12 lg:px-16">
-                <div className="inline-flex w-fit items-center gap-2 rounded-full bg-[#f6efe5] px-4 py-2 text-sm font-medium text-[#8a5736]">
+              <div className="relative z-10 flex min-h-[320px] max-w-[700px] flex-col justify-center px-7 py-10 sm:px-12">
+                <div className="inline-flex w-fit items-center gap-2 rounded-lg border border-[#ead8bf] bg-[#fffaf5] px-3 py-2 text-sm font-semibold text-[#8a5736]">
                   <Coffee size={15} aria-hidden />
-                  Behavioral research for better payments
+                  {locale === "vi" ? "Nghiên cứu thanh toán tại quầy" : "POS payment research"}
                 </div>
-                <h1 className="mt-8 max-w-[660px] text-4xl font-extrabold leading-[1.05] tracking-normal text-[#21160f] sm:text-5xl">
-                  Research session setup
+                <h1 className="mt-7 max-w-[660px] text-4xl font-extrabold leading-[1.05] tracking-normal text-[#21160f] sm:text-5xl">
+                  {locale === "vi" ? "Thiết lập phiên nghiên cứu" : "Research session setup"}
                 </h1>
-                <p className="mt-7 max-w-[570px] text-lg leading-8 text-stone-600">
-                  Configure a new research session and choose the payment method to test.
+                <p className="mt-5 max-w-[570px] text-base leading-7 text-stone-600">
+                  {locale === "vi"
+                    ? "Tạo phiên mới và chọn phương thức thanh toán cần thử nghiệm."
+                    : "Configure a new research session and choose the payment method to test."}
                 </p>
               </div>
             </section>
 
-            <section className="rounded-lg border border-[#ead8bf] bg-white px-7 py-8 shadow-sm sm:px-8">
+            <section className="rounded-lg border border-[#ead8bf] bg-white px-6 py-7 sm:px-8">
               <div className="mb-7 flex items-center gap-3">
                 <ClipboardCheck size={20} aria-hidden />
                 <h2 className="text-lg font-semibold">
@@ -2158,9 +2232,9 @@ function AdminHome({
                     <button
                       aria-pressed={selected}
                       className={cn(
-                        "relative flex min-h-[240px] flex-col items-center justify-center rounded-lg border p-5 text-center transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#b78352]",
+                        "relative flex min-h-[236px] flex-col items-center justify-center rounded-lg border p-5 text-center transition hover:border-[#8a4d2a] focus:outline-none focus:ring-2 focus:ring-[#b78352]",
                         copy.color,
-                        selected && "border-[#8a4d2a] shadow-sm ring-1 ring-[#8a4d2a]",
+                        selected && "border-[#8a4d2a] ring-1 ring-[#8a4d2a]",
                       )}
                       key={group}
                       onClick={() => chooseGroup(group)}
@@ -2185,9 +2259,9 @@ function AdminHome({
             </section>
           </div>
 
-          <aside className="space-y-8">
+          <aside className="space-y-7">
             <form
-              className="rounded-lg border border-[#ead8bf] bg-white p-7 shadow-sm sm:p-8"
+              className="rounded-lg border border-[#ead8bf] bg-white p-7 sm:p-8"
               onSubmit={(event) => {
                 event.preventDefault();
                 if (!trimmedName) return;
@@ -2219,7 +2293,7 @@ function AdminHome({
                 />
               </div>
               <button
-                className="mt-8 inline-flex h-[72px] w-full items-center justify-center gap-3 rounded-lg bg-[#7b4325] px-5 text-lg font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18)] transition hover:bg-[#65371f] disabled:bg-[#d6c0aa]"
+                className={cn(primaryButtonClass, "mt-8 h-16 w-full text-lg")}
                 disabled={!trimmedName}
                 type="submit"
               >
@@ -2228,7 +2302,7 @@ function AdminHome({
               </button>
             </form>
 
-            <section className="rounded-lg border border-[#ead8bf] bg-white p-7 shadow-sm sm:p-8">
+            <section className="rounded-lg border border-[#ead8bf] bg-white p-7 sm:p-8">
               <div className="flex items-center gap-4">
                 <ExternalLink size={21} aria-hidden />
                 <h2 className="text-xl font-semibold">Export data</h2>
@@ -2269,39 +2343,28 @@ function ExperimentHeader({
   onReset: () => void;
 }) {
   return (
-    <header className="sticky top-0 z-20 border-b border-[#ead8bf] bg-[#fffaf3]/95 backdrop-blur">
-      <div className="mx-auto flex max-w-[1680px] flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center">
-            <Image
-              alt=""
-              aria-hidden
-              height={40}
-              priority
-              src="/brand/palmpay-mark.svg"
-              width={40}
-            />
-          </div>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold">
-              {t("appTitle", locale)}
-            </p>
-            <p className="truncate text-xs text-stone-500">
-              {session.participant_name || t("participantFallback", locale)}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
+    <header className="sticky top-0 z-20 border-b border-[#ead8bf] bg-[#fffaf5]/95 backdrop-blur">
+      <div className="mx-auto flex min-h-[92px] max-w-[1760px] flex-wrap items-center justify-between gap-4 px-5 sm:px-8">
+        <BrandLockup
+          compact
+          subtitle={
+            session.participant_name
+              ? `${locale === "vi" ? "Nghiên cứu PalmPay Coffee" : "PalmPay Coffee Study"} - ${session.participant_name}`
+              : t("appTitle", locale)
+          }
+        />
+        <div className="flex flex-wrap items-center justify-end gap-3">
           <LocaleSwitcher locale={locale} onChange={onLocaleChange} />
-          <span className="rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 py-2 text-sm font-medium text-stone-700">
+          <span className="inline-flex h-12 items-center gap-2 rounded-lg border border-[#ead8bf] bg-white px-4 text-sm font-medium text-stone-700">
+            <WalletCards className="text-[#9b6138]" size={18} aria-hidden />
             {t("balance", locale)}: {formatVnd(startingBalance)}
           </span>
           <button
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#ead8bf] bg-white px-3 text-sm font-semibold text-stone-700 transition hover:bg-[#fffaf3]"
+            className={cn(secondaryButtonClass, "h-12 text-sm")}
             onClick={onReset}
             type="button"
           >
-            <RotateCcw size={16} aria-hidden />
+            <RotateCcw size={17} aria-hidden />
             {t("admin", locale)}
           </button>
         </div>
@@ -2320,14 +2383,14 @@ function LocaleSwitcher({
   return (
     <div
       aria-label={t("language", locale)}
-      className="inline-flex h-10 items-center rounded-lg border border-[#ead8bf] bg-white p-1"
+      className="inline-flex h-12 items-center rounded-lg border border-[#ead8bf] bg-white p-1"
       role="group"
     >
       {(["vi", "en"] as const).map((item) => (
         <button
           aria-pressed={locale === item}
           className={cn(
-            "h-8 rounded-md px-2.5 text-xs font-semibold transition",
+            "h-10 min-w-10 rounded-md px-3 text-sm font-semibold transition",
             locale === item
               ? "bg-[#6f3f24] text-white"
               : "text-stone-700 hover:bg-[#fffaf3]",
@@ -2353,37 +2416,54 @@ function ProgressRail({
   locale?: Locale;
 }) {
   const activeIndex = flowSteps.indexOf(currentStep);
+  const MethodIcon = group ? groupCopyFor(group, locale).icon : Nfc;
   return (
-    <aside className="self-start rounded-lg border border-[#ead8bf] bg-white p-4 shadow-sm lg:sticky lg:top-20 lg:-mt-4 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
-      <div className="mb-4 flex items-center gap-2">
+    <aside className="self-start rounded-lg border border-[#ead8bf] bg-white p-6 lg:sticky lg:top-[120px] lg:max-h-[calc(100vh-9rem)] lg:overflow-y-auto">
+      <div className="mb-7 flex items-center gap-3">
         <ClipboardCheck size={18} aria-hidden />
-        <h2 className="font-semibold">{t("flowTitle", locale)}</h2>
+        <h2 className="text-lg font-bold">{t("flowTitle", locale)}</h2>
       </div>
-      <div className="space-y-2">
+      <div className="space-y-3">
         {flowSteps.map((step, index) => {
           const active = step === currentStep;
           const done = activeIndex > index;
           return (
             <div
               className={cn(
-                "flex min-h-10 items-center gap-2 rounded-lg border px-3 text-sm",
+                "flex min-h-12 items-center gap-3 rounded-lg border px-4 text-sm transition",
                 active
-                  ? "border-[#d8b88b] bg-[#fff3df] text-[#4f2f1c]"
+                  ? "border-[#d6b896] bg-[#fff5e8] font-bold text-[#6f3f24]"
                   : done
-                    ? "border-[#ead8bf] bg-[#fffaf3] text-stone-500"
-                    : "border-transparent text-stone-400",
+                    ? "border-[#dfe7d7] bg-[#f3f7ef] text-[#47683f]"
+                    : "border-transparent bg-white text-stone-400",
               )}
               key={step}
             >
-              {done ? <Check size={15} aria-hidden /> : <span className="h-2 w-2 rounded-full bg-current" />}
-              {stepLabel(step, locale)}
+              <span
+                className={cn(
+                  "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold",
+                  active
+                    ? "bg-[#7b4325] text-white"
+                    : done
+                      ? "bg-[#47683f] text-white"
+                      : "bg-[#ece8e2] text-stone-500",
+                )}
+              >
+                {done ? <Check size={15} aria-hidden /> : index + 1}
+              </span>
+              <span className="min-w-0 truncate">
+                {index + 1}. {stepLabel(step, locale)}
+              </span>
             </div>
           );
         })}
       </div>
       {group && (
-        <div className={cn("mt-4 rounded-lg border p-3", groupCopyFor(group, locale).color)}>
-          <p className="text-sm font-semibold">{groupCopyFor(group, locale).label}</p>
+        <div className="mt-8 rounded-lg border border-[#dbe6d2] bg-[#f1f6ed] p-4 text-[#365d32]">
+          <div className="flex items-center gap-3">
+            <MethodIcon className="shrink-0" size={22} aria-hidden />
+            <p className="text-sm font-bold">{groupCopyFor(group, locale).label}</p>
+          </div>
         </div>
       )}
     </aside>
@@ -2398,39 +2478,79 @@ function ConsentScreen({
   onContinue: () => void;
 }) {
   const [checked, setChecked] = useState(false);
+  const infoCards = (
+    locale === "vi"
+      ? [
+          {
+            Icon: GraduationCap,
+            body: "Đây là nghiên cứu học thuật.",
+            title: "Nghiên cứu học thuật",
+          },
+          {
+            Icon: WalletCards,
+            body: "Không sử dụng tiền thật hoặc tài khoản thật.",
+            title: "Không sử dụng tiền thật",
+          },
+          {
+            Icon: Hand,
+            body: "Bạn có thể dừng tham gia bất kỳ lúc nào.",
+            title: "Dừng bất kỳ lúc nào",
+          },
+          {
+            Icon: LockKeyhole,
+            body: "Dữ liệu chỉ được sử dụng cho mục đích nghiên cứu.",
+            title: "Dữ liệu cho nghiên cứu",
+          },
+        ]
+      : [
+          {
+            Icon: GraduationCap,
+            body: "This is an academic study.",
+            title: "Academic research",
+          },
+          {
+            Icon: WalletCards,
+            body: "No real money or real account is used.",
+            title: "No real money",
+          },
+          {
+            Icon: Hand,
+            body: "You may stop participating at any time.",
+            title: "Stop anytime",
+          },
+          {
+            Icon: LockKeyhole,
+            body: "Data is used only for research purposes.",
+            title: "Research data only",
+          },
+        ]
+  );
   return (
     <Panel
       eyebrow={locale === "vi" ? "Đồng ý tham gia" : "Participation consent"}
       icon={ShieldCheck}
       title={locale === "vi" ? "Thông tin nghiên cứu" : "Study information"}
     >
-      <div className="grid gap-3 text-sm leading-6 text-stone-600 sm:grid-cols-2">
-        {(locale === "vi"
-          ? [
-              "Đây là nghiên cứu học thuật.",
-              "Không sử dụng tiền thật hoặc tài khoản thật.",
-              "Bạn có thể dừng tham gia bất kỳ lúc nào.",
-              "Dữ liệu chỉ được sử dụng cho mục đích nghiên cứu.",
-            ]
-          : [
-              "This is an academic study.",
-              "No real money or real account is used.",
-              "You may stop participating at any time.",
-              "Data is used only for research purposes.",
-            ]
-        ).map((item) => (
+      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+        {infoCards.map(({ Icon, body, title: cardTitle }) => (
           <div
-            className="rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 py-3"
-            key={item}
+            className="flex min-h-[270px] flex-col items-center justify-center rounded-lg border border-[#ead8bf] bg-[#fffaf7] p-7 text-center"
+            key={cardTitle}
           >
-            {item}
+            <div className="mb-7 flex h-28 w-28 items-center justify-center rounded-full border border-[#f0dfca] bg-[#f7efe5] text-[#7b4325]">
+              <Icon size={52} strokeWidth={1.8} aria-hidden />
+            </div>
+            <h2 className="text-lg font-extrabold text-[#17120f]">{cardTitle}</h2>
+            <p className="mt-4 max-w-[220px] text-base leading-7 text-stone-600">
+              {body}
+            </p>
           </div>
         ))}
       </div>
-      <label className="mt-5 flex items-start gap-3 rounded-lg border border-[#ead8bf] bg-white p-3 text-sm text-stone-700">
+      <label className="mt-9 flex items-center gap-4 rounded-lg border border-transparent bg-white py-1 text-lg text-stone-900">
         <input
           checked={checked}
-          className="mt-0.5 h-4 w-4 shrink-0 accent-[#6f3f24]"
+          className="h-9 w-9 shrink-0 accent-[#6f3f24]"
           onChange={(event) => setChecked(event.target.checked)}
           type="checkbox"
         />
@@ -2442,7 +2562,7 @@ function ConsentScreen({
       </label>
       <ActionRow>
         <button
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-[#d6c0aa]"
+          className={cn(primaryButtonClass, "h-16 min-w-[320px] text-xl")}
           disabled={!checked}
           onClick={onContinue}
           type="button"
@@ -2767,7 +2887,7 @@ function SurveyScreen({
                 <span
                   className={cn(
                     "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-sm font-semibold",
-                    active ? "bg-[#6f3f24] text-white" : "bg-[#f6efe5] text-[#7a4a2a]",
+                    active ? "bg-[#6f3f24] text-white" : "bg-[#f7efe5] text-[#7a4a2a]",
                   )}
                 >
                   {step.complete ? <Check size={15} aria-hidden /> : step.number}
@@ -3408,39 +3528,27 @@ function ProductScreen({
       icon={ShoppingBag}
       title={locale === "vi" ? "Chọn món tại quầy cafe" : "Choose cafe items"}
     >
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="min-w-0 space-y-4">
-          <div className="rounded-lg border border-[#ead8bf] bg-[#fffaf3] p-4">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-stone-950">
-                  {locale === "vi" ? "Danh mục cafe" : "Cafe menu"}
-                </h2>
-                <p className="mt-1 text-sm leading-6 text-stone-600">
-                  {locale === "vi"
-                    ? "Chọn một hoặc nhiều món trong giới hạn số dư thử nghiệm."
-                    : "Choose one or more items within the test balance."}
-                </p>
-              </div>
-              <label className="relative block w-full max-w-sm">
-                <Search
-                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-stone-400"
-                  size={16}
-                  aria-hidden
-                />
-                <input
-                  className="h-11 w-full rounded-lg border border-[#dcc6aa] bg-white pl-9 pr-3 text-sm outline-none transition focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder={locale === "vi" ? "Tìm latte, croissant..." : "Search latte, croissant..."}
-                  value={query}
-                />
-              </label>
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2">
+      <div className="grid gap-8 2xl:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="min-w-0">
+          <div className="mb-7 flex flex-col gap-5 2xl:flex-row 2xl:items-center 2xl:justify-between">
+            <label className="relative block w-full max-w-[430px]">
+              <Search
+                className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-stone-400"
+                size={18}
+                aria-hidden
+              />
+              <input
+                className="h-12 w-full rounded-lg border border-[#dcc6aa] bg-white pl-12 pr-4 text-sm outline-none transition placeholder:text-stone-400 focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={locale === "vi" ? "Tìm latte, croissant..." : "Search latte, croissant..."}
+                value={query}
+              />
+            </label>
+            <div className="flex flex-wrap gap-3">
               {categoryOptions.map((item) => (
                 <button
                   className={cn(
-                    "h-9 rounded-lg border px-3 text-sm font-semibold transition",
+                    "h-12 rounded-lg border px-6 text-sm font-semibold transition",
                     category === item
                       ? "border-[#6f3f24] bg-[#6f3f24] text-white"
                       : "border-[#dcc6aa] bg-white text-stone-700 hover:border-[#c9955d]",
@@ -3455,7 +3563,7 @@ function ProductScreen({
             </div>
           </div>
 
-          <div className="grid items-stretch gap-4 lg:grid-cols-2 2xl:grid-cols-3">
+          <div className="grid items-stretch gap-5 md:grid-cols-2 xl:grid-cols-3">
             {visibleProducts.map((item) => (
               <ProductCard
                 key={item.id}
@@ -3469,21 +3577,28 @@ function ProductScreen({
           </div>
         </div>
 
-        <aside className="h-fit rounded-lg border border-[#dcc6aa] bg-[#fffaf3] p-4 shadow-sm xl:sticky xl:top-24">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div>
-              <h3 className="font-semibold text-stone-950">{t("cart", locale)}</h3>
-              <p className="mt-1 text-xs text-stone-500">
-                {cartCount(cartLines)}{" "}
-                {locale === "vi" ? "món đã chọn" : "items selected"}
-              </p>
-            </div>
-            <ShoppingBag className="text-[#7a4a2a]" size={22} aria-hidden />
+        <aside className="h-fit rounded-lg border border-[#dcc6aa] bg-white p-6 2xl:sticky 2xl:top-32">
+          <div className="mb-6 flex items-center justify-between gap-3">
+            <h3 className="text-xl font-extrabold text-stone-950">{t("cart", locale)}</h3>
+            <ShoppingBag className="text-[#7a4a2a]" size={26} aria-hidden />
           </div>
 
           {cartLines.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-[#dcc6aa] bg-white px-3 py-6 text-center text-sm text-stone-500">
-              {locale === "vi" ? "Chưa có món nào trong giỏ hàng." : "No items in the cart yet."}
+            <div className="rounded-lg border border-dashed border-[#dcc6aa] bg-[#fffaf7] px-5 py-8 text-center">
+              <Image
+                alt=""
+                aria-hidden
+                className="mx-auto h-auto w-36"
+                height={116}
+                src="/brand/empty-cart-cup.svg"
+                width={168}
+              />
+              <p className="mt-4 font-bold text-stone-950">
+                {locale === "vi" ? "Chưa có món nào" : "No items yet"}
+              </p>
+              <p className="mt-2 text-sm text-stone-500">
+                {locale === "vi" ? "Hãy chọn món từ menu" : "Choose items from the menu"}
+              </p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -3492,7 +3607,7 @@ function ProductScreen({
                 if (!item) return null;
                 return (
                   <div
-                    className="rounded-lg border border-[#ead8bf] bg-white px-3 py-2"
+                    className="rounded-lg border border-[#ead8bf] bg-[#fffaf7] px-4 py-3"
                     key={line.productId}
                   >
                     <div className="flex items-start justify-between gap-3">
@@ -3514,7 +3629,7 @@ function ProductScreen({
             </div>
           )}
 
-          <div className="mt-4 grid gap-2 text-sm">
+          <div className="mt-6 grid gap-2 text-sm">
             <Row label={locale === "vi" ? "Số dư ban đầu" : "Starting balance"} value={formatVnd(startingBalance)} />
             <Row label={locale === "vi" ? "Tổng tiền" : "Total"} value={formatVnd(totalCents)} strong />
             <Row
@@ -3529,9 +3644,9 @@ function ProductScreen({
                 : "The total exceeds the test balance."}
             </p>
           )}
-          <div className="mt-4 border-t border-[#ead8bf] pt-4">
+          <div className="mt-6 border-t border-[#ead8bf] pt-6">
             <button
-              className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-[#d6c0aa]"
+              className={cn(primaryButtonClass, "h-16 w-full text-base")}
               disabled={!canContinue}
               onClick={onContinue}
               type="button"
@@ -3572,10 +3687,10 @@ function ProductCard({
       aria-label={`${selected ? t("selected", locale) : locale === "vi" ? "Chọn" : "Choose"} ${name}`}
       aria-pressed={selected}
       className={cn(
-        "group flex h-full min-h-[460px] flex-col overflow-hidden rounded-lg border bg-white text-left shadow-sm outline-none transition focus:ring-2 focus:ring-[#9a6237]",
+        "group flex h-full min-h-[350px] flex-col overflow-hidden rounded-lg border bg-white text-left outline-none transition focus:ring-2 focus:ring-[#9a6237]",
         selected
-          ? "border-[#9a6237] bg-[#fffaf3] shadow-md ring-2 ring-[#c9955d]/25"
-          : "cursor-pointer border-[#ead8bf] hover:border-[#c9955d] hover:shadow-md",
+          ? "border-[#9a6237] bg-[#fffaf3] ring-2 ring-[#c9955d]/25"
+          : "cursor-pointer border-[#ead8bf] hover:border-[#c9955d]",
       )}
       onClick={selectProduct}
       onKeyDown={(event) => {
@@ -3586,49 +3701,44 @@ function ProductCard({
       role="button"
       tabIndex={0}
     >
-      <div className="relative aspect-[4/3] bg-[#efe1cf]">
+      <div className="relative aspect-[1.75] bg-[#efe1cf]">
         <Image
           alt={productImageAlt(product)}
-          className={cn(
-            "object-cover transition duration-300",
-            selected ? "scale-[1.02]" : "group-hover:scale-[1.02]",
-          )}
+          className="object-cover"
           fill
           sizes="(min-width: 1024px) 340px, (min-width: 768px) 45vw, 92vw"
           src={product.image}
         />
         {product.popular && (
-          <span className="absolute left-3 top-3 rounded-lg bg-[#fffaf3]/95 px-2 py-1 text-xs font-semibold text-[#6f3f24] shadow-sm">
+          <span className="absolute left-3 top-3 rounded-md border border-[#ead8bf] bg-[#fffaf3]/95 px-2 py-1 text-xs font-semibold text-[#6f3f24]">
             {locale === "vi" ? "Phổ biến" : "Popular"}
           </span>
         )}
         {selected && (
-          <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-lg bg-[#6f3f24] px-2 py-1 text-xs font-semibold text-white shadow-sm">
+          <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-md bg-[#6f3f24] px-2 py-1 text-xs font-semibold text-white">
             <CheckCircle2 size={14} aria-hidden />
             {t("selected", locale)}
           </span>
         )}
       </div>
       <div className="flex flex-1 flex-col p-4">
-        <div className="flex flex-1 items-start justify-between gap-3">
+        <div className="flex min-h-[98px] items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase text-[#7a4a2a]">
-              {category}
-            </p>
-            <h3 className="mt-1 text-base font-semibold text-stone-950">
+            <p className="sr-only">{category}</p>
+            <h3 className="text-base font-extrabold leading-5 text-stone-950">
               {name}
             </h3>
-            <p className="mt-1 text-sm leading-6 text-stone-600">
+            <p className="mt-2 min-h-[44px] text-sm leading-6 text-stone-600">
               {detail}
             </p>
           </div>
-          <p className="shrink-0 text-sm font-semibold text-stone-900">
+          <p className="shrink-0 text-sm font-extrabold text-stone-900">
             {formatVnd(product.priceCents)}
           </p>
         </div>
         <div
           className={cn(
-            "mt-4 flex h-11 items-center justify-between rounded-lg border px-2 transition",
+            "mt-auto ml-auto flex h-11 w-[164px] items-center justify-between rounded-lg border px-2 transition",
             selected
               ? "border-[#9a6237] bg-[#efe1cf]"
               : "border-[#dcc6aa] bg-[#fffaf3]",
@@ -3683,69 +3793,101 @@ function CheckoutScreen({
   const Icon = copy.icon;
   const canPay = cartLines.length > 0 && totalCents <= startingBalance;
   return (
-    <Panel eyebrow={t("checkout", locale)} icon={ReceiptText} title={t("cart", locale)}>
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="rounded-lg border border-[#ead8bf] bg-white p-4">
-          <div className="space-y-3">
+    <Panel eyebrow={t("checkout", locale)} icon={ShoppingCart} title={t("cart", locale)}>
+      <div className="grid gap-8 2xl:grid-cols-[minmax(0,1fr)_420px]">
+        <div>
+          <div className="rounded-lg border border-[#ead8bf] bg-[#fffaf7] p-6">
             {cartLines.map((line) => {
               const item = getProduct(line.productId);
               if (!item) return null;
               return (
                 <div
-                  className="flex items-start justify-between gap-4 rounded-lg border border-[#f0dfc8] bg-[#fffaf3] px-3 py-2"
+                  className="flex items-center justify-between gap-5 rounded-lg border border-[#ead8bf] bg-white p-5"
                   key={line.productId}
                 >
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-stone-950">
-                      {productName(item, locale)}
-                    </p>
-                    <p className="mt-1 text-xs text-stone-500">
-                      {line.quantity} x {formatVnd(item.priceCents)}
-                    </p>
+                  <div className="flex min-w-0 items-center gap-5">
+                    <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-lg border border-[#ead8bf] bg-[#f7efe5]">
+                      <Image
+                        alt=""
+                        aria-hidden
+                        className="object-cover"
+                        fill
+                        sizes="96px"
+                        src={item.image}
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xl font-extrabold text-stone-950">
+                        {productName(item, locale)}
+                      </p>
+                      <p className="mt-2 text-base text-stone-500">
+                        {line.quantity} x {formatVnd(item.priceCents)}
+                      </p>
+                    </div>
                   </div>
-                  <p className="text-sm font-semibold text-stone-800">
+                  <p className="shrink-0 text-xl font-extrabold text-stone-950">
                     {formatVnd(lineTotal(line))}
                   </p>
                 </div>
               );
             })}
           </div>
-          <div className="mt-4 grid gap-2 text-sm">
+          <div className="mt-8 grid gap-2 text-base">
             <Row label={locale === "vi" ? "Số lượng món" : "Item count"} value={String(cartCount(cartLines))} />
             <Row label={locale === "vi" ? "Số dư ban đầu" : "Starting balance"} value={formatVnd(startingBalance)} />
             <Row label={locale === "vi" ? "Tổng tiền" : "Total"} value={formatVnd(totalCents)} strong />
-            <Row
-              label={locale === "vi" ? "Số dư sau thanh toán" : "Balance after payment"}
-              value={formatVnd(startingBalance - totalCents)}
-            />
+          </div>
+          <div className="mt-6 flex items-center justify-between rounded-lg border border-[#dbe6d2] bg-[#f4f8f1] px-7 py-5 text-[#365d32]">
+            <span className="text-lg font-extrabold">
+              {locale === "vi" ? "Số dư sau thanh toán" : "Balance after payment"}
+            </span>
+            <span className="text-xl font-extrabold">
+              {formatVnd(startingBalance - totalCents)}
+            </span>
           </div>
         </div>
-        <div className={cn("rounded-lg border p-4", copy.color)}>
-          <div className="mb-3 flex items-center gap-3">
-            <Icon size={22} aria-hidden />
-            <div>
-              <p className="text-sm font-semibold">{copy.label}</p>
-              <p className="text-xs opacity-75">{copy.device}</p>
+        <div>
+          <div className="rounded-lg border border-[#dbe6d2] bg-[#f9fbf7] p-8 text-center text-[#365d32]">
+            <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-white">
+              {group === "NFC_CARD" ? (
+                <NfcSignalMark className="text-[#365d32]" size={58} />
+              ) : (
+                <Icon size={48} aria-hidden />
+              )}
+            </div>
+            <p className="mt-8 text-base text-stone-600">
+              {locale === "vi" ? "Thanh toán bằng" : "Pay with"}
+            </p>
+            <h2 className="mt-2 text-2xl font-extrabold text-stone-950">
+              {copy.label}
+            </h2>
+            <p className="mx-auto mt-6 max-w-[270px] text-base leading-7">
+              {locale === "vi"
+                ? "POS sẽ chuyển thẳng sang phương thức đã chọn cho phiên này."
+                : "The POS will go directly to the assigned method for this session."}
+            </p>
+            <div className="mt-10 grid grid-cols-2 border-t border-[#dbe6d2] pt-6 text-sm text-stone-700">
+              <span className="inline-flex items-center justify-center gap-2 border-r border-[#dbe6d2]">
+                <ShieldCheck size={18} aria-hidden />
+                {locale === "vi" ? "An toàn" : "Secure"}
+              </span>
+              <span className="inline-flex items-center justify-center gap-2">
+                <Zap size={18} aria-hidden />
+                {locale === "vi" ? "Nhanh chóng" : "Fast"}
+              </span>
             </div>
           </div>
-          <p className="text-sm leading-6 opacity-85">
-            {locale === "vi"
-              ? "POS sẽ chuyển thẳng sang phương thức đã chọn cho phiên này."
-              : "The POS will go directly to the assigned method for this session."}
-          </p>
+          <button
+            className={cn(primaryButtonClass, "mt-7 h-16 w-full text-xl")}
+            disabled={!canPay}
+            onClick={onPay}
+            type="button"
+          >
+            {t("payment", locale)}
+            <ArrowRight size={24} aria-hidden />
+          </button>
         </div>
       </div>
-      <ActionRow>
-        <button
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-[#d6c0aa]"
-          disabled={!canPay}
-          onClick={onPay}
-          type="button"
-        >
-          {t("payment", locale)}
-          <ArrowRight size={17} aria-hidden />
-        </button>
-      </ActionRow>
     </Panel>
   );
 }
@@ -3798,8 +3940,8 @@ function PaymentScreen({
       icon={groupCopy[group].icon}
       title={groupCopyFor(group, locale).label}
     >
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="rounded-lg border border-[#ead8bf] bg-white p-4">
+      <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_400px]">
+        <div className="min-w-0">
           {group === "QR_PIN" && (
             <QrPosPayment
               amount={totalCents}
@@ -4356,23 +4498,40 @@ function NfcBridgePayment({
 
   return (
     <div className="space-y-4">
-      <div className="flex min-h-64 items-center justify-center rounded-lg border border-[#ead8bf] bg-[#fffaf3]">
-        <div className="text-center">
-          <Nfc className="mx-auto mb-4 text-[#405438]" size={60} aria-hidden />
-          <p className="text-lg font-semibold">
-            {locale === "vi" ? "Chạm thẻ vào đầu đọc USB" : "Tap the card on the USB reader"}
+      <div className="relative flex min-h-[520px] items-center justify-center overflow-hidden rounded-lg border border-[#ead8bf] bg-[#fff8ed] px-6 py-10">
+        <div className="absolute inset-0 flex items-center justify-center text-[#ead8bf]">
+          <span className="absolute h-[430px] w-[430px] rounded-full border border-current opacity-45" />
+          <span className="absolute h-[330px] w-[330px] rounded-full border border-current opacity-60" />
+          <span className="absolute h-[230px] w-[230px] rounded-full border border-current opacity-75" />
+        </div>
+        <div className="relative z-10 w-full max-w-[560px] text-center">
+          <div className="mx-auto flex h-36 w-36 items-center justify-center rounded-full border border-[#ead8bf] bg-white text-[#52693d]">
+            <NfcSignalMark size={78} />
+          </div>
+          <p className="mt-12 text-3xl font-extrabold text-stone-950">
+            {locale === "vi" ? "Chạm thẻ vào đầu đọc" : "Tap card on the reader"}
           </p>
-          <p className="mt-1 text-sm text-stone-500">{formatVnd(amount)}</p>
-          <p className="mt-3 text-sm font-medium text-[#6f3f24]">{status}</p>
+          <p className="mt-4 text-2xl font-medium text-stone-600">
+            {formatVnd(amount)}
+          </p>
+          <p className="mx-auto mt-8 max-w-[430px] rounded-lg border border-[#ead8bf] bg-white px-4 py-3 text-sm font-semibold text-[#6f3f24]">
+            {status}
+          </p>
+          <div className="mx-auto mt-10 max-w-[430px] border-t border-[#ead8bf] pt-6">
+            <p className="inline-flex items-center gap-2 text-base text-stone-600">
+              <ShieldCheck size={20} aria-hidden />
+              {locale === "vi" ? "Giao dịch an toàn và được mã hóa" : "Secure encrypted transaction"}
+            </p>
+          </div>
         </div>
       </div>
       <button
-        className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-[#ead8bf] bg-white px-4 text-sm font-semibold text-stone-700 transition hover:bg-[#fffaf3] disabled:bg-[#d6c0aa]"
+        className="inline-flex h-16 w-full items-center justify-center gap-3 rounded-lg border border-[#dbe6d2] bg-[#f1f6ed] px-4 text-lg font-semibold text-stone-800 transition hover:border-[#b9caa8] disabled:bg-[#d6c0aa]"
         disabled={busy}
         onClick={simulateTap}
         type="button"
       >
-        <Nfc size={17} aria-hidden />
+        <NfcSignalMark size={24} />
         {locale === "vi" ? "Mô phỏng chạm thẻ" : "Simulate card tap"}
       </button>
     </div>
@@ -4473,38 +4632,54 @@ function RetryPanel({
   };
 
   return (
-    <aside className="rounded-lg border border-[#ead8bf] bg-white p-4">
-      <div className="mb-3 flex items-center gap-2">
-        <TimerReset size={18} aria-hidden />
-        <h3 className="font-semibold">
-          {locale === "vi" ? "Thử lại và lỗi" : "Retries and errors"}
+    <aside className="self-start rounded-lg border border-[#ead8bf] bg-white p-8">
+      <div className="mb-6 flex items-center gap-3">
+        <CircleHelp className="text-[#52693d]" size={22} aria-hidden />
+        <h3 className="text-lg font-extrabold">
+          {locale === "vi" ? "Gặp sự cố?" : "Having trouble?"}
         </h3>
       </div>
-      <p className="text-sm leading-6 text-stone-600">
-        {locale === "vi"
-          ? "Tối đa hai lần thử lại. Sau đó hệ thống ghi nhận lỗi kỹ thuật và mở khảo sát sau trải nghiệm."
-          : "Up to two retries are allowed. After that, the system records a technical failure and opens the post-experience survey."}
-      </p>
-      <div className="mt-3 space-y-2">
+      <div className="space-y-3">
         {errors[group].map((error) => (
           <button
-            className="inline-flex min-h-11 w-full items-start justify-start gap-2 rounded-lg border border-[#ead8bf] bg-white px-3 py-2.5 text-left text-sm font-medium leading-5 text-stone-700 transition hover:bg-[#fffaf3] disabled:text-[#b8a491]"
+            className="inline-flex min-h-[76px] w-full items-center justify-start gap-4 rounded-lg border border-[#ead8bf] bg-white px-4 py-3 text-left text-sm font-semibold leading-5 text-stone-800 transition hover:border-[#c9955d] disabled:text-[#b8a491]"
             disabled={retries >= 2}
             key={error.code}
             onClick={() => onRetry(error.code)}
             type="button"
           >
-            <AlertTriangle className="mt-0.5 shrink-0" size={15} aria-hidden />
-            <span className="min-w-0 flex-1 break-words">{localizeText(error.label, locale)}</span>
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#fff3df] text-[#9a6237]">
+              <AlertTriangle size={19} aria-hidden />
+            </span>
+            <span className="min-w-0 flex-1 break-words">
+              {localizeText(error.label, locale)}
+            </span>
+            <ArrowRight className="text-[#7b4325]" size={18} aria-hidden />
           </button>
         ))}
       </div>
-      <div className="mt-4 rounded-lg bg-[#fffaf3] px-3 py-2 text-sm text-stone-600">
-        {locale === "vi" ? "Số lần thử lại" : "Retries"}:{" "}
-        <span className="font-semibold">{retries}/2</span>
+      <div className="mt-8 border-t border-[#ead8bf] pt-7">
+        <div className="inline-flex h-12 items-center gap-3 rounded-lg bg-[#f1f6ed] px-5 text-sm text-stone-600">
+          <TimerReset className="text-[#52693d]" size={20} aria-hidden />
+          {locale === "vi" ? "Đã thử" : "Tried"}:{" "}
+          <span className="font-extrabold text-stone-950">{retries}/2</span>
+        </div>
+        <p className="mt-7 max-w-[280px] text-sm leading-6 text-stone-500">
+          {locale === "vi"
+            ? "Nếu vẫn không được, hãy thử lại hoặc đổi phương thức thanh toán."
+            : "If it still does not work, retry or switch payment method."}
+        </p>
+        <Image
+          alt=""
+          aria-hidden
+          className="ml-auto mt-4 h-auto w-36"
+          height={112}
+          src="/brand/coffee-sprig.svg"
+          width={148}
+        />
       </div>
       <button
-        className="mt-3 inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:opacity-40"
+        className="mt-5 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:opacity-40"
         disabled={retries < 2}
         onClick={onFailure}
         type="button"
@@ -4528,35 +4703,67 @@ function SuccessScreen({
   const balanceAfter = transaction?.balance_after ?? startingBalance - paidAmount;
 
   return (
-    <Panel
-      eyebrow={locale === "vi" ? "Kết quả giao dịch" : "Transaction result"}
-      icon={CheckCircle2}
-      title={locale === "vi" ? "Thanh toán thành công" : "Payment successful"}
-    >
-      <div className="mx-auto max-w-lg rounded-lg border border-[#d8b88b] bg-[#fff3df] p-6 text-center text-[#4f2f1c]">
-        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-lg bg-white/80">
-          <CheckCircle2 size={32} aria-hidden />
+    <section className="flex min-h-[calc(100vh-10rem)] items-center justify-center rounded-lg border border-[#ead8bf] bg-white p-8">
+      <div className="w-full max-w-[700px] rounded-lg border border-[#ead8bf] bg-[#fffaf7] px-10 py-12 text-center">
+        <div className="relative mx-auto mb-8 flex h-28 w-28 items-center justify-center">
+          <Sparkles className="absolute -left-9 top-3 text-[#d2b06f]" size={24} aria-hidden />
+          <Sparkles className="absolute -right-8 top-6 text-[#bfc9ac]" size={18} aria-hidden />
+          <div className="flex h-24 w-24 items-center justify-center rounded-full bg-[#e8f0e2] text-[#47683f]">
+            <CheckCircle2 size={56} strokeWidth={1.8} aria-hidden />
+          </div>
         </div>
-        <h2 className="text-2xl font-semibold">
+        <h1 className="text-4xl font-extrabold text-[#7b4325]">
           {locale === "vi" ? "Thanh toán thành công" : "Payment successful"}
-        </h2>
-        <div className="mt-5 space-y-2 text-sm">
-          <Row label={locale === "vi" ? "Đơn hàng" : "Order"} value={transaction?.product ?? (locale === "vi" ? "Đơn cafe" : "Cafe order")} />
-          <Row label={locale === "vi" ? "Đã thanh toán" : "Paid"} value={formatVnd(paidAmount)} />
-          <Row label={locale === "vi" ? "Số dư còn lại" : "Remaining balance"} value={formatVnd(balanceAfter)} />
+        </h1>
+        <p className="mt-5 text-base leading-7 text-stone-600">
+          {locale === "vi"
+            ? "Giao dịch của bạn đã được xử lý thành công. Cảm ơn bạn đã tham gia nghiên cứu!"
+            : "Your transaction was processed successfully. Thank you for joining the study!"}
+        </p>
+        <div className="mt-10 border-t border-[#ead8bf] pt-5 text-left">
+          {[
+            {
+              Icon: Coffee,
+              label: locale === "vi" ? "Đơn hàng" : "Order",
+              value: transaction?.product ?? (locale === "vi" ? "Đơn cafe" : "Cafe order"),
+            },
+            {
+              Icon: WalletCards,
+              label: locale === "vi" ? "Đã thanh toán" : "Paid",
+              value: formatVnd(paidAmount),
+            },
+            {
+              Icon: ReceiptText,
+              label: locale === "vi" ? "Số dư còn lại" : "Remaining balance",
+              value: formatVnd(balanceAfter),
+            },
+          ].map(({ Icon, label, value }) => (
+            <div
+              className="flex items-center justify-between gap-6 border-b border-[#ead8bf] py-4 last:border-0"
+              key={label}
+            >
+              <div className="flex min-w-0 items-center gap-4">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[#ead8bf] bg-[#fff3df] text-[#7b4325]">
+                  <Icon size={18} aria-hidden />
+                </span>
+                <span className="text-base font-medium text-stone-500">{label}</span>
+              </div>
+              <span className="text-right text-lg font-extrabold text-[#4f2f1c]">
+                {value}
+              </span>
+            </div>
+          ))}
         </div>
-      </div>
-      <ActionRow>
         <button
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f]"
+          className={cn(primaryButtonClass, "mt-8 h-16 w-full text-xl")}
           onClick={onContinue}
           type="button"
         >
           {t("surveyContinue", locale)}
-          <ArrowRight size={17} aria-hidden />
+          <ArrowRight size={24} aria-hidden />
         </button>
-      </ActionRow>
-    </Panel>
+      </div>
+    </section>
   );
 }
 
@@ -4645,14 +4852,16 @@ function Panel({
   title: string;
 }) {
   return (
-    <section className="rounded-lg border border-[#ead8bf] bg-white p-5 shadow-sm">
-      <div className="mb-5 flex items-start gap-3">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[#6f3f24] text-white">
-          <Icon size={21} aria-hidden />
+    <section className="min-h-[calc(100vh-10rem)] rounded-lg border border-[#ead8bf] bg-white p-6 sm:p-8 lg:p-10">
+      <div className="mb-8 flex items-start gap-5">
+        <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg border border-[#ead8bf] bg-[#fff3df] text-[#7b4325]">
+          <Icon size={28} aria-hidden />
         </div>
         <div>
-          <p className="text-sm font-medium text-[#7a4a2a]">{eyebrow}</p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-normal">{title}</h1>
+          <p className="text-sm font-semibold text-[#9a4f1f]">{eyebrow}</p>
+          <h1 className="mt-2 text-3xl font-extrabold tracking-normal text-[#17120f]">
+            {title}
+          </h1>
         </div>
       </div>
       {children}
@@ -4662,7 +4871,7 @@ function Panel({
 
 function ActionRow({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mt-5 flex justify-end border-t border-[#ead8bf] pt-4">
+    <div className="mt-8 flex justify-end border-t border-[#ead8bf] pt-7">
       {children}
     </div>
   );
@@ -4730,7 +4939,7 @@ function CustomSelect({
 
       {open && (
         <div
-          className="absolute left-0 right-0 z-30 mt-2 overflow-hidden rounded-lg border border-[#d6b896] bg-[#fffaf3] p-1 shadow-lg shadow-stone-900/10"
+          className="absolute left-0 right-0 z-30 mt-2 overflow-hidden rounded-lg border border-[#d6b896] bg-[#fffaf3] p-1"
           role="listbox"
         >
           {options.map((option) => {
