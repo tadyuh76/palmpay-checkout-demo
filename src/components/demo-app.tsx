@@ -443,6 +443,35 @@ const primaryButtonClass =
 const secondaryButtonClass =
   "inline-flex items-center justify-center gap-2 rounded-lg border border-[#e5d2bb] bg-white px-3 font-semibold text-stone-700 transition hover:border-[#c99862] hover:bg-[#fffaf7] disabled:text-[#b8a491]";
 
+function CoffeeLeafGraphic({
+  className,
+  coffeeClassName,
+  leavesClassName,
+}: {
+  className?: string;
+  coffeeClassName?: string;
+  leavesClassName?: string;
+}) {
+  return (
+    <div className={cn("pointer-events-none relative", className)} aria-hidden>
+      <Image
+        alt=""
+        className={cn("absolute object-contain", leavesClassName)}
+        height={1254}
+        src="/leaves.png"
+        width={1254}
+      />
+      <Image
+        alt=""
+        className={cn("absolute object-contain", coffeeClassName)}
+        height={1254}
+        src="/coffee.png"
+        width={1254}
+      />
+    </div>
+  );
+}
+
 function BrandLockup({
   compact = false,
   subtitle,
@@ -3577,21 +3606,22 @@ function ProductScreen({
           </div>
         </div>
 
-        <aside className="h-fit rounded-lg border border-[#dcc6aa] bg-white p-5 2xl:sticky 2xl:top-28">
+        <aside className="h-fit overflow-hidden rounded-lg border border-[#dcc6aa] bg-white p-5 2xl:sticky 2xl:top-28">
           <div className="mb-5 flex items-center justify-between gap-3">
             <h3 className="text-lg font-extrabold text-stone-950">{t("cart", locale)}</h3>
-            <ShoppingBag className="text-[#7a4a2a]" size={22} aria-hidden />
+            <CoffeeLeafGraphic
+              className="h-12 w-16 shrink-0"
+              coffeeClassName="bottom-0 left-0 h-10 w-10"
+              leavesClassName="-right-1 -top-2 h-12 w-12 rotate-12"
+            />
           </div>
 
           {cartLines.length === 0 ? (
             <div className="rounded-lg border border-dashed border-[#dcc6aa] bg-[#fffaf7] px-4 py-6 text-center">
-              <Image
-                alt=""
-                aria-hidden
-                className="mx-auto h-auto w-28"
-                height={116}
-                src="/brand/empty-cart-cup.svg"
-                width={168}
+              <CoffeeLeafGraphic
+                className="mx-auto h-28 w-36"
+                coffeeClassName="bottom-0 left-2 h-24 w-24"
+                leavesClassName="-right-1 top-0 h-24 w-24 rotate-6"
               />
               <p className="mt-4 font-bold text-stone-950">
                 {locale === "vi" ? "Chưa có món nào" : "No items yet"}
@@ -3796,41 +3826,50 @@ function CheckoutScreen({
     <Panel eyebrow={t("checkout", locale)} icon={ShoppingCart} title={t("cart", locale)}>
       <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_360px]">
         <div>
-          <div className="rounded-lg border border-[#ead8bf] bg-[#fffaf7] p-4">
-            {cartLines.map((line) => {
-              const item = getProduct(line.productId);
-              if (!item) return null;
-              return (
-                <div
-                  className="flex items-center justify-between gap-4 rounded-lg border border-[#ead8bf] bg-white p-4"
-                  key={line.productId}
-                >
-                  <div className="flex min-w-0 items-center gap-4">
-                    <div className="relative h-18 w-18 shrink-0 overflow-hidden rounded-lg border border-[#ead8bf] bg-[#f7efe5]">
-                      <Image
-                        alt=""
-                        aria-hidden
-                        className="object-cover"
-                        fill
-                        sizes="96px"
-                        src={item.image}
-                      />
+          <div className="relative overflow-hidden rounded-lg border border-[#ead8bf] bg-[#fffaf7] p-4">
+            <div className="pointer-events-none absolute -right-7 -top-8 h-28 w-32 opacity-30" aria-hidden>
+              <CoffeeLeafGraphic
+                className="h-full w-full"
+                coffeeClassName="bottom-0 left-1 h-20 w-20"
+                leavesClassName="-right-1 top-0 h-24 w-24 rotate-12"
+              />
+            </div>
+            <div className="relative z-10 space-y-3">
+              {cartLines.map((line) => {
+                const item = getProduct(line.productId);
+                if (!item) return null;
+                return (
+                  <div
+                    className="flex items-center justify-between gap-4 rounded-lg border border-[#ead8bf] bg-white p-4"
+                    key={line.productId}
+                  >
+                    <div className="flex min-w-0 items-center gap-4">
+                      <div className="relative h-18 w-18 shrink-0 overflow-hidden rounded-lg border border-[#ead8bf] bg-[#f7efe5]">
+                        <Image
+                          alt=""
+                          aria-hidden
+                          className="object-cover"
+                          fill
+                          sizes="96px"
+                          src={item.image}
+                        />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-lg font-extrabold text-stone-950">
+                          {productName(item, locale)}
+                        </p>
+                        <p className="mt-2 text-base text-stone-500">
+                          {line.quantity} x {formatVnd(item.priceCents)}
+                        </p>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <p className="text-lg font-extrabold text-stone-950">
-                        {productName(item, locale)}
-                      </p>
-                      <p className="mt-2 text-base text-stone-500">
-                        {line.quantity} x {formatVnd(item.priceCents)}
-                      </p>
-                    </div>
+                    <p className="shrink-0 text-lg font-extrabold text-stone-950">
+                      {formatVnd(lineTotal(line))}
+                    </p>
                   </div>
-                  <p className="shrink-0 text-lg font-extrabold text-stone-950">
-                    {formatVnd(lineTotal(line))}
-                  </p>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
           <div className="mt-5 grid gap-2 text-sm">
             <Row label={locale === "vi" ? "Số lượng món" : "Item count"} value={String(cartCount(cartLines))} />
@@ -4705,10 +4744,17 @@ function SuccessScreen({
   return (
     <section className="flex min-h-[calc(100vh-8rem)] items-center justify-center rounded-lg border border-[#ead8bf] bg-white p-5">
       <div className="w-full max-w-[560px] rounded-lg border border-[#ead8bf] bg-[#fffaf7] px-7 py-8 text-center">
-        <div className="relative mx-auto mb-6 flex h-20 w-20 items-center justify-center">
-          <Sparkles className="absolute -left-9 top-3 text-[#d2b06f]" size={24} aria-hidden />
-          <Sparkles className="absolute -right-8 top-6 text-[#bfc9ac]" size={18} aria-hidden />
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#e8f0e2] text-[#47683f]">
+        <div className="relative mx-auto mb-5 h-28 w-44">
+          <div className="pointer-events-none absolute inset-0" aria-hidden>
+            <CoffeeLeafGraphic
+              className="h-full w-full"
+              coffeeClassName="bottom-0 left-2 h-24 w-24"
+              leavesClassName="-right-1 top-0 h-28 w-28 rotate-6"
+            />
+          </div>
+          <Sparkles className="absolute left-1 top-5 text-[#d2b06f]" size={22} aria-hidden />
+          <Sparkles className="absolute right-8 top-4 text-[#bfc9ac]" size={18} aria-hidden />
+          <div className="absolute left-1/2 top-4 flex h-16 w-16 -translate-x-1/2 items-center justify-center rounded-full bg-[#e8f0e2] text-[#47683f]">
             <CheckCircle2 size={40} strokeWidth={1.8} aria-hidden />
           </div>
         </div>
