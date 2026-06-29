@@ -3393,7 +3393,9 @@ function PersonalInfoSection({
             {locale === "vi" ? "Thông tin cá nhân" : "Personal information"}
           </p>
           <h2 className="mt-1 text-xl font-extrabold text-stone-950">
-            {locale === "vi" ? "Xác nhận thông tin đăng ký" : "Confirm registration details"}
+            {locale === "vi"
+              ? "Xác nhận thông tin đăng ký (Giả lập)"
+              : "Confirm registration details (Simulation)"}
           </h2>
         </div>
         <span
