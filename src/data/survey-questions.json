@@ -197,8 +197,8 @@
       "item_id": "PS1",
       "construct": "PERCEIVED_SECURITY",
       "construct_label": {
-        "vi": "CẢM NHẬN CỦA BẠN VỀ TÍNH BẢO MẬT",
-        "en": "YOUR PERCEPTION OF SECURITY"
+        "vi": "Cảm nhận về bảo mật",
+        "en": "Perceived Security"
       },
       "section_intro": {
         "vi": "Vui lòng đánh giá mức độ đồng ý của bạn theo thang từ 1 - 7 với:\n1. Hoàn toàn không đồng ý\n2. Không đồng ý\n3. Hơi không đồng ý\n4. Trung lập\n5. Hơi đồng ý\n6. Đồng ý\n7. Hoàn toàn đồng ý",
@@ -206,8 +206,8 @@
       },
       "source_text": "PS1: I perceive EPS as secure.",
       "text": {
-        "vi": "PS1:  Tôi cảm nhận phương thức thanh toán này được bảo mật.",
-        "en": "PS1: I perceive this payment method as secure."
+        "vi": "Tôi cảm thấy phương thức thanh toán này an toàn.",
+        "en": "I perceive this payment method as secure."
       },
       "scale_min": 1,
       "scale_max": 7,
@@ -218,13 +218,13 @@
       "item_id": "PS2",
       "construct": "PERCEIVED_SECURITY",
       "construct_label": {
-        "vi": "CẢM NHẬN CỦA BẠN VỀ TÍNH BẢO MẬT",
-        "en": "YOUR PERCEPTION OF SECURITY"
+        "vi": "Cảm nhận về bảo mật",
+        "en": "Perceived Security"
       },
       "source_text": "PS2: I perceive the information relating to user and EPS transactions as secure.",
       "text": {
-        "vi": "PS2:  Tôi cảm nhận các thông tin liên quan đến người dùng và giao dịch thông qua phương thức thanh toán này được bảo mật.",
-        "en": "PS2: I perceive the information relating to users and transactions through this payment method as secure."
+        "vi": "Tôi cảm thấy các thông tin cá nhân và các thông tin giao dịch phát sinh trong quá trình thanh toán này được bảo mật.",
+        "en": "I perceive the information relating to user and transactions through this payment method as secure."
       },
       "scale_min": 1,
       "scale_max": 7,
@@ -235,13 +235,13 @@
       "item_id": "PS3",
       "construct": "PERCEIVED_SECURITY",
       "construct_label": {
-        "vi": "CẢM NHẬN CỦA BẠN VỀ TÍNH BẢO MẬT",
-        "en": "YOUR PERCEPTION OF SECURITY"
+        "vi": "Cảm nhận về bảo mật",
+        "en": "Perceived Security"
       },
       "source_text": "PS3: The information I provided in previous EPS is helpful for secure payment transactions.",
       "text": {
-        "vi": "PS3:  Những thông tin tôi đã cung cấp cho phương thức thanh toán này hỗ trợ cho việc thực hiện giao dịch thanh toán an toàn.",
-        "en": "PS3: The information I provided for this payment method supports secure payment transactions."
+        "vi": "Những thông tin cá nhân tôi đã cung cấp giúp việc thực hiện giao dịch thanh toán được an toàn.",
+        "en": "The information I provided is helpful for secure payment transactions."
       },
       "scale_min": 1,
       "scale_max": 7,
@@ -252,13 +252,13 @@
       "item_id": "PS4",
       "construct": "PERCEIVED_SECURITY",
       "construct_label": {
-        "vi": "CẢM NHẬN CỦA BẠN VỀ TÍNH BẢO MẬT",
-        "en": "YOUR PERCEPTION OF SECURITY"
+        "vi": "Cảm nhận về bảo mật",
+        "en": "Perceived Security"
       },
       "source_text": "PS4: I do not fear hacker invasions into EPS.",
       "text": {
-        "vi": "PS4:  Tôi không lo ngại về việc bị tin tặc xâm nhập khi sử dụng phương thức thanh toán này.",
-        "en": "PS4: I do not worry about hacker intrusion when using this payment method."
+        "vi": "Tôi không lo sợ về việc bị đánh cắp thông tin khi sử dụng phương thức thanh toán này.",
+        "en": "I do not fear hacker invasions when using this payment method."
       },
       "scale_min": 1,
       "scale_max": 7,
@@ -269,13 +269,30 @@
       "item_id": "CON1",
       "construct": "PERCEIVED_EASE_OF_USE",
       "construct_label": {
-        "vi": "CẢM NHẬN CỦA BẠN VỀ SỰ DỄ DÀNG KHI THANH TOÁN",
-        "en": "YOUR PERCEPTION OF EASE WHEN PAYING"
+        "vi": "Cảm nhận về sự dễ dàng",
+        "en": "Perceived Ease"
       },
       "source_text": "CON1: Learning to use the mobile payment is easy for me.",
       "text": {
-        "vi": "CON1:  Tôi dễ dàng học cách sử dụng phương thức thanh toán được phân công.",
-        "en": "CON1: I easily learned how to use the assigned payment method."
+        "vi": "Tôi dễ dàng học cách sử dụng phương thức thanh toán này.",
+        "en": "Learning to use this payment method is easy for me."
+      },
+      "scale_min": 1,
+      "scale_max": 7,
+      "reverse_scored": false,
+      "required": true
+    },
+    {
+      "item_id": "ATT1",
+      "construct": "PERCEIVED_EASE_OF_USE",
+      "construct_label": {
+        "vi": "Cảm nhận về sự dễ dàng",
+        "en": "Perceived Ease"
+      },
+      "source_text": "ATT1: Nếu bạn vẫn còn tập trung trả lời bảng hỏi, vui lòng chọn số 6 cho câu này.",
+      "text": {
+        "vi": "Nếu bạn vẫn còn tập trung trả lời bảng hỏi, vui lòng chọn số 6 cho câu này.",
+        "en": "If you are still paying attention while answering the questionnaire, please select number 6 for this item."
       },
       "scale_min": 1,
       "scale_max": 7,
@@ -286,13 +303,13 @@
       "item_id": "CON2",
       "construct": "PERCEIVED_EASE_OF_USE",
       "construct_label": {
-        "vi": "CẢM NHẬN CỦA BẠN VỀ SỰ DỄ DÀNG KHI THANH TOÁN",
-        "en": "YOUR PERCEPTION OF EASE WHEN PAYING"
+        "vi": "Cảm nhận về sự dễ dàng",
+        "en": "Perceived Ease"
       },
       "source_text": "CON2: My interaction with mobile payment procedure would be clear and understandable.",
       "text": {
-        "vi": "CON2:  Quá trình tương tác của tôi với quy trình thanh toán bằng phương thức được phân công rõ ràng và dễ hiểu.",
-        "en": "CON2: My interaction with the assigned payment method procedure was clear and understandable."
+        "vi": "Sự tương tác của tôi với quy trình thanh toán bằng phương thức này rõ ràng và dễ hiểu.",
+        "en": "My interaction with this payment procedure is clear and understandable."
       },
       "scale_min": 1,
       "scale_max": 7,
@@ -303,13 +320,13 @@
       "item_id": "CON3",
       "construct": "PERCEIVED_EASE_OF_USE",
       "construct_label": {
-        "vi": "CẢM NHẬN CỦA BẠN VỀ SỰ DỄ DÀNG KHI THANH TOÁN",
-        "en": "YOUR PERCEPTION OF EASE WHEN PAYING"
+        "vi": "Cảm nhận về sự dễ dàng",
+        "en": "Perceived Ease"
       },
       "source_text": "CON3: It would be easy for me to become skillful at using the mobile payment.",
       "text": {
-        "vi": "CON3:  Tôi dễ dàng trở nên thành thạo khi sử dụng phương thức thanh toán được phân công.",
-        "en": "CON3: I easily became skillful at using the assigned payment method."
+        "vi": "Tôi dễ dàng thành thạo việc sử dụng phương thức thanh toán này.",
+        "en": "It is easy for me to become skillful at using this payment method."
       },
       "scale_min": 1,
       "scale_max": 7,
@@ -320,13 +337,13 @@
       "item_id": "CON4",
       "construct": "PERCEIVED_EASE_OF_USE",
       "construct_label": {
-        "vi": "CẢM NHẬN CỦA BẠN VỀ SỰ DỄ DÀNG KHI THANH TOÁN",
-        "en": "YOUR PERCEPTION OF EASE WHEN PAYING"
+        "vi": "Cảm nhận về sự dễ dàng",
+        "en": "Perceived Ease"
       },
       "source_text": "CON4: I would find the mobile payment easy to use.",
       "text": {
-        "vi": "CON4: Tôi nhận thấy phương thức thanh toán được phân công dễ sử dụng.",
-        "en": "CON4: I found the assigned payment method easy to use."
+        "vi": "Tôi nhận thấy phương thức thanh toán này dễ sử dụng.",
+        "en": "I find this payment method easy to use."
       },
       "scale_min": 1,
       "scale_max": 7,
@@ -337,13 +354,13 @@
       "item_id": "CON5",
       "construct": "PERCEIVED_EASE_OF_USE",
       "construct_label": {
-        "vi": "CẢM NHẬN CỦA BẠN VỀ SỰ DỄ DÀNG KHI THANH TOÁN",
-        "en": "YOUR PERCEPTION OF EASE WHEN PAYING"
+        "vi": "Cảm nhận về sự dễ dàng",
+        "en": "Perceived Ease"
       },
       "source_text": "CON5: I would find a mobile payment procedure to be flexible to interact with.",
       "text": {
-        "vi": "CON5:  Tôi nhận thấy quy trình thanh toán bằng phương thức được phân công linh hoạt khi tương tác",
-        "en": "CON5: I found the assigned payment method procedure flexible to interact with."
+        "vi": "Tôi nhận thấy quy trình thanh toán này linh hoạt khi tương tác được ở bất kỳ đâu.",
+        "en": "I find this payment method procedure flexible to interact with anywhere."
       },
       "scale_min": 1,
       "scale_max": 7,
@@ -354,13 +371,30 @@
       "item_id": "USE1",
       "construct": "PERCEIVED_USEFULNESS",
       "construct_label": {
-        "vi": "CẢM NHẬN CỦA BẠN VỀ SỰ HỮU ÍCH",
-        "en": "YOUR PERCEPTION OF USEFULNESS"
+        "vi": "Cảm nhận về sự hữu ích",
+        "en": "Perceived Usefulness"
       },
       "source_text": "USE1: Using mobile payment would enable me to pay more quickly.",
       "text": {
-        "vi": "USE1: Việc sử dụng phương thức thanh toán này giúp tôi thanh toán nhanh hơn.",
-        "en": "USE1: Using this payment method helped me pay more quickly."
+        "vi": "Việc sử dụng phương thức thanh toán này giúp tôi thanh toán nhanh hơn.",
+        "en": "Using this payment method enabled me to pay more quickly."
+      },
+      "scale_min": 1,
+      "scale_max": 7,
+      "reverse_scored": false,
+      "required": true
+    },
+    {
+      "item_id": "ATT2",
+      "construct": "PERCEIVED_USEFULNESS",
+      "construct_label": {
+        "vi": "Cảm nhận về sự hữu ích",
+        "en": "Perceived Usefulness"
+      },
+      "source_text": "ATT2: Nếu bạn vẫn còn tập trung trả lời bảng hỏi, vui lòng chọn số 6 cho câu này.",
+      "text": {
+        "vi": "Nếu bạn vẫn còn tập trung trả lời bảng hỏi, vui lòng chọn số 6 cho câu này.",
+        "en": "If you are still paying attention while answering the questionnaire, please select number 6 for this item."
       },
       "scale_min": 1,
       "scale_max": 7,
@@ -371,13 +405,13 @@
       "item_id": "USE2",
       "construct": "PERCEIVED_USEFULNESS",
       "construct_label": {
-        "vi": "CẢM NHẬN CỦA BẠN VỀ SỰ HỮU ÍCH",
-        "en": "YOUR PERCEPTION OF USEFULNESS"
+        "vi": "Cảm nhận về sự hữu ích",
+        "en": "Perceived Usefulness"
       },
       "source_text": "USE2: Using mobile payment makes it easier for me to conduct transactions.",
       "text": {
-        "vi": "USE2:  Việc sử dụng phương thức thanh toán này giúp tôi thực hiện giao dịch dễ dàng hơn.",
-        "en": "USE2: Using this payment method helped me conduct transactions more easily."
+        "vi": "Việc sử dụng phương thức thanh toán này giúp tôi thực hiện giao dịch dễ dàng hơn.",
+        "en": "Using this payment method made it easier for me to conduct transactions."
       },
       "scale_min": 1,
       "scale_max": 7,
@@ -388,13 +422,13 @@
       "item_id": "USE3",
       "construct": "PERCEIVED_USEFULNESS",
       "construct_label": {
-        "vi": "CẢM NHẬN CỦA BẠN VỀ SỰ HỮU ÍCH",
-        "en": "YOUR PERCEPTION OF USEFULNESS"
+        "vi": "Cảm nhận về sự hữu ích",
+        "en": "Perceived Usefulness"
       },
       "source_text": "USE3: I would find mobile payment a useful possibility for paying.",
       "text": {
-        "vi": "USE3: Tôi nhận thấy phương thức thanh toán này là một lựa chọn hữu ích để thanh toán.",
-        "en": "USE3: I found this payment method a useful option for paying."
+        "vi": "Tôi cảm thấy phương thức thanh toán này là một lựa chọn hữu ích để thanh toán.",
+        "en": "I would find this payment method a useful option for paying."
       },
       "scale_min": 1,
       "scale_max": 7,
@@ -405,13 +439,13 @@
       "item_id": "TRU1",
       "construct": "PERCEIVED_TRUST",
       "construct_label": {
-        "vi": "CẢM NHẬN VỀ NIỀM TIN KHI THANH TOÁN",
-        "en": "PERCEPTION OF TRUST WHEN PAYING"
+        "vi": "Cảm nhận về niềm tin về hệ thống mô phỏng",
+        "en": "Perceived Trust"
       },
       "source_text": "TRU1: I trust each participant, such as seller and buyer, involved in EPS.",
       "text": {
-        "vi": "TRU1:  Tôi tin tưởng các bên tham gia, chẳng hạn như người bán và người mua, trong hệ thống thanh toán điện tử mô phỏng này.",
-        "en": "TRU1: I trust each participant, such as seller and buyer, involved in this simulated electronic payment system."
+        "vi": "Tôi tin tưởng các bên tham gia, chẳng hạn như người bán và người mua, trong hệ thống thanh toán điện tử mô phỏng này.",
+        "en": "I trust each participant, such as seller and buyer, involved in this simulated electronic payment system."
       },
       "scale_min": 1,
       "scale_max": 7,
@@ -422,13 +456,13 @@
       "item_id": "TRU2",
       "construct": "PERCEIVED_TRUST",
       "construct_label": {
-        "vi": "CẢM NHẬN VỀ NIỀM TIN KHI THANH TOÁN",
-        "en": "PERCEPTION OF TRUST WHEN PAYING"
+        "vi": "Cảm nhận về niềm tin về hệ thống mô phỏng",
+        "en": "Perceived Trust"
       },
       "source_text": "TRU2: I trust the security mechanisms of EPS.",
       "text": {
-        "vi": "TRU2:  Tôi tin tưởng cơ chế bảo mật của hệ thống thanh toán điện tử mô phỏng này.",
-        "en": "TRU2: I trust the security mechanisms of this simulated electronic payment system."
+        "vi": "Tôi tin tưởng cơ chế bảo mật của hệ thống thanh toán điện tử mô phỏng này.",
+        "en": "I trust the security mechanisms of this simulated electronic payment system."
       },
       "scale_min": 1,
       "scale_max": 7,
@@ -439,13 +473,13 @@
       "item_id": "TRU3",
       "construct": "PERCEIVED_TRUST",
       "construct_label": {
-        "vi": "CẢM NHẬN VỀ NIỀM TIN KHI THANH TOÁN",
-        "en": "PERCEPTION OF TRUST WHEN PAYING"
+        "vi": "Cảm nhận về niềm tin về hệ thống mô phỏng",
+        "en": "Perceived Trust"
       },
       "source_text": "TRU3: I trust EPS services.",
       "text": {
-        "vi": "TRU3: Tôi tin tưởng các dịch vụ của hệ thống thanh toán điện tử mô phỏng này.",
-        "en": "TRU3: I trust this simulated electronic payment system's services."
+        "vi": "Tôi tin tưởng các dịch vụ của hệ thống thanh toán điện tử mô phỏng này.",
+        "en": "I trust this simulated electronic payment system's services."
       },
       "scale_min": 1,
       "scale_max": 7,
@@ -456,13 +490,13 @@
       "item_id": "TRU4",
       "construct": "PERCEIVED_TRUST",
       "construct_label": {
-        "vi": "CẢM NHẬN VỀ NIỀM TIN KHI THANH TOÁN",
-        "en": "PERCEPTION OF TRUST WHEN PAYING"
+        "vi": "Cảm nhận về niềm tin về hệ thống mô phỏng",
+        "en": "Perceived Trust"
       },
       "source_text": "TRU4: I trust the information provided during the EPS process.",
       "text": {
-        "vi": "TRU4:  Tôi tin tưởng các thông tin được cung cấp trong quá trình thanh toán điện tử mô phỏng này.",
-        "en": "TRU4: I trust the information provided during this simulated electronic payment process."
+        "vi": "Tôi tin tưởng các thông tin được cung cấp trong quá trình thanh toán điện tử mô phỏng này.",
+        "en": "I trust the information provided during this simulated electronic payment process."
       },
       "scale_min": 1,
       "scale_max": 7,
@@ -473,13 +507,30 @@
       "item_id": "WIL1",
       "construct": "CONTINUANCE_INTENTION",
       "construct_label": {
-        "vi": "SỰ SẴN LÒNG TIẾP TỤC SỬ DỤNG",
-        "en": "WILLINGNESS TO CONTINUE USING"
+        "vi": "Ý định tiếp tục sử dụng",
+        "en": "Continuance Intention"
       },
       "source_text": "WIL1: I intend to continue using m-payment rather than discontinue its use.",
       "text": {
-        "vi": "WIL1:  Tôi có ý định tiếp tục sử dụng phương thức thanh toán này thay vì ngừng sử dụng",
-        "en": "WIL1: I intend to continue using this payment method rather than discontinue its use."
+        "vi": "Tôi có ý định tiếp tục sử dụng phương thức thanh toán này thay vì ngừng sử dụng.",
+        "en": "I intend to continue using this payment method rather than discontinue its use."
+      },
+      "scale_min": 1,
+      "scale_max": 7,
+      "reverse_scored": false,
+      "required": true
+    },
+    {
+      "item_id": "ATT3",
+      "construct": "CONTINUANCE_INTENTION",
+      "construct_label": {
+        "vi": "Ý định tiếp tục sử dụng",
+        "en": "Continuance Intention"
+      },
+      "source_text": "ATT3: Để đảm bảo chất lượng câu trả lời, vui lòng chọn số 4 cho câu này.",
+      "text": {
+        "vi": "Để đảm bảo chất lượng câu trả lời, vui lòng chọn số 4 cho câu này.",
+        "en": "To ensure response quality, please select number 4 for this item."
       },
       "scale_min": 1,
       "scale_max": 7,
@@ -490,13 +541,13 @@
       "item_id": "WIL2",
       "construct": "CONTINUANCE_INTENTION",
       "construct_label": {
-        "vi": "SỰ SẴN LÒNG TIẾP TỤC SỬ DỤNG",
-        "en": "WILLINGNESS TO CONTINUE USING"
+        "vi": "Ý định tiếp tục sử dụng",
+        "en": "Continuance Intention"
       },
       "source_text": "WIL2: My intentions are to continue using m-payment rather than manual processing or other alternative means.",
       "text": {
-        "vi": "WIL2:  Ý định của tôi là tiếp tục sử dụng phương thức thanh toán này thay vì các phương thức thanh toán khác.",
-        "en": "WIL2: My intention is to continue using this payment method rather than other payment methods."
+        "vi": "Tôi có ý định tiếp tục sử dụng phương thức thanh toán này thay vì các phương thức thanh toán khác.",
+        "en": "My intention is to continue using this payment method rather than other payment methods."
       },
       "scale_min": 1,
       "scale_max": 7,
@@ -507,13 +558,13 @@
       "item_id": "WIL3",
       "construct": "CONTINUANCE_INTENTION",
       "construct_label": {
-        "vi": "SỰ SẴN LÒNG TIẾP TỤC SỬ DỤNG",
-        "en": "WILLINGNESS TO CONTINUE USING"
+        "vi": "Ý định tiếp tục sử dụng",
+        "en": "Continuance Intention"
       },
       "source_text": "WIL3: I plan to continue using m-payment in my job.",
       "text": {
-        "vi": "WIL3:  Tôi dự định tiếp tục sử dụng phương thức thanh toán này cho các giao dịch mua hàng trong tương lai.",
-        "en": "WIL3: I plan to continue using this payment method for future purchases."
+        "vi": "Tôi có kế hoạch tiếp tục sử dụng phương thức thanh toán này trong các tình huống mua hàng tương tự trong tương lai.",
+        "en": "I plan to continue using this payment method in similar purchasing situations in the future."
       },
       "scale_min": 1,
       "scale_max": 7,
