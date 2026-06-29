@@ -410,8 +410,8 @@ const uiText = {
   methodExcel: { vi: "Excel theo phương thức", en: "Excel by method" },
   newSession: { vi: "Phiên mới", en: "New session" },
   participantFallback: { vi: "Người tham gia", en: "Participant" },
-  participantName: { vi: "Tên người tham gia", en: "Participant name" },
-  participantPlaceholder: { vi: "Ví dụ: Minh Anh", en: "Example: Minh Anh" },
+  participantName: { vi: "Họ và tên", en: "Full name" },
+  participantPlaceholder: { vi: "Ví dụ: Nguyễn Minh Anh", en: "Example: Nguyen Minh Anh" },
   payment: { vi: "Thanh toán", en: "Payment" },
   postSurveyEyebrow: { vi: "Phần 1 / 3", en: "Part 1 / 3" },
   postSurveyTitle: {
@@ -2609,6 +2609,7 @@ function AdminHome({
                   id="participant-name"
                   onChange={(event) => setParticipantName(event.target.value)}
                   placeholder={t("participantPlaceholder", locale)}
+                  required
                   value={participantName}
                 />
               </div>
