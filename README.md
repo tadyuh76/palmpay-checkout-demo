@@ -98,6 +98,21 @@ npm run nfc:bridge:mock
 
 Do not encode a public payment-success URL that directly marks the order paid. If you write a URL or token to an NFC tag, make it a card token such as `CARD-POS-042` or `https://local-palmpay/nfc?cardRef=CARD-POS-042`; the local bridge still decides whether there is an active waiting transaction.
 
+## Palm Vein Scanner
+
+The `PALM_VEIN` condition uses the bundled Windows palm vein SDK directly from the Next.js API layer. The app calls `scripts/palm-sdk-worker.py`, which loads `SonixCamera.dll` and `XRCommonVeinAlgAPI.dll`, enrolls three palm samples during setup, saves the feature template under `data/palm-templates`, then verifies that template during payment.
+
+By default the app auto-detects the bundled `CameraSDK/run` folder. If needed, set:
+
+```bash
+PALMPAY_PALM_SDK_DIR="C:\path\to\CameraSDK\run"
+PALMPAY_PALM_TEMPLATE_DIR=data/palm-templates
+PALMPAY_PALM_SCAN_TIMEOUT_MS=45000
+PALMPAY_PALM_PYTHON=python
+```
+
+The palm scanner must appear in Windows as the SDK camera device, typically `USB Camera` with VID/PID `0C45:636B`. Palm templates are deleted through `/api/palm/delete` when the biometric session reaches the debrief step.
+
 ## Stack
 
 - Next.js + React + TypeScript

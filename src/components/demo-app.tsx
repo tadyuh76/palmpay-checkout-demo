@@ -114,6 +114,187 @@ type TransactionRecord = {
   payment_status: "paid" | "technical_failure";
 };
 
+type PalmSdkClientResult = {
+  attempts?: number;
+  capTip?: number | null;
+  deviceName?: string;
+  distance?: number | null;
+  error?: string;
+  event?: "enrolled" | "matched";
+  featureBytes?: number;
+  framesSeen?: number;
+  highBright?: number;
+  imageHeight?: number;
+  imageWidth?: number;
+  message?: string;
+  ok?: boolean;
+  palmBox?: {
+    height: number;
+    status: number;
+    width: number;
+    x: number;
+    y: number;
+  };
+  palmBright?: number;
+  palmStatus?: number;
+  previewHeight?: number;
+  previewImage?: string;
+  previewWidth?: number;
+  sampleCount?: number;
+  sampleGoal?: number;
+  sdkReturn?: number | null;
+  sdkVersion?: string;
+  streamType?: "ready" | "scan" | "done";
+  templateRef?: string;
+  threshold?: number;
+};
+
+function palmSdkClientMessage(
+  result: PalmSdkClientResult | null,
+  locale: Locale,
+  phase: "enroll" | "verify",
+) {
+  if (result?.message && !result.message.includes("[palm-sdk]")) {
+    return result.message;
+  }
+
+  if (result?.error === "sdk_timeout") {
+    return locale === "vi"
+      ? "Máy quét phản hồi quá lâu. Đặt lại lòng bàn tay rồi thử lại."
+      : "The scanner took too long. Place your palm again and retry.";
+  }
+  if (result?.error === "template_not_found") {
+    return locale === "vi"
+      ? "Chưa có mẫu palm vein cho phiên này. Hãy đăng ký lại trước khi thanh toán."
+      : "No palm vein template is available for this session. Enroll again before payment.";
+  }
+  if (result?.sdkReturn === -7) {
+    return locale === "vi"
+      ? "Máy quét chưa thấy lòng bàn tay. Đặt lòng bàn tay vào vùng quét rồi thử lại."
+      : "The scanner cannot see a palm yet. Place your palm in the scan area and retry.";
+  }
+  if (result?.sdkReturn === -38) {
+    return locale === "vi"
+      ? "Mẫu palm vein chưa đủ rõ. Giữ tay ổn định và thử lại."
+      : "The palm vein sample is not clear enough. Hold still and retry.";
+  }
+  if (result?.sdkReturn === -1000) {
+    return locale === "vi"
+      ? "SDK chưa kích hoạt được với thiết bị palm vein."
+      : "The palm vein SDK could not activate with the scanner.";
+  }
+
+  if (phase === "verify") {
+    return locale === "vi" ? "Palm vein chưa khớp. Có thể thử lại." : "Palm vein did not match. You can retry.";
+  }
+  return locale === "vi"
+    ? "Đăng ký palm vein chưa thành công. Đặt lại lòng bàn tay rồi thử lại."
+    : "Palm vein enrollment failed. Place your palm again and retry.";
+}
+
+function palmSdkScanHint(
+  result: PalmSdkClientResult | null | undefined,
+  locale: Locale,
+  phase: "enroll" | "verify",
+) {
+  if (!result) {
+    return phase === "enroll"
+      ? locale === "vi"
+        ? "Đặt lòng bàn tay vào vùng quét."
+        : "Place your palm in the scan area."
+      : locale === "vi"
+        ? "Đặt lòng bàn tay để xác minh."
+        : "Place your palm to verify.";
+  }
+
+  if (result.sampleGoal && typeof result.sampleCount === "number") {
+    if (result.sampleCount >= result.sampleGoal) {
+      return locale === "vi" ? "Đã ghi đủ mẫu palm vein." : "Palm vein samples captured.";
+    }
+    if (result.sdkReturn === 0) {
+      return locale === "vi"
+        ? `Đã ghi mẫu ${result.sampleCount}/${result.sampleGoal}. Giữ tay ổn định.`
+        : `Captured ${result.sampleCount}/${result.sampleGoal}. Keep your palm steady.`;
+    }
+  }
+
+  const tips: Record<number, LocalizedText> = {
+    1: { vi: "Đưa lòng bàn tay vào vùng quét.", en: "Move your palm into the scan area." },
+    2: { vi: "Tay đang quá gần. Nâng tay xa máy hơn một chút.", en: "Your palm is too close. Move it slightly farther away." },
+    3: { vi: "Tay đang quá xa. Đưa tay lại gần máy hơn.", en: "Your palm is too far. Move it closer." },
+    4: { vi: "Ánh sáng chưa phù hợp. Giữ tay che đều vùng quét.", en: "Lighting is not ideal. Cover the scan area evenly." },
+    5: { vi: "Giữ tay ổn định trong giây lát.", en: "Hold your palm steady for a moment." },
+    6: { vi: "Xoay lòng bàn tay thẳng với máy quét.", en: "Align your palm straight with the scanner." },
+    7: { vi: "Dịch lòng bàn tay xuống thấp hơn.", en: "Move your palm down." },
+    8: { vi: "Dịch lòng bàn tay lên cao hơn.", en: "Move your palm up." },
+    9: { vi: "Dịch lòng bàn tay sang trái.", en: "Move your palm left." },
+    10: { vi: "Dịch lòng bàn tay sang phải.", en: "Move your palm right." },
+    20: { vi: "Đã nhận được mẫu. Tiếp tục giữ tay.", en: "Sample captured. Keep holding your palm." },
+    100: { vi: "Hoàn tất quét palm vein.", en: "Palm vein scan complete." },
+  };
+
+  if (typeof result.capTip === "number" && tips[result.capTip]) {
+    return localizeText(tips[result.capTip], locale);
+  }
+  if (result.sdkReturn === -7) {
+    return locale === "vi"
+      ? "Máy quét chưa thấy lòng bàn tay. Đưa tay vào giữa khung."
+      : "The scanner cannot see your palm yet. Move it into the center.";
+  }
+  if (result.sdkReturn === -38) {
+    return locale === "vi"
+      ? "Mẫu chưa đủ rõ. Giữ tay ổn định và thẳng hơn."
+      : "The sample is not clear enough. Hold steady and align your palm.";
+  }
+  if (result.palmStatus) {
+    return locale === "vi"
+      ? "Đã thấy lòng bàn tay. Giữ nguyên vị trí."
+      : "Palm detected. Hold this position.";
+  }
+
+  return phase === "enroll"
+    ? locale === "vi"
+      ? "Đang tìm lòng bàn tay trong vùng quét."
+      : "Looking for your palm in the scan area."
+    : locale === "vi"
+      ? "Đang đối chiếu mẫu palm vein."
+      : "Matching the palm vein sample.";
+}
+
+function runPalmSdkEventScan(
+  action: "enroll" | "verify",
+  input: { participantId?: string; templateRef: string; transactionId?: string },
+  onScan: (event: PalmSdkClientResult) => void,
+) {
+  return new Promise<PalmSdkClientResult>((resolve, reject) => {
+    const params = new URLSearchParams({ templateRef: input.templateRef });
+    if (input.participantId) params.set("participantId", input.participantId);
+    if (input.transactionId) params.set("transactionId", input.transactionId);
+
+    const source = new EventSource(`/api/palm/${action}/stream?${params.toString()}`);
+    let completed = false;
+    const parseEvent = (event: MessageEvent) => JSON.parse(event.data) as PalmSdkClientResult;
+
+    source.addEventListener("ready", (event) => {
+      onScan(parseEvent(event as MessageEvent));
+    });
+    source.addEventListener("scan", (event) => {
+      onScan(parseEvent(event as MessageEvent));
+    });
+    source.addEventListener("done", (event) => {
+      completed = true;
+      source.close();
+      resolve(parseEvent(event as MessageEvent));
+    });
+    source.onerror = () => {
+      if (completed) return;
+      completed = true;
+      source.close();
+      reject(new Error("Palm scanner stream disconnected"));
+    };
+  });
+}
+
 type ExperimentSession = {
   participant_id: string;
   participant_name: string;
@@ -1627,6 +1808,14 @@ export function DemoApp() {
   };
 
   const completePostSurvey = () => {
+    if (session?.assigned_group === "PALM_VEIN" && session.template_ref) {
+      fetch("/api/palm/delete", {
+        body: JSON.stringify({ templateRef: session.template_ref }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      }).catch(() => undefined);
+    }
+
     updateSession((current) => {
       const timestamp = nowIso();
       const biometric =
@@ -1724,6 +1913,7 @@ export function DemoApp() {
               onComplete={completeSetup}
               onFaceEnroll={recordFaceEnrollment}
               onQrPinChange={updateQrPin}
+              participantId={session.participant_id}
               participantName={session.participant_name}
               qrPin={session.qr_pin ?? ""}
               templateRef={session.template_ref}
@@ -1773,6 +1963,8 @@ export function DemoApp() {
               onFailure={markTechnicalFailure}
               onLog={logEvent}
               onRetry={recordRetry}
+              participantId={session.participant_id}
+              templateRef={session.template_ref}
             />
           )}
           {session.current_step === "success" && (
@@ -2614,6 +2806,7 @@ function SetupScreen({
   onComplete,
   onFaceEnroll,
   onQrPinChange,
+  participantId,
   participantName,
   qrPin,
   templateRef,
@@ -2627,12 +2820,25 @@ function SetupScreen({
   onComplete: (metadata?: Record<string, unknown>) => void;
   onFaceEnroll: (descriptor: number[], metadata: Record<string, unknown>) => void;
   onQrPinChange: (pin: string) => void;
+  participantId: string;
   participantName: string;
   qrPin: string;
   templateRef?: string | null;
 }) {
   const copy = groupCopyFor(group, locale);
   const Icon = copy.icon;
+  const [palmEnrollState, setPalmEnrollState] = useState<{
+    message: string;
+    result?: PalmSdkClientResult;
+    scan?: PalmSdkClientResult;
+    status: "idle" | "scanning" | "success" | "error";
+  }>({
+    message:
+      locale === "vi"
+        ? "Sẵn sàng đăng ký bằng máy quét PalmPay"
+        : "Ready to enroll with the PalmPay scanner",
+    status: "idle",
+  });
   const pinReady = /^\d{4}$/.test(qrPin);
   const biometricConsentReady = Boolean(biometricConsentAt);
   const faceReady = Boolean(faceDescriptor?.length);
@@ -2661,13 +2867,69 @@ function SetupScreen({
     if (group === "PALM_VEIN") {
       onComplete({
         biometric_consent_at: biometricConsentAt,
+        device_name: palmEnrollState.result?.deviceName,
+        feature_bytes: palmEnrollState.result?.featureBytes,
+        frames_seen: palmEnrollState.result?.framesSeen,
         palm_samples_registered: true,
-        sample_count: 3,
+        sample_count: palmEnrollState.result?.sampleCount ?? 3,
+        sdk_version: palmEnrollState.result?.sdkVersion,
         template_ref: templateRef,
       });
       return;
     }
     onComplete({ card_ref: "CARD-POS-042", nfc_card_ready: true });
+  };
+
+  const startPalmEnrollment = async () => {
+    if (!templateRef || palmEnrollState.status === "scanning" || biometricConsentReady) {
+      return;
+    }
+    setPalmEnrollState({
+      message:
+        locale === "vi"
+          ? "Đang kết nối máy quét và ghi 3 mẫu lòng bàn tay..."
+          : "Connecting to the scanner and recording 3 palm samples...",
+      scan: undefined,
+      status: "scanning",
+    });
+
+    try {
+      const result = await runPalmSdkEventScan(
+        "enroll",
+        { participantId, templateRef },
+        (scan) => {
+          setPalmEnrollState((current) => ({
+            ...current,
+            message: palmSdkScanHint(scan, locale, "enroll"),
+            result: scan,
+            scan,
+          }));
+        },
+      );
+      if (!result?.ok) {
+        if (result) result.message = palmSdkClientMessage(result, locale, "enroll");
+        throw new Error(
+          result?.message ||
+            result?.error ||
+            (locale === "vi" ? "Đăng ký palm vein chưa thành công" : "Palm vein enrollment failed"),
+        );
+      }
+      setPalmEnrollState({
+        message:
+          locale === "vi"
+            ? "Đã đăng ký mẫu palm vein từ máy quét"
+            : "Palm vein template enrolled from the scanner",
+        result,
+        scan: result,
+        status: "success",
+      });
+      onBiometricConsent();
+    } catch (error) {
+      setPalmEnrollState({
+        message: error instanceof Error ? error.message : String(error),
+        status: "error",
+      });
+    }
   };
 
   const readyLabel = setupReady
@@ -2680,7 +2942,7 @@ function SetupScreen({
         ? locale === "vi" ? "Chuẩn bị thẻ thử nghiệm" : "Prepare test card"
         : group === "FACE_POS"
           ? locale === "vi" ? "Ghi mẫu khuôn mặt" : "Record face sample"
-          : locale === "vi" ? "Xác nhận mẫu mô phỏng" : "Confirm simulated sample";
+          : locale === "vi" ? "Đăng ký bằng máy quét" : "Enroll with scanner";
 
   return (
     <Panel
@@ -2823,32 +3085,93 @@ function SetupScreen({
                     <div>
                       <h3 className="text-lg font-extrabold text-stone-950">
                         {locale === "vi"
-                          ? "Mẫu lòng bàn tay mô phỏng"
-                          : "Simulated palm sample"}
+                          ? "Đăng ký palm vein bằng máy quét"
+                          : "Enroll palm vein with scanner"}
                       </h3>
                       <p className="mt-2 text-sm leading-6 text-stone-600">
                         {locale === "vi"
-                          ? "Mẫu tĩnh mạch lòng bàn tay chỉ được mô phỏng trong phiên demo."
-                          : "The palm vein sample is simulated only for this demo session."}
+                          ? "Đặt lòng bàn tay trên thiết bị PalmPay cho đến khi hệ thống ghi đủ 3 mẫu."
+                          : "Place the palm over the PalmPay scanner until 3 samples are recorded."}
                       </p>
                     </div>
                   </div>
-                  <label className="mt-5 flex min-h-16 items-start gap-3 rounded-lg border border-[#ead8bf] bg-[#fffaf3] p-4 text-sm leading-6 text-stone-700">
-                    <input
-                      checked={biometricConsentReady}
-                      className="mt-1 h-4 w-4 shrink-0 accent-[#6f3f24]"
-                      disabled={biometricConsentReady}
-                      onChange={(event) => {
-                        if (event.target.checked) onBiometricConsent();
-                      }}
-                      type="checkbox"
+                  <div className="mt-5">
+                    <PalmScanPreview
+                      active={palmEnrollState.status === "scanning"}
+                      error={palmEnrollState.status === "error" ? palmEnrollState.message : ""}
+                      locale={locale}
+                      message={
+                        biometricConsentReady && palmEnrollState.status !== "error"
+                          ? locale === "vi"
+                            ? "Mẫu palm vein đã sẵn sàng cho phiên này."
+                            : "Palm vein template is ready for this session."
+                          : palmEnrollState.message
+                      }
+                      phase="enroll"
+                      scan={palmEnrollState.scan ?? palmEnrollState.result}
+                      success={palmEnrollState.status === "success" || biometricConsentReady}
                     />
-                    <span>
-                      {locale === "vi"
-                        ? "Tôi đồng ý tạo mẫu tĩnh mạch lòng bàn tay mô phỏng cho phiên thử nghiệm này."
-                        : "I agree to create a simulated palm vein sample for this test session."}
-                    </span>
-                  </label>
+                    <button
+                      className={cn(primaryButtonClass, "mt-4 h-11 w-full")}
+                      disabled={
+                        biometricConsentReady ||
+                        !templateRef ||
+                        palmEnrollState.status === "scanning"
+                      }
+                      onClick={startPalmEnrollment}
+                      type="button"
+                    >
+                      {palmEnrollState.status === "scanning" ? (
+                        <Loader2 className="animate-spin" size={17} />
+                      ) : (
+                        <ScanLine size={17} aria-hidden />
+                      )}
+                      {locale === "vi" ? "Đăng ký bằng máy quét" : "Enroll with scanner"}
+                    </button>
+                  </div>
+                  <div className="hidden rounded-lg border border-[#ead8bf] bg-[#fffaf3] p-4">
+                    <p
+                      className={cn(
+                        "text-sm font-semibold leading-6",
+                        palmEnrollState.status === "error"
+                          ? "text-red-700"
+                          : palmEnrollState.status === "success" || biometricConsentReady
+                            ? "text-[#365d32]"
+                            : "text-stone-700",
+                      )}
+                    >
+                      {biometricConsentReady && palmEnrollState.status !== "error"
+                        ? locale === "vi"
+                          ? "Mẫu palm vein đã sẵn sàng cho phiên này."
+                          : "Palm vein template is ready for this session."
+                        : palmEnrollState.message}
+                    </p>
+                    {palmEnrollState.result?.sdkVersion && (
+                      <p className="mt-2 text-xs font-semibold text-stone-500">
+                        SDK {palmEnrollState.result.sdkVersion}
+                        {palmEnrollState.result.deviceName
+                          ? ` - ${palmEnrollState.result.deviceName}`
+                          : ""}
+                      </p>
+                    )}
+                    <button
+                      className={cn(primaryButtonClass, "mt-4 h-11 w-full")}
+                      disabled={
+                        biometricConsentReady ||
+                        !templateRef ||
+                        palmEnrollState.status === "scanning"
+                      }
+                      onClick={startPalmEnrollment}
+                      type="button"
+                    >
+                      {palmEnrollState.status === "scanning" ? (
+                        <Loader2 className="animate-spin" size={17} />
+                      ) : (
+                        <ScanLine size={17} aria-hidden />
+                      )}
+                      {locale === "vi" ? "Đăng ký bằng máy quét" : "Enroll with scanner"}
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -4048,6 +4371,8 @@ function PaymentScreen({
   productSummary,
   retries,
   senderName,
+  participantId,
+  templateRef,
   totalCents,
   transactionId,
 }: {
@@ -4065,6 +4390,8 @@ function PaymentScreen({
   productSummary: string;
   retries: number;
   senderName: string;
+  participantId: string;
+  templateRef?: string | null;
   totalCents: number;
   transactionId: string;
 }) {
@@ -4135,15 +4462,21 @@ function PaymentScreen({
           )}
 
           {group === "PALM_VEIN" && (
-            <TapPayment
-              busy={busy}
-              icon={Hand}
-              label={locale === "vi" ? "Vui lòng đặt lòng bàn tay" : "Place your palm"}
+            <PalmVeinPayment
               amount={totalCents}
-              onComplete={() =>
-                finish({ channel: "palm_vein", match_score: 0.96, threshold: 0.86 })
+              busy={busy}
+              locale={locale}
+              onComplete={(metadata) =>
+                finish({
+                  channel: "palm_vein",
+                  ...metadata,
+                })
               }
-              onLog={() => onLog("palm_match_success", "payment", { threshold: 0.86 })}
+              onLog={onLog}
+              onRetry={onRetry}
+              participantId={participantId}
+              templateRef={templateRef}
+              transactionId={transactionId}
             />
           )}
         </div>
@@ -4679,41 +5012,296 @@ function NfcBridgePayment({
   );
 }
 
-function TapPayment({
+function PalmScanPreview({
+  active,
+  amount,
+  error,
+  locale = defaultLocale,
+  message,
+  phase,
+  scan,
+  success,
+}: {
+  active: boolean;
+  amount?: number;
+  error?: string;
+  locale?: Locale;
+  message: string;
+  phase: "enroll" | "verify";
+  scan?: PalmSdkClientResult | null;
+  success?: boolean;
+}) {
+  const hasPalm = Boolean(scan?.palmStatus || scan?.palmBox?.status);
+  const sampleGoal = scan?.sampleGoal ?? (phase === "enroll" ? 3 : undefined);
+  const sampleCount = Math.min(scan?.sampleCount ?? 0, sampleGoal ?? 0);
+  const progress = sampleGoal ? Math.max(0, Math.min(100, (sampleCount / sampleGoal) * 100)) : 0;
+  const box = scan?.palmBox;
+  const imageWidth = scan?.imageWidth || 1;
+  const imageHeight = scan?.imageHeight || 1;
+  const showBox = Boolean(
+    box &&
+      box.status &&
+      box.width > 0 &&
+      box.height > 0 &&
+      scan?.previewImage,
+  );
+
+  return (
+    <div className="space-y-3">
+      <div className="overflow-hidden rounded-lg border border-[#ead8bf] bg-stone-950">
+        <div className="relative aspect-video">
+          {scan?.previewImage ? (
+            <Image
+              alt={locale === "vi" ? "Ảnh quét lòng bàn tay" : "Palm scan preview"}
+              className="object-contain"
+              fill
+              sizes="(min-width: 1024px) 640px, 92vw"
+              src={scan.previewImage}
+              unoptimized
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center bg-[#241910] text-[#f6e8d6]">
+              <div className="text-center">
+                {active ? (
+                  <Loader2 className="mx-auto mb-3 animate-spin" size={42} aria-hidden />
+                ) : (
+                  <Hand className="mx-auto mb-3" size={52} aria-hidden />
+                )}
+                <p className="text-sm font-semibold">
+                  {locale === "vi" ? "Đang chờ hình từ máy quét" : "Waiting for scanner preview"}
+                </p>
+              </div>
+            </div>
+          )}
+
+          <div className="pointer-events-none absolute inset-[12%] rounded-[18px] border-2 border-dashed border-white/70 shadow-[0_0_0_999px_rgba(0,0,0,0.18)]" />
+          <div className="pointer-events-none absolute left-1/2 top-[12%] h-[76%] w-px -translate-x-1/2 bg-white/20" />
+          <div className="pointer-events-none absolute left-[12%] top-1/2 h-px w-[76%] -translate-y-1/2 bg-white/20" />
+
+          {showBox && box && (
+            <div
+              className="pointer-events-none absolute rounded-md border-2 border-emerald-300 bg-emerald-300/10 shadow-[0_0_18px_rgba(110,231,183,0.45)]"
+              style={{
+                height: `${(box.height / imageHeight) * 100}%`,
+                left: `${(box.x / imageWidth) * 100}%`,
+                top: `${(box.y / imageHeight) * 100}%`,
+                width: `${(box.width / imageWidth) * 100}%`,
+              }}
+            />
+          )}
+
+          <div className="absolute left-3 top-3 inline-flex items-center gap-2 rounded-md bg-black/55 px-3 py-1.5 text-xs font-semibold text-white">
+            {success ? (
+              <CheckCircle2 size={15} aria-hidden />
+            ) : active ? (
+              <Loader2 className="animate-spin" size={15} aria-hidden />
+            ) : error ? (
+              <AlertTriangle size={15} aria-hidden />
+            ) : (
+              <Hand size={15} aria-hidden />
+            )}
+            {hasPalm
+              ? locale === "vi" ? "Đã thấy tay" : "Palm detected"
+              : active
+                ? locale === "vi" ? "Đang canh tay" : "Aligning palm"
+                : locale === "vi" ? "Sẵn sàng" : "Ready"}
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-3 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p
+            className={cn(
+              "text-sm font-semibold leading-6",
+              error
+                ? "text-red-700"
+                : success
+                  ? "text-[#365d32]"
+                  : "text-stone-700",
+            )}
+          >
+            {message}
+          </p>
+          {amount ? (
+            <span className="rounded-md bg-white px-2 py-1 text-xs font-bold text-[#6f3f24]">
+              {formatVnd(amount)}
+            </span>
+          ) : null}
+        </div>
+
+        {sampleGoal ? (
+          <div className="mt-3">
+            <div className="h-2 overflow-hidden rounded-full bg-[#ead8bf]">
+              <div
+                className="h-full rounded-full bg-[#6f3f24] transition-all"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <div className="mt-2 flex gap-1.5">
+              {Array.from({ length: sampleGoal }).map((_, index) => (
+                <span
+                  className={cn(
+                    "h-2.5 flex-1 rounded-full",
+                    index < sampleCount ? "bg-[#6f3f24]" : "bg-[#ead8bf]",
+                  )}
+                  key={index}
+                />
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {scan?.sdkVersion ? (
+          <p className="mt-2 text-xs font-semibold text-stone-500">
+            SDK {scan.sdkVersion}
+            {scan.deviceName ? ` - ${scan.deviceName}` : ""}
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function PalmVeinPayment({
   amount,
   busy,
-  icon: Icon,
-  label,
+  locale = defaultLocale,
   onComplete,
   onLog,
+  onRetry,
+  participantId,
+  templateRef,
+  transactionId,
 }: {
   amount: number;
   busy: boolean;
-  icon: typeof Nfc;
-  label: string;
-  onComplete: () => void;
-  onLog: () => void;
+  locale?: Locale;
+  onComplete: (metadata: Record<string, unknown>) => void;
+  onLog: (eventName: string, screenName: StepKey, metadata?: Record<string, unknown>) => void;
+  onRetry: (errorCode: string) => void;
+  participantId: string;
+  templateRef?: string | null;
+  transactionId: string;
 }) {
+  const [localBusy, setLocalBusy] = useState(false);
+  const [status, setStatus] = useState(
+    locale === "vi"
+      ? "Đặt lòng bàn tay lên máy quét PalmPay để xác minh"
+      : "Place your palm on the PalmPay scanner to verify",
+  );
+  const [error, setError] = useState("");
+  const [scan, setScan] = useState<PalmSdkClientResult | null>(null);
+  const disabled = busy || localBusy || !templateRef;
+
+  const verifyPalm = async () => {
+    if (disabled) return;
+    setLocalBusy(true);
+    setError("");
+    setScan(null);
+    setStatus(
+      locale === "vi"
+        ? "Đang kết nối máy quét và đối chiếu palm vein..."
+        : "Connecting to scanner and matching palm vein...",
+    );
+    onLog("palm_scan_started", "payment", { template_ref: templateRef });
+
+    try {
+      const result = await runPalmSdkEventScan(
+        "verify",
+        { participantId, templateRef, transactionId },
+        (scanEvent) => {
+          setScan(scanEvent);
+          setStatus(palmSdkScanHint(scanEvent, locale, "verify"));
+        },
+      );
+      if (!result?.ok) {
+        if (result) result.message = palmSdkClientMessage(result, locale, "verify");
+        const code =
+          result?.error === "template_not_found"
+            ? "palm_no_match"
+            : result?.error === "sdk_timeout"
+              ? "scanner_disconnected"
+              : "palm_no_match";
+        onRetry(code);
+        throw new Error(
+          result?.message ||
+            result?.error ||
+            (locale === "vi" ? "Palm vein không khớp" : "Palm vein did not match"),
+        );
+      }
+
+      const metadata = {
+        device_name: result.deviceName,
+        distance: result.distance,
+        frames_seen: result.framesSeen,
+        sdk_version: result.sdkVersion,
+        template_ref: result.templateRef,
+        threshold: result.threshold,
+      };
+      setScan(result);
+      setStatus(locale === "vi" ? "Đã xác minh palm vein" : "Palm vein verified");
+      onLog("palm_match_success", "payment", metadata);
+      onComplete(metadata);
+    } catch (scanError) {
+      setError(scanError instanceof Error ? scanError.message : String(scanError));
+      setStatus(
+        locale === "vi"
+          ? "Chưa xác minh được. Có thể thử lại."
+          : "Not verified yet. You can try again.",
+      );
+    } finally {
+      setLocalBusy(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
-      <div className="flex min-h-64 items-center justify-center rounded-lg border border-[#ead8bf] bg-[#fffaf3]">
+      <PalmScanPreview
+        active={localBusy}
+        amount={amount}
+        error={error}
+        locale={locale}
+        message={
+          templateRef
+            ? status
+            : locale === "vi"
+              ? "Chưa có mẫu palm vein cho phiên này"
+              : "No palm vein template is available for this session"
+        }
+        phase="verify"
+        scan={scan}
+        success={Boolean(scan?.ok)}
+      />
+      <div className="hidden min-h-64 items-center justify-center rounded-lg border border-[#ead8bf] bg-[#fffaf3] px-5 py-7">
         <div className="text-center">
-          <Icon className="mx-auto mb-4 text-[#7a4a2a]" size={60} aria-hidden />
-          <p className="text-lg font-semibold">{label}</p>
+          <Hand className="mx-auto mb-4 text-[#7a4a2a]" size={60} aria-hidden />
+          <p className="text-lg font-semibold">
+            {locale === "vi" ? "Vui lòng đặt lòng bàn tay" : "Place your palm"}
+          </p>
           <p className="mt-1 text-sm text-stone-500">{formatVnd(amount)}</p>
+          <p className="mx-auto mt-4 max-w-[360px] rounded-lg border border-[#ead8bf] bg-white px-3 py-2 text-sm font-semibold text-[#6f3f24]">
+            {templateRef
+              ? status
+              : locale === "vi"
+                ? "Chưa có mẫu palm vein cho phiên này"
+                : "No palm vein template is available for this session"}
+          </p>
+          {error && (
+            <p className="mx-auto mt-3 max-w-[360px] rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {error}
+            </p>
+          )}
         </div>
       </div>
       <button
         className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-[#d6c0aa]"
-        disabled={busy}
-        onClick={() => {
-          onLog();
-          onComplete();
-        }}
+        disabled={disabled}
+        onClick={verifyPalm}
         type="button"
       >
-        {busy ? <Loader2 className="animate-spin" size={17} /> : <ScanLine size={17} aria-hidden />}
-        Mô phỏng xác nhận
+        {localBusy ? <Loader2 className="animate-spin" size={17} /> : <ScanLine size={17} aria-hidden />}
+        {locale === "vi" ? "Quét và xác minh" : "Scan and verify"}
       </button>
     </div>
   );
