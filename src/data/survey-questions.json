@@ -150,9 +150,9 @@
         "vi": "Thông tin người tham gia",
         "en": "Respondent profile"
       },
-      "source_text": "Trung bình một ngày, bạn thường phải thanh toán bao nhiêu lần lần?",
+      "source_text": "Trung bình một ngày, bạn thường phải thanh toán bao nhiêu lần?",
       "text": {
-        "vi": "Trung bình một ngày, bạn thường phải thanh toán bao nhiêu lần lần?",
+        "vi": "Trung bình một ngày, bạn thường phải thanh toán bao nhiêu lần?",
         "en": "On average, how many times do you usually make payments per day?"
       },
       "type": "select",
