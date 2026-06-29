@@ -17,10 +17,13 @@ import {
   FileSpreadsheet,
   GraduationCap,
   Hand,
+  IdCard,
   Loader2,
   LockKeyhole,
+  MapPin,
   Minus,
   Nfc,
+  Phone,
   PlayCircle,
   Plus,
   QrCode,
@@ -326,6 +329,8 @@ type ExperimentSession = {
   current_step: StepKey;
   face_descriptor?: number[] | null;
   face_account_name?: string;
+  nfc_card_ref?: string | null;
+  personal_info?: ParticipantPersonalInfo;
   qr_account_name?: string;
   qr_pin?: string;
   biometric_consent_at?: string | null;
@@ -361,6 +366,12 @@ type ExperimentStateSnapshot = {
 const protocolVersion = "PALMPAY-POS-2026.06";
 const startingBalance = 100000;
 const faceMatchThreshold = 0.55;
+const defaultNfcCardRef = "CARD-POS-042";
+const defaultPersonalInfo: ParticipantPersonalInfo = {
+  address: "279 Nguyễn Tri Phương, Phường Diên Hồng, Thành phố Hồ Chí Minh",
+  cccd: "079204000001",
+  phone: "0901234567",
+};
 
 const storageKeys = {
   currentSession: "palmpay.pos.currentSession",
@@ -631,6 +642,18 @@ type PublicQrTransfer = {
   senderName: string;
   status: "pending" | "paid";
   transactionId: string;
+};
+
+type NfcTapPayload = {
+  cardRef: string;
+  createdAt: string;
+  transactionId: string;
+};
+
+type ParticipantPersonalInfo = {
+  address: string;
+  cccd: string;
+  phone: string;
 };
 
 function cn(...classes: Array<string | false | null | undefined>) {
@@ -964,6 +987,14 @@ function makeParticipantId() {
   return `P${String(current).padStart(4, "0")}`;
 }
 
+function normalizePersonalInfo(value?: Partial<ParticipantPersonalInfo> | null) {
+  return {
+    address: value?.address?.trim() || defaultPersonalInfo.address,
+    cccd: value?.cccd?.trim() || defaultPersonalInfo.cccd,
+    phone: value?.phone?.trim() || defaultPersonalInfo.phone,
+  };
+}
+
 function makeSession(
   participantName: string,
   selectedGroup: StudyGroup | null = null,
@@ -985,6 +1016,8 @@ function makeSession(
     biometric_consent_at: null,
     face_descriptor: null,
     face_account_name: trimmedName,
+    nfc_card_ref: null,
+    personal_info: { ...defaultPersonalInfo },
     qr_account_name: trimmedName,
     qr_pin: "",
     template_ref:
@@ -1013,7 +1046,9 @@ function normalizeSession(session: ExperimentSession | null) {
       ...session,
       face_descriptor: session.face_descriptor ?? null,
       face_account_name: session.face_account_name || participantName,
+      nfc_card_ref: session.nfc_card_ref ?? null,
       participant_name: participantName,
+      personal_info: normalizePersonalInfo(session.personal_info),
       qr_account_name: session.qr_account_name || participantName,
       current_step: "debrief" as StepKey,
     };
@@ -1028,7 +1063,9 @@ function normalizeSession(session: ExperimentSession | null) {
           : session.current_step,
     face_descriptor: session.face_descriptor ?? null,
     face_account_name: session.face_account_name || participantName,
+    nfc_card_ref: session.nfc_card_ref ?? null,
     participant_name: participantName,
+    personal_info: normalizePersonalInfo(session.personal_info),
     qr_account_name: session.qr_account_name || participantName,
     setup_started_at: session.setup_started_at ?? null,
     setup_completed_at: session.setup_completed_at ?? null,
@@ -1123,8 +1160,12 @@ function baseMethodWorkbookColumns(locale = defaultLocale): ExportColumn[] {
     { key: "timestamp", label: locale === "vi" ? "Dấu thời gian" : "Timestamp" },
     { key: "participant_id", label: locale === "vi" ? "Mã người tham gia" : "Participant ID" },
     { key: "participant_name", label: locale === "vi" ? "Tên người tham gia" : "Participant name" },
+    { key: "cccd", label: locale === "vi" ? "CCCD" : "Citizen ID" },
+    { key: "phone", label: locale === "vi" ? "SĐT" : "Phone" },
+    { key: "address", label: locale === "vi" ? "Địa chỉ" : "Address" },
     { key: "qr_account_name", label: locale === "vi" ? "Tên tài khoản QR" : "QR account name" },
     { key: "face_account_name", label: locale === "vi" ? "Tên đăng ký Face ID" : "Face ID registration name" },
+    { key: "nfc_card_ref", label: locale === "vi" ? "Mã thẻ NFC" : "NFC card ref" },
     { key: "method_code", label: locale === "vi" ? "Mã phương thức" : "Method code" },
     { key: "method", label: locale === "vi" ? "Phương thức" : "Method" },
     { key: "method_label", label: locale === "vi" ? "Tên phương thức" : "Method label" },
@@ -1217,6 +1258,7 @@ function buildSurveyCodebookRows(): Array<Record<string, unknown>> {
 
 function buildMethodWorkbookRow(session: ExperimentSession, locale = defaultLocale) {
   const group = session.assigned_group;
+  const personalInfo = normalizePersonalInfo(session.personal_info);
   const row: Record<string, unknown> = {
     timestamp:
       session.post_survey_completed_at ??
@@ -1224,6 +1266,10 @@ function buildMethodWorkbookRow(session: ExperimentSession, locale = defaultLoca
       session.created_at,
     participant_id: session.participant_id,
     participant_name: session.participant_name,
+    address: personalInfo.address,
+    cccd: personalInfo.cccd,
+    nfc_card_ref: session.nfc_card_ref ?? "",
+    phone: personalInfo.phone,
     qr_account_name: session.qr_account_name ?? "",
     face_account_name: session.face_account_name ?? "",
     method_code: methodCode(group),
@@ -1640,6 +1686,13 @@ export function DemoApp() {
     }));
   };
 
+  const updatePersonalInfo = (personalInfo: ParticipantPersonalInfo) => {
+    updateSession((current) => ({
+      ...current,
+      personal_info: personalInfo,
+    }));
+  };
+
   const recordBiometricConsent = () => {
     updateSession((current) => {
       if (current.biometric_consent_at) return current;
@@ -1655,6 +1708,29 @@ export function DemoApp() {
             participant_id: current.participant_id,
             screen_name: "setup",
             metadata: { assigned_group: current.assigned_group },
+          },
+        ],
+      };
+    });
+  };
+
+  const recordNfcEnrollment = (tap: NfcTapPayload) => {
+    updateSession((current) => {
+      const timestamp = nowIso();
+      return {
+        ...current,
+        nfc_card_ref: tap.cardRef,
+        events: [
+          ...current.events,
+          {
+            event_name: "nfc_card_enrollment_completed",
+            timestamp,
+            participant_id: current.participant_id,
+            screen_name: "setup",
+            metadata: {
+              card_ref: tap.cardRef,
+              setup_transaction_id: tap.transactionId,
+            },
           },
         ],
       };
@@ -1927,12 +2003,16 @@ export function DemoApp() {
               faceDescriptor={session.face_descriptor}
               group={session.assigned_group}
               locale={locale}
+              nfcCardRef={session.nfc_card_ref}
               onBiometricConsent={recordBiometricConsent}
               onComplete={completeSetup}
               onFaceEnroll={recordFaceEnrollment}
+              onNfcEnroll={recordNfcEnrollment}
+              onPersonalInfoChange={updatePersonalInfo}
               onQrPinChange={updateQrPin}
               participantId={session.participant_id}
               participantName={session.participant_name}
+              personalInfo={session.personal_info ?? defaultPersonalInfo}
               qrPin={session.qr_pin ?? ""}
               templateRef={session.template_ref}
             />
@@ -1982,6 +2062,7 @@ export function DemoApp() {
               onLog={logEvent}
               onRetry={recordRetry}
               participantId={session.participant_id}
+              nfcCardRef={session.nfc_card_ref}
               templateRef={session.template_ref}
             />
           )}
@@ -2820,12 +2901,16 @@ function SetupScreen({
   faceDescriptor,
   group,
   locale = defaultLocale,
+  nfcCardRef,
   onBiometricConsent,
   onComplete,
   onFaceEnroll,
+  onNfcEnroll,
+  onPersonalInfoChange,
   onQrPinChange,
   participantId,
   participantName,
+  personalInfo,
   qrPin,
   templateRef,
 }: {
@@ -2834,12 +2919,16 @@ function SetupScreen({
   faceDescriptor?: number[] | null;
   group: StudyGroup;
   locale?: Locale;
+  nfcCardRef?: string | null;
   onBiometricConsent: () => void;
   onComplete: (metadata?: Record<string, unknown>) => void;
   onFaceEnroll: (descriptor: number[], metadata: Record<string, unknown>) => void;
+  onNfcEnroll: (tap: NfcTapPayload) => void;
+  onPersonalInfoChange: (personalInfo: ParticipantPersonalInfo) => void;
   onQrPinChange: (pin: string) => void;
   participantId: string;
   participantName: string;
+  personalInfo: ParticipantPersonalInfo;
   qrPin: string;
   templateRef?: string | null;
 }) {
@@ -2858,26 +2947,33 @@ function SetupScreen({
     status: "idle",
   });
   const pinReady = /^\d{4}$/.test(qrPin);
+  const personalInfoReady = Boolean(
+    personalInfo.cccd.trim() &&
+      personalInfo.address.trim() &&
+      personalInfo.phone.trim(),
+  );
   const biometricConsentReady = Boolean(biometricConsentAt);
   const faceReady = Boolean(faceDescriptor?.length);
-  const setupReady =
+  const methodReady =
     group === "QR_PIN"
       ? pinReady
       : group === "FACE_POS"
         ? faceReady
         : group === "PALM_VEIN"
           ? biometricConsentReady
-          : true;
+          : Boolean(nfcCardRef);
+  const setupReady = personalInfoReady && methodReady;
 
   const finishSetup = () => {
     if (!setupReady) return;
     if (group === "QR_PIN") {
-      onComplete({ qr_pin_registered: true });
+      onComplete({ personal_info: personalInfo, qr_pin_registered: true });
       return;
     }
     if (group === "FACE_POS") {
       onComplete({
         face_registered: true,
+        personal_info: personalInfo,
         template_ref: templateRef,
       });
       return;
@@ -2889,13 +2985,14 @@ function SetupScreen({
         feature_bytes: palmEnrollState.result?.featureBytes,
         frames_seen: palmEnrollState.result?.framesSeen,
         palm_samples_registered: true,
+        personal_info: personalInfo,
         sample_count: palmEnrollState.result?.sampleCount ?? 3,
         sdk_version: palmEnrollState.result?.sdkVersion,
         template_ref: templateRef,
       });
       return;
     }
-    onComplete({ card_ref: "CARD-POS-042", nfc_card_ready: true });
+    onComplete({ card_ref: nfcCardRef, nfc_card_ready: true, personal_info: personalInfo });
   };
 
   const startPalmEnrollment = async () => {
@@ -2969,7 +3066,15 @@ function SetupScreen({
       title={copy.label}
     >
       <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_320px]">
-        <section className="overflow-hidden rounded-lg border border-[#ead8bf] bg-[#fffaf7]">
+        <div className="space-y-5">
+          <PersonalInfoSection
+            locale={locale}
+            onChange={onPersonalInfoChange}
+            personalInfo={personalInfo}
+            ready={personalInfoReady}
+          />
+
+          <section className="overflow-hidden rounded-lg border border-[#ead8bf] bg-[#fffaf7]">
           <div className="grid lg:grid-cols-[240px_minmax(0,1fr)]">
             <div className="relative flex min-h-[260px] flex-col items-center justify-center overflow-hidden border-b border-[#ead8bf] bg-[#fff3df] p-6 text-center lg:border-b-0 lg:border-r">
               <div className="pointer-events-none absolute -right-10 -top-12 h-36 w-36 opacity-30" aria-hidden>
@@ -3057,23 +3162,12 @@ function SetupScreen({
               )}
 
               {group === "NFC_CARD" && (
-                <div className="rounded-lg border border-[#dbe6d2] bg-white p-5">
-                  <div className="flex items-center gap-5">
-                    <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-[#f1f6ed] text-[#365d32]">
-                      <NfcSignalMark size={42} />
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-extrabold text-stone-950">
-                        {locale === "vi" ? "Thẻ NFC thử nghiệm đã sẵn sàng" : "Test NFC card is ready"}
-                      </h3>
-                      <p className="mt-2 max-w-[560px] text-sm leading-6 text-stone-600">
-                        {locale === "vi"
-                          ? "Chuẩn bị thẻ test cho người tham gia. Không cần nhập thông tin định danh bổ sung."
-                          : "Prepare the test card for the participant. No additional identity information is required."}
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                <NfcEnrollment
+                  enrolledCardRef={nfcCardRef}
+                  locale={locale}
+                  onEnroll={onNfcEnroll}
+                  participantId={participantId}
+                />
               )}
 
               {group === "FACE_POS" && (
@@ -3194,7 +3288,8 @@ function SetupScreen({
               )}
             </div>
           </div>
-        </section>
+          </section>
+        </div>
 
         <aside className="hidden self-start rounded-lg border border-[#dbe6d2] bg-[#f9fbf7] p-5 text-[#365d32] 2xl:block">
           <div className="mb-5 flex items-center gap-3">
@@ -3245,6 +3340,293 @@ function SetupScreen({
         </button>
       </ActionRow>
     </Panel>
+  );
+}
+
+function PersonalInfoSection({
+  locale = defaultLocale,
+  onChange,
+  personalInfo,
+  ready,
+}: {
+  locale?: Locale;
+  onChange: (personalInfo: ParticipantPersonalInfo) => void;
+  personalInfo: ParticipantPersonalInfo;
+  ready: boolean;
+}) {
+  const fields: Array<{
+    autoComplete: string;
+    icon: typeof IdCard;
+    inputMode?: "numeric" | "tel" | "text";
+    key: keyof ParticipantPersonalInfo;
+    label: string;
+  }> = [
+    {
+      autoComplete: "off",
+      icon: IdCard,
+      inputMode: "numeric",
+      key: "cccd",
+      label: locale === "vi" ? "CCCD" : "Citizen ID",
+    },
+    {
+      autoComplete: "tel",
+      icon: Phone,
+      inputMode: "tel",
+      key: "phone",
+      label: locale === "vi" ? "SĐT" : "Phone",
+    },
+    {
+      autoComplete: "street-address",
+      icon: MapPin,
+      inputMode: "text",
+      key: "address",
+      label: locale === "vi" ? "Địa chỉ" : "Address",
+    },
+  ];
+
+  return (
+    <section className="rounded-lg border border-[#ead8bf] bg-white p-5 sm:p-6">
+      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-[#9a4f1f]">
+            {locale === "vi" ? "Thông tin cá nhân" : "Personal information"}
+          </p>
+          <h2 className="mt-1 text-xl font-extrabold text-stone-950">
+            {locale === "vi" ? "Xác nhận thông tin đăng ký" : "Confirm registration details"}
+          </h2>
+        </div>
+        <span
+          className={cn(
+            "inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-sm font-semibold",
+            ready
+              ? "border-[#dbe6d2] bg-[#f1f6ed] text-[#365d32]"
+              : "border-[#ead8bf] bg-[#fffaf3] text-[#7b4325]",
+          )}
+        >
+          {ready ? <CheckCircle2 size={16} aria-hidden /> : <TimerReset size={16} aria-hidden />}
+          {ready
+            ? locale === "vi" ? "Đã đủ thông tin" : "Details ready"
+            : locale === "vi" ? "Cần đủ thông tin" : "Details required"}
+        </span>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
+        {fields.map(({ autoComplete, icon: FieldIcon, inputMode, key, label }) => (
+          <label
+            className={cn("block", key === "address" && "lg:col-span-2")}
+            htmlFor={`personal-info-${key}`}
+            key={key}
+          >
+            <span className="mb-2 block text-sm font-semibold text-stone-700">
+              {label}
+            </span>
+            <span className="relative block">
+              <FieldIcon
+                className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#a67b60]"
+                size={18}
+                aria-hidden
+              />
+              <input
+                autoComplete={autoComplete}
+                className="h-12 w-full rounded-lg border border-[#ead8bf] bg-[#fffaf7] pl-11 pr-4 text-sm font-medium text-stone-900 outline-none transition placeholder:text-stone-400 focus:border-[#9a6237] focus:ring-2 focus:ring-[#ead3b7]"
+                id={`personal-info-${key}`}
+                inputMode={inputMode}
+                onChange={(event) =>
+                  onChange({
+                    ...personalInfo,
+                    [key]: event.target.value,
+                  })
+                }
+                value={personalInfo[key]}
+              />
+            </span>
+          </label>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function NfcEnrollment({
+  enrolledCardRef,
+  locale = defaultLocale,
+  onEnroll,
+  participantId,
+}: {
+  enrolledCardRef?: string | null;
+  locale?: Locale;
+  onEnroll: (tap: NfcTapPayload) => void;
+  participantId: string;
+}) {
+  const handledRef = useRef(false);
+  const lastTapKeyRef = useRef("");
+  const transactionId = useMemo(
+    () => `SETUP-${participantId}`,
+    [participantId],
+  );
+  const [status, setStatus] = useState(
+    enrolledCardRef
+      ? locale === "vi" ? "Thẻ NFC đã được liên kết" : "NFC card has been linked"
+      : locale === "vi"
+        ? "Đang chuẩn bị đầu đọc NFC cho bước đăng ký"
+        : "Preparing the NFC reader for enrollment",
+  );
+  const displayStatus = enrolledCardRef
+    ? locale === "vi"
+      ? `Đã liên kết thẻ ${enrolledCardRef}`
+      : `Linked card ${enrolledCardRef}`
+    : status;
+
+  useEffect(() => {
+    if (enrolledCardRef) {
+      handledRef.current = true;
+      return;
+    }
+
+    handledRef.current = false;
+    let active = true;
+    fetch("/api/nfc-session", {
+      body: JSON.stringify({
+        acceptedCardRef: defaultNfcCardRef,
+        amount: 0,
+        transactionId,
+      }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    })
+      .then((response) => (response.ok ? response.json() : Promise.reject()))
+      .then(() => {
+        if (active) {
+          setStatus(
+            locale === "vi"
+              ? "Chạm thẻ NFC vào đầu đọc để liên kết với phiên này"
+              : "Tap the NFC card on the reader to link it to this session",
+          );
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setStatus(
+            locale === "vi"
+              ? "Không đăng ký được phiên NFC cho bước liên kết"
+              : "Could not register the NFC enrollment session",
+          );
+        }
+      });
+
+    return () => {
+      active = false;
+      fetch("/api/nfc-session", {
+        body: JSON.stringify({ transactionId }),
+        headers: { "Content-Type": "application/json" },
+        method: "DELETE",
+      }).catch(() => undefined);
+    };
+  }, [enrolledCardRef, locale, transactionId]);
+
+  useEffect(() => {
+    if (enrolledCardRef) return;
+    const interval = window.setInterval(() => {
+      fetch(`/api/nfc-taps?transactionId=${encodeURIComponent(transactionId)}`)
+        .then((response) => (response.ok ? response.json() : Promise.reject()))
+        .then((data: { tap: NfcTapPayload | null }) => {
+          if (!data.tap || handledRef.current) return;
+          const tapKey = `${data.tap.cardRef}:${data.tap.createdAt}`;
+          if (tapKey === lastTapKeyRef.current) return;
+          lastTapKeyRef.current = tapKey;
+          handledRef.current = true;
+          setStatus(
+            locale === "vi"
+              ? `Đã nhận thẻ ${data.tap.cardRef}`
+              : `Received card ${data.tap.cardRef}`,
+          );
+          onEnroll(data.tap);
+          fetch("/api/nfc-session", {
+            body: JSON.stringify({ transactionId }),
+            headers: { "Content-Type": "application/json" },
+            method: "DELETE",
+          }).catch(() => undefined);
+        })
+        .catch(() =>
+          setStatus(
+            locale === "vi"
+              ? "Không đọc được trạng thái đầu đọc NFC"
+              : "Could not read NFC reader status",
+          ),
+        );
+    }, 800);
+
+    return () => window.clearInterval(interval);
+  }, [enrolledCardRef, locale, onEnroll, transactionId]);
+
+  const simulateTap = async () => {
+    const response = await fetch("/api/nfc-taps", {
+      body: JSON.stringify({ cardRef: defaultNfcCardRef, transactionId }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    });
+    if (!response.ok) {
+      setStatus(
+        locale === "vi"
+          ? "Nút mô phỏng bị chặn bởi token production của bridge"
+          : "Simulation button is blocked by the bridge production token",
+      );
+    }
+  };
+
+  return (
+    <div className="rounded-lg border border-[#dbe6d2] bg-white p-5">
+      <div className="grid gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">
+        <div className="flex min-h-[220px] items-center justify-center rounded-lg border border-[#dbe6d2] bg-[#f4f8f1]">
+          <div className="relative h-[170px] w-[170px] text-[#b9caa8]">
+            <span className="absolute left-1/2 top-1/2 h-full w-full -translate-x-1/2 -translate-y-1/2 rounded-full border border-current opacity-45" />
+            <span className="absolute left-1/2 top-1/2 h-[72%] w-[72%] -translate-x-1/2 -translate-y-1/2 rounded-full border border-current opacity-65" />
+            <span className="absolute left-1/2 top-1/2 h-[46%] w-[46%] -translate-x-1/2 -translate-y-1/2 rounded-full border border-current opacity-85" />
+            <div className="absolute left-1/2 top-1/2 flex h-20 w-20 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-[#dbe6d2] bg-white text-[#52693d]">
+              {enrolledCardRef ? (
+                <CheckCircle2 size={42} aria-hidden />
+              ) : (
+                <NfcSignalMark size={52} />
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="flex flex-col justify-center">
+          <p className="text-sm font-semibold text-[#52693d]">
+            {locale === "vi" ? "Mẫu đăng ký NFC" : "NFC enrollment sample"}
+          </p>
+          <h3 className="mt-1 text-lg font-extrabold text-stone-950">
+            {locale === "vi"
+              ? "Chạm thẻ vào thiết bị để đăng ký"
+              : "Tap the card on the device to enroll"}
+          </h3>
+          <p className="mt-2 max-w-[560px] text-sm leading-6 text-stone-600">
+            {locale === "vi"
+              ? "Người tham gia chạm thẻ NFC vào đầu đọc một lần trước khi mua hàng. Mã thẻ này sẽ được dùng lại ở bước thanh toán."
+              : "The participant taps the NFC card on the reader once before shopping. This card ref will be reused during payment."}
+          </p>
+          <p
+            className={cn(
+              "mt-4 rounded-lg border px-3 py-2 text-sm font-semibold",
+              enrolledCardRef
+                ? "border-[#dbe6d2] bg-[#f1f6ed] text-[#365d32]"
+                : "border-[#ead8bf] bg-[#fffaf3] text-[#6f3f24]",
+            )}
+          >
+            {displayStatus}
+          </p>
+          <button
+            className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-[#dbe6d2] bg-[#f1f6ed] px-3 text-sm font-semibold text-stone-800 transition hover:border-[#b9caa8] disabled:bg-[#e4dbc9] disabled:text-stone-500 sm:w-fit"
+            disabled={Boolean(enrolledCardRef)}
+            onClick={simulateTap}
+            type="button"
+          >
+            <NfcSignalMark size={22} />
+            {locale === "vi" ? "Mô phỏng chạm thẻ để đăng ký" : "Simulate enrollment tap"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -4385,6 +4767,7 @@ function PaymentScreen({
   onFailure,
   onLog,
   onRetry,
+  nfcCardRef,
   pin,
   productSummary,
   retries,
@@ -4404,6 +4787,7 @@ function PaymentScreen({
   onFailure: () => void;
   onLog: (eventName: string, screenName: StepKey, metadata?: Record<string, unknown>) => void;
   onRetry: (errorCode: string) => void;
+  nfcCardRef?: string | null;
   pin: string;
   productSummary: string;
   retries: number;
@@ -4452,6 +4836,7 @@ function PaymentScreen({
           {group === "NFC_CARD" && (
             <NfcBridgePayment
               amount={totalCents}
+              acceptedCardRef={nfcCardRef ?? defaultNfcCardRef}
               busy={busy}
               locale={locale}
               onComplete={(tap) => finish({ channel: "nfc_card", card_ref: tap.cardRef })}
@@ -4871,6 +5256,7 @@ function QrPosPayment({
 }
 
 function NfcBridgePayment({
+  acceptedCardRef,
   amount,
   busy,
   locale = defaultLocale,
@@ -4879,10 +5265,11 @@ function NfcBridgePayment({
   onRetry,
   transactionId,
 }: {
+  acceptedCardRef: string;
   amount: number;
   busy: boolean;
   locale?: Locale;
-  onComplete: (tap: { cardRef: string; transactionId: string }) => void;
+  onComplete: (tap: NfcTapPayload) => void;
   onLog: (eventName: string, screenName: StepKey, metadata?: Record<string, unknown>) => void;
   onRetry: (errorCode: string) => void;
   transactionId: string;
@@ -4901,7 +5288,7 @@ function NfcBridgePayment({
 
     fetch("/api/nfc-session", {
       body: JSON.stringify({
-        acceptedCardRef: "CARD-POS-042",
+        acceptedCardRef,
         amount,
         transactionId,
       }),
@@ -4936,18 +5323,18 @@ function NfcBridgePayment({
         method: "DELETE",
       }).catch(() => undefined);
     };
-  }, [amount, locale, transactionId]);
+  }, [acceptedCardRef, amount, locale, transactionId]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
       fetch(`/api/nfc-taps?transactionId=${encodeURIComponent(transactionId)}`)
         .then((response) => (response.ok ? response.json() : Promise.reject()))
-        .then((data: { tap: { cardRef: string; createdAt: string; transactionId: string } | null }) => {
+        .then((data: { tap: NfcTapPayload | null }) => {
           if (!data.tap || handledRef.current) return;
           const tapKey = `${data.tap.cardRef}:${data.tap.createdAt}`;
           if (tapKey === lastTapKeyRef.current) return;
           lastTapKeyRef.current = tapKey;
-          if (data.tap.cardRef !== "CARD-POS-042") {
+          if (data.tap.cardRef !== acceptedCardRef) {
             setStatus(
               locale === "vi"
                 ? `Thẻ không khớp: ${data.tap.cardRef}`
@@ -4971,11 +5358,11 @@ function NfcBridgePayment({
     }, 800);
 
     return () => window.clearInterval(interval);
-  }, [locale, onComplete, onLog, onRetry, transactionId]);
+  }, [acceptedCardRef, locale, onComplete, onLog, onRetry, transactionId]);
 
   const simulateTap = async () => {
     const response = await fetch("/api/nfc-taps", {
-      body: JSON.stringify({ cardRef: "CARD-POS-042", transactionId }),
+      body: JSON.stringify({ cardRef: acceptedCardRef, transactionId }),
       headers: { "Content-Type": "application/json" },
       method: "POST",
     });

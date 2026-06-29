@@ -164,36 +164,6 @@
       "required": true
     },
     {
-      "item_id": "PAYMENT_METHOD",
-      "construct": "RESPONDENT_PROFILE",
-      "construct_label": {
-        "vi": "Thông tin người tham gia",
-        "en": "Respondent profile"
-      },
-      "source_text": "Bạn vừa thực hiện phương pháp thanh toán nào ?",
-      "text": {
-        "vi": "Bạn vừa thực hiện phương pháp thanh toán nào ?",
-        "en": "Which payment method did you just use?"
-      },
-      "type": "select",
-      "options": {
-        "vi": [
-          "Xác thực qua mã QR kết hợp PIN (QR + PIN)",
-          "Xác thực qua giao tiếp trường gần (NFC)",
-          "Xác thực nhận diện khuôn mặt (Facial Recognition)",
-          "Xác thực nhận diện tĩnh mạch lòng bàn tay"
-        ],
-        "en": [
-          "QR code with PIN authentication (QR + PIN)",
-          "Near-field communication authentication (NFC)",
-          "Facial recognition authentication",
-          "Palm vein recognition authentication"
-        ]
-      },
-      "reverse_scored": false,
-      "required": true
-    },
-    {
       "item_id": "PS1",
       "construct": "PERCEIVED_SECURITY",
       "construct_label": {
