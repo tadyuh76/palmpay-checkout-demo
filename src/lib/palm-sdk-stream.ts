@@ -33,7 +33,13 @@ export function palmSdkStreamResponse(action: PalmSdkAction, request: Request) {
         if (data) send("done", data);
         settled = true;
         if (timer) clearTimeout(timer);
-        controller.close();
+        setTimeout(() => {
+          try {
+            controller.close();
+          } catch {
+            // The browser may have already closed the EventSource.
+          }
+        }, 150);
       };
 
       timer = setTimeout(() => {

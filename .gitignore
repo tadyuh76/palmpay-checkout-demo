@@ -30,12 +30,27 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# python
+__pycache__/
+*.py[cod]
+
 # env files (can opt-in for committing if needed)
 .env*
 !.env.example
 
-# local sqlite state
-/data/
+# local runtime state
+/data/*
+!/data/palm-python-sdk/
+/data/palm-python-sdk/*
+!/data/palm-python-sdk/PythonProject1920/
+/data/palm-python-sdk/PythonProject1920/*
+!/data/palm-python-sdk/PythonProject1920/camer.py
+!/data/palm-python-sdk/PythonProject1920/gmssl.dll
+!/data/palm-python-sdk/PythonProject1920/libusb-1.0.dll
+!/data/palm-python-sdk/PythonProject1920/liveness_roi
+!/data/palm-python-sdk/PythonProject1920/reg_img.bin
+!/data/palm-python-sdk/PythonProject1920/SonixCamera.dll
+!/data/palm-python-sdk/PythonProject1920/XRCommonVeinAlgAPI.dll
 
 # vercel
 .vercel

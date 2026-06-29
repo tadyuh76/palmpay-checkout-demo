@@ -168,6 +168,11 @@ function palmSdkClientMessage(
       ? "Chưa có mẫu palm vein cho phiên này. Hãy đăng ký lại trước khi thanh toán."
       : "No palm vein template is available for this session. Enroll again before payment.";
   }
+  if (result?.error === "stream_closed") {
+    return locale === "vi"
+      ? "Luong preview may quet da dong truoc khi nhan ket qua cuoi. Hay giu tay trong khung va thu lai."
+      : "The scanner preview ended before the final result arrived. Keep your palm in frame and retry.";
+  }
   if (result?.sdkReturn === -7) {
     return locale === "vi"
       ? "Máy quét chưa thấy lòng bàn tay. Đặt lòng bàn tay vào vùng quét rồi thử lại."
@@ -273,13 +278,16 @@ function runPalmSdkEventScan(
 
     const source = new EventSource(`/api/palm/${action}/stream?${params.toString()}`);
     let completed = false;
+    let lastScan: PalmSdkClientResult | null = null;
     const parseEvent = (event: MessageEvent) => JSON.parse(event.data) as PalmSdkClientResult;
 
     source.addEventListener("ready", (event) => {
-      onScan(parseEvent(event as MessageEvent));
+      lastScan = parseEvent(event as MessageEvent);
+      onScan(lastScan);
     });
     source.addEventListener("scan", (event) => {
-      onScan(parseEvent(event as MessageEvent));
+      lastScan = parseEvent(event as MessageEvent);
+      onScan(lastScan);
     });
     source.addEventListener("done", (event) => {
       completed = true;
@@ -290,7 +298,17 @@ function runPalmSdkEventScan(
       if (completed) return;
       completed = true;
       source.close();
-      reject(new Error("Palm scanner stream disconnected"));
+      if (lastScan) {
+        resolve({
+          ...lastScan,
+          ok: false,
+          error: "stream_closed",
+          message: "",
+          streamType: "done",
+        });
+        return;
+      }
+      reject(new Error("Palm scanner stream disconnected before the scanner returned any data"));
     };
   });
 }

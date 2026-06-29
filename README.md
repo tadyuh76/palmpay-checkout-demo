@@ -12,6 +12,12 @@ Local hardware demo on Windows/POS, with NFC bridge and PalmPay palm scanner sup
 git pull && start-palmpay-local.cmd
 ```
 
+Fresh Windows checkout:
+
+```cmd
+git clone https://github.com/tadyuh76/palmpay-checkout-demo.git && cd palmpay-checkout-demo && start-palmpay-local.cmd
+```
+
 The script installs app dependencies if needed, starts the NFC bridge in a second terminal, and starts the local app at `http://localhost:7999`. The palm scanner runs through the app API; set `PALMPAY_PALM_SDK_DIR` only if the SDK DLLs are outside the default local SDK folder.
 
 ## Experiment Groups
@@ -112,9 +118,9 @@ Do not encode a public payment-success URL that directly marks the order paid. I
 
 ## Palm Vein Scanner
 
-The `PALM_VEIN` condition uses the bundled Windows palm vein SDK directly from the Next.js API layer. The app calls `scripts/palm-sdk-worker.py`, which loads `SonixCamera.dll` and `XRCommonVeinAlgAPI.dll`, enrolls three palm samples during setup, saves the feature template under `data/palm-templates`, then verifies that template during payment.
+The `PALM_VEIN` condition uses the bundled Windows palm vein SDK directly from the Next.js API layer. The app calls `scripts/palm-sdk-worker.py`, which loads `SonixCamera.dll` and `XRCommonVeinAlgAPI.dll` from `data/palm-python-sdk/PythonProject1920`, enrolls three palm samples during setup, saves the feature template under `data/palm-templates`, then verifies that template during payment.
 
-By default the app auto-detects the bundled `CameraSDK/run` folder. If needed, set:
+By default the repo includes the required Windows SDK runtime files. If needed, override the SDK or template path with:
 
 ```bash
 PALMPAY_PALM_SDK_DIR="C:\path\to\CameraSDK\run"
