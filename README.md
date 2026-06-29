@@ -2,6 +2,18 @@
 
 Coffee-themed point-of-sale prototype for the PalmPay experiment. The app keeps the full research sequence visible to the researcher and participant: named session creation, consent, pre-survey, randomized method assignment, method setup, coffee catalog selection, checkout, assigned payment, receipt, post-survey, debrief, and CSV export.
 
+## Quick Start
+
+Deployed demo: https://demo-experiment.vercel.app
+
+Local hardware demo on Windows/POS, with NFC bridge and PalmPay palm scanner support:
+
+```cmd
+git pull && start-palmpay-local.cmd
+```
+
+The script installs app dependencies if needed, starts the NFC bridge in a second terminal, and starts the local app at `http://localhost:7999`. The palm scanner runs through the app API; set `PALMPAY_PALM_SDK_DIR` only if the SDK DLLs are outside the default local SDK folder.
+
 ## Experiment Groups
 
 - `QR_PIN`: DemoBank QR payment with sender name and a four-digit test PIN. The POS QR opens a mobile mock transfer page and the POS reacts when that page confirms payment.
@@ -129,6 +141,12 @@ npm run dev -- -p 7999
 ```
 
 Open `http://localhost:7999`.
+
+For the full local hardware setup, prefer the one-line command above:
+
+```cmd
+git pull && start-palmpay-local.cmd
+```
 
 ## Data
 
