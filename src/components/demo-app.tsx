@@ -45,7 +45,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { QRCodeSVG } from "qrcode.react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import surveyConfig from "@/data/survey-questions.json";
 import {
   catalog,
@@ -83,6 +83,7 @@ type SurveyQuestion = {
   section_intro?: string | LocalizedText;
   source_text?: string;
   text: string | LocalizedText;
+  emphasis?: string[] | Partial<Record<Locale, string[]>>;
   scale_min?: number;
   scale_max?: number;
   type?: "select";
@@ -443,6 +444,49 @@ function t(key: UiTextKey, locale = defaultLocale) {
 
 function questionText(question: SurveyQuestion, locale = defaultLocale) {
   return localizeText(question.text, locale);
+}
+
+function questionEmphasis(question: SurveyQuestion, locale = defaultLocale) {
+  const emphasis = question.emphasis ?? [];
+  if (Array.isArray(emphasis)) return emphasis;
+  return emphasis[locale] ?? emphasis.vi ?? emphasis.en ?? [];
+}
+
+function renderTextWithEmphasis(text: string, phrases: string[]) {
+  const uniquePhrases = [...new Set(phrases.filter(Boolean))].sort(
+    (a, b) => b.length - a.length,
+  );
+  if (uniquePhrases.length === 0) return text;
+
+  const parts: ReactNode[] = [];
+  let cursor = 0;
+  while (cursor < text.length) {
+    let nextIndex = text.length;
+    let nextPhrase = "";
+    for (const phrase of uniquePhrases) {
+      const index = text.indexOf(phrase, cursor);
+      if (index !== -1 && index < nextIndex) {
+        nextIndex = index;
+        nextPhrase = phrase;
+      }
+    }
+
+    if (!nextPhrase) {
+      parts.push(text.slice(cursor));
+      break;
+    }
+    if (nextIndex > cursor) {
+      parts.push(text.slice(cursor, nextIndex));
+    }
+    parts.push(
+      <strong className="font-bold" key={`${nextPhrase}-${nextIndex}`}>
+        {nextPhrase}
+      </strong>,
+    );
+    cursor = nextIndex + nextPhrase.length;
+  }
+
+  return parts;
 }
 
 function constructLabel(question: SurveyQuestion, locale = defaultLocale) {
@@ -3778,6 +3822,7 @@ function SurveyScreen({
                 const answerValue = answers[question.item_id];
                 const normalizedValue = normalizeSurveyAnswer(question, answerValue);
                 const text = questionText(question, locale);
+                const emphasis = questionEmphasis(question, locale);
                 const options = questionOptions(question, locale);
                 const useRadioChoices =
                   section.construct === profileSurveyConstruct &&
@@ -3789,8 +3834,8 @@ function SurveyScreen({
                   >
                     <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="text-sm font-bold leading-6 text-stone-950">
-                          {text}
+                        <p className="text-sm font-normal leading-6 text-stone-950">
+                          {renderTextWithEmphasis(text, emphasis)}
                         </p>
                       </div>
                     </div>

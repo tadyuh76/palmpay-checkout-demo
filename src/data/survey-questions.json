@@ -179,6 +179,9 @@
         "vi": "Tôi cảm thấy phương thức thanh toán này an toàn.",
         "en": "I perceive this payment method as secure."
       },
+      "emphasis": {
+        "vi": ["an toàn"]
+      },
       "scale_min": 1,
       "scale_max": 7,
       "reverse_scored": false,
@@ -195,6 +198,9 @@
       "text": {
         "vi": "Tôi cảm thấy các thông tin cá nhân và thông tin giao dịch phát sinh trong quá trình thanh toán này được bảo mật.",
         "en": "I perceive the information relating to user and transactions through this payment method as secure."
+      },
+      "emphasis": {
+        "vi": ["các thông tin cá nhân", "thông tin giao dịch", "được bảo mật"]
       },
       "scale_min": 1,
       "scale_max": 7,
@@ -213,6 +219,9 @@
         "vi": "Những thông tin cá nhân tôi đã cung cấp giúp việc thực hiện giao dịch thanh toán được an toàn.",
         "en": "The information I provided is helpful for secure payment transactions."
       },
+      "emphasis": {
+        "vi": ["thông tin cá nhân", "giúp việc thực hiện giao dịch", "được an toàn"]
+      },
       "scale_min": 1,
       "scale_max": 7,
       "reverse_scored": false,
@@ -230,6 +239,9 @@
         "vi": "Tôi không lo sợ về việc bị đánh cắp thông tin khi sử dụng phương thức thanh toán này.",
         "en": "I do not fear hacker invasions when using this payment method."
       },
+      "emphasis": {
+        "vi": ["không lo sợ", "đánh cắp thông tin"]
+      },
       "scale_min": 1,
       "scale_max": 7,
       "reverse_scored": false,
@@ -246,6 +258,9 @@
       "text": {
         "vi": "Tôi dễ dàng học cách sử dụng phương thức thanh toán này.",
         "en": "Learning to use this payment method is easy for me."
+      },
+      "emphasis": {
+        "vi": ["dễ dàng học cách sử dụng"]
       },
       "scale_min": 1,
       "scale_max": 7,
@@ -281,6 +296,9 @@
         "vi": "Sự tương tác của tôi với quy trình thanh toán bằng phương thức này rõ ràng và dễ hiểu.",
         "en": "My interaction with this payment procedure is clear and understandable."
       },
+      "emphasis": {
+        "vi": ["rõ ràng và dễ hiểu"]
+      },
       "scale_min": 1,
       "scale_max": 7,
       "reverse_scored": false,
@@ -297,6 +315,9 @@
       "text": {
         "vi": "Tôi dễ dàng thành thạo việc sử dụng phương thức thanh toán này.",
         "en": "It is easy for me to become skillful at using this payment method."
+      },
+      "emphasis": {
+        "vi": ["dễ dàng thành thạo"]
       },
       "scale_min": 1,
       "scale_max": 7,
@@ -315,6 +336,9 @@
         "vi": "Tôi nhận thấy phương thức thanh toán này dễ sử dụng.",
         "en": "I find this payment method easy to use."
       },
+      "emphasis": {
+        "vi": ["dễ sử dụng"]
+      },
       "scale_min": 1,
       "scale_max": 7,
       "reverse_scored": false,
@@ -332,6 +356,9 @@
         "vi": "Tôi nhận thấy quy trình thanh toán này linh hoạt khi tương tác được ở bất kỳ đâu.",
         "en": "I find this payment method procedure flexible to interact with anywhere."
       },
+      "emphasis": {
+        "vi": ["linh hoạt", "tương tác được ở bất kỳ đâu"]
+      },
       "scale_min": 1,
       "scale_max": 7,
       "reverse_scored": false,
@@ -348,6 +375,9 @@
       "text": {
         "vi": "Việc sử dụng phương thức thanh toán này giúp tôi thanh toán nhanh hơn.",
         "en": "Using this payment method enabled me to pay more quickly."
+      },
+      "emphasis": {
+        "vi": ["giúp tôi thanh toán nhanh hơn"]
       },
       "scale_min": 1,
       "scale_max": 7,
@@ -383,6 +413,9 @@
         "vi": "Việc sử dụng phương thức thanh toán này giúp tôi thực hiện giao dịch dễ dàng hơn.",
         "en": "Using this payment method made it easier for me to conduct transactions."
       },
+      "emphasis": {
+        "vi": ["thực hiện giao dịch dễ dàng hơn"]
+      },
       "scale_min": 1,
       "scale_max": 7,
       "reverse_scored": false,
@@ -399,6 +432,9 @@
       "text": {
         "vi": "Tôi cảm thấy phương thức thanh toán này là một lựa chọn hữu ích để thanh toán.",
         "en": "I would find this payment method a useful option for paying."
+      },
+      "emphasis": {
+        "vi": ["lựa chọn hữu ích"]
       },
       "scale_min": 1,
       "scale_max": 7,
@@ -417,6 +453,9 @@
         "vi": "Tôi tin tưởng các bên tham gia, chẳng hạn như người bán và người mua, trong hệ thống thanh toán điện tử mô phỏng này.",
         "en": "I trust each participant, such as seller and buyer, involved in this simulated electronic payment system."
       },
+      "emphasis": {
+        "vi": ["các bên tham gia", "người bán", "người mua"]
+      },
       "scale_min": 1,
       "scale_max": 7,
       "reverse_scored": false,
@@ -433,6 +472,9 @@
       "text": {
         "vi": "Tôi tin tưởng cơ chế bảo mật của hệ thống thanh toán điện tử mô phỏng này.",
         "en": "I trust the security mechanisms of this simulated electronic payment system."
+      },
+      "emphasis": {
+        "vi": ["cơ chế bảo mật"]
       },
       "scale_min": 1,
       "scale_max": 7,
@@ -451,6 +493,9 @@
         "vi": "Tôi tin tưởng các dịch vụ của hệ thống thanh toán điện tử mô phỏng này.",
         "en": "I trust this simulated electronic payment system's services."
       },
+      "emphasis": {
+        "vi": ["các dịch vụ"]
+      },
       "scale_min": 1,
       "scale_max": 7,
       "reverse_scored": false,
@@ -468,6 +513,9 @@
         "vi": "Tôi tin tưởng các thông tin được cung cấp trong quá trình thanh toán điện tử mô phỏng này.",
         "en": "I trust the information provided during this simulated electronic payment process."
       },
+      "emphasis": {
+        "vi": ["các thông tin được cung cấp"]
+      },
       "scale_min": 1,
       "scale_max": 7,
       "reverse_scored": false,
@@ -484,6 +532,9 @@
       "text": {
         "vi": "Tôi có ý định tiếp tục sử dụng phương thức thanh toán này thay vì ngừng sử dụng.",
         "en": "I intend to continue using this payment method rather than discontinue its use."
+      },
+      "emphasis": {
+        "vi": ["tiếp tục sử dụng", "thay vì ngừng sử dụng"]
       },
       "scale_min": 1,
       "scale_max": 7,
@@ -519,6 +570,9 @@
         "vi": "Tôi có ý định tiếp tục sử dụng phương thức thanh toán này thay vì các phương thức thanh toán khác.",
         "en": "My intention is to continue using this payment method rather than other payment methods."
       },
+      "emphasis": {
+        "vi": ["tiếp tục sử dụng", "thay vì các phương thức thanh toán khác"]
+      },
       "scale_min": 1,
       "scale_max": 7,
       "reverse_scored": false,
@@ -535,6 +589,9 @@
       "text": {
         "vi": "Tôi có kế hoạch tiếp tục sử dụng phương thức thanh toán này trong các tình huống mua hàng tương tự trong tương lai.",
         "en": "I plan to continue using this payment method in similar purchasing situations in the future."
+      },
+      "emphasis": {
+        "vi": ["tiếp tục sử dụng", "trong các tình huống mua hàng tương tự trong tương lai"]
       },
       "scale_min": 1,
       "scale_max": 7,
