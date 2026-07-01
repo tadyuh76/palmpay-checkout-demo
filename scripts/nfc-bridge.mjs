@@ -1,11 +1,25 @@
 #!/usr/bin/env node
 
-const appUrl = (process.env.PALMPAY_APP_URL || "http://localhost:7999").replace(/\/$/, "");
+const appUrls = resolveAppUrls();
 const bridgeToken = process.env.PALMPAY_NFC_BRIDGE_TOKEN || "";
 const defaultCardRef = process.env.PALMPAY_NFC_CARD_REF || "CARD-POS-042";
 const pollMs = Number(process.env.PALMPAY_NFC_POLL_MS || 1000);
 const aid = process.env.PALMPAY_NFC_AID || "";
 const mockMode = process.argv.includes("--mock");
+
+function resolveAppUrls() {
+  const raw =
+    process.env.PALMPAY_APP_URLS ||
+    process.env.PALMPAY_APP_URL ||
+    "http://localhost:7999";
+
+  const urls = raw
+    .split(/[,\s;]+/)
+    .map((url) => url.trim().replace(/\/$/, ""))
+    .filter(Boolean);
+
+  return [...new Set(urls)];
+}
 
 function log(message, details) {
   const suffix = details ? ` ${JSON.stringify(details)}` : "";
@@ -80,7 +94,7 @@ function resolveCardRef(card, activeSession) {
   return defaultCardRef || activeSession?.acceptedCardRef || (uid ? `UID:${uid}` : "UNKNOWN_CARD");
 }
 
-async function getActiveSession() {
+async function getActiveSession(appUrl) {
   const response = await fetch(`${appUrl}/api/nfc-session`, {
     headers: requestHeaders(),
   });
@@ -94,7 +108,42 @@ async function getActiveSession() {
   return data.session || null;
 }
 
-async function postTap({ cardRef, transactionId }) {
+async function getActiveSessions() {
+  const results = await Promise.allSettled(
+    appUrls.map(async (appUrl) => {
+      try {
+        return {
+          appUrl,
+          session: await getActiveSession(appUrl),
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Could not read active NFC session";
+        throw new Error(`${appUrl}: ${message}`);
+      }
+    }),
+  );
+
+  const sessions = [];
+  let readableTargets = 0;
+
+  for (const result of results) {
+    if (result.status === "fulfilled") {
+      readableTargets += 1;
+      if (result.value.session) sessions.push(result.value);
+      continue;
+    }
+
+    log(result.reason instanceof Error ? result.reason.message : "Could not read active NFC session");
+  }
+
+  if (readableTargets === 0) {
+    throw new Error("Could not read active NFC session from any configured app URL");
+  }
+
+  return sessions;
+}
+
+async function postTap(appUrl, { cardRef, transactionId }) {
   const response = await fetch(`${appUrl}/api/nfc-taps`, {
     body: JSON.stringify({ cardRef, transactionId }),
     headers: requestHeaders(),
@@ -108,38 +157,64 @@ async function postTap({ cardRef, transactionId }) {
 }
 
 async function handleCard(card) {
-  const activeSession = await getActiveSession();
-  if (!activeSession) {
+  const activeSessions = await getActiveSessions();
+  if (activeSessions.length === 0) {
     log("card tapped but no POS NFC transaction is waiting", {
+      appUrls,
       uid: normalizeUid(card?.uid) || null,
     });
     return;
   }
 
-  const cardRef = resolveCardRef(card, activeSession);
-  const tap = await postTap({
-    cardRef,
-    transactionId: activeSession.transactionId,
-  });
+  let postedTargets = 0;
+  for (const { appUrl, session } of activeSessions) {
+    const cardRef = resolveCardRef(card, session);
+    try {
+      const tap = await postTap(appUrl, {
+        cardRef,
+        transactionId: session.transactionId,
+      });
 
-  log("tap posted", {
-    cardRef: tap.cardRef,
-    transactionId: tap.transactionId,
-  });
+      postedTargets += 1;
+      log("tap posted", {
+        appUrl,
+        cardRef: tap.cardRef,
+        transactionId: tap.transactionId,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not post NFC tap";
+      log(`${appUrl}: ${message}`);
+    }
+  }
+
+  if (postedTargets === 0) {
+    throw new Error("Could not post NFC tap to any configured app URL");
+  }
 }
 
 async function runMock() {
-  log("mock mode waiting for active POS NFC session", { appUrl, cardRef: defaultCardRef });
+  log("mock mode waiting for active POS NFC session", { appUrls, cardRef: defaultCardRef });
   while (true) {
     try {
-      const session = await getActiveSession();
-      if (session) {
-        const tap = await postTap({
-          cardRef: defaultCardRef,
-          transactionId: session.transactionId,
-        });
-        log("mock tap posted", tap);
-        return;
+      const activeSessions = await getActiveSessions();
+      if (activeSessions.length > 0) {
+        let postedTargets = 0;
+        for (const { appUrl, session } of activeSessions) {
+          try {
+            const tap = await postTap(appUrl, {
+              cardRef: defaultCardRef,
+              transactionId: session.transactionId,
+            });
+            postedTargets += 1;
+            log("mock tap posted", { appUrl, ...tap });
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Could not post NFC tap";
+            log(`${appUrl}: ${message}`);
+          }
+        }
+        if (postedTargets > 0) {
+          return;
+        }
       }
     } catch (error) {
       log(error instanceof Error ? error.message : "mock bridge error");
@@ -173,7 +248,7 @@ async function runReader() {
   }
 
   const nfc = new NFC();
-  log("reader bridge started", { appUrl, defaultCardRef });
+  log("reader bridge started", { appUrls, defaultCardRef });
 
   nfc.on("reader", (reader) => {
     log("reader attached", { reader: reader.reader.name });

@@ -23,11 +23,12 @@ if not exist node_modules\nfc-pcsc (
   )
 )
 
-set "PALMPAY_APP_URL=http://localhost:7999"
+set "PALMPAY_APP_URLS=http://localhost:7999,https://demo-experiment.vercel.app"
+if not defined PALMPAY_PALM_ALLOWED_ORIGINS set "PALMPAY_PALM_ALLOWED_ORIGINS=http://localhost:7999,https://demo-experiment.vercel.app"
 if not defined PALMPAY_NFC_BRIDGE_TOKEN set "PALMPAY_NFC_BRIDGE_TOKEN=local-reader-token"
 if not defined PALMPAY_PALM_SCAN_TIMEOUT_MS set "PALMPAY_PALM_SCAN_TIMEOUT_MS=45000"
 
-echo Starting NFC bridge in a new window...
+echo Starting NFC bridge in a new window for %PALMPAY_APP_URLS%...
 start "PalmPay NFC bridge" /D "%CD%" cmd /k "npm run nfc:bridge"
 
 echo Starting PalmPay app at http://localhost:7999

@@ -1,4 +1,5 @@
 import { spawnPalmSdkWorker, type PalmSdkAction, type PalmSdkResult } from "@/lib/palm-sdk";
+import { palmCorsHeaders } from "@/lib/palm-api-cors";
 
 function sseMessage(event: string, data: unknown) {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
@@ -114,6 +115,7 @@ export function palmSdkStreamResponse(action: PalmSdkAction, request: Request) {
 
   return new Response(stream, {
     headers: {
+      ...palmCorsHeaders(request),
       "Cache-Control": "no-cache, no-transform",
       Connection: "keep-alive",
       "Content-Type": "text/event-stream",

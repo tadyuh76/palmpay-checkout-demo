@@ -1,6 +1,11 @@
 import { runPalmSdk } from "@/lib/palm-sdk";
+import { palmCorsHeaders, palmOptionsResponse } from "@/lib/palm-api-cors";
 
 export const runtime = "nodejs";
+
+export function OPTIONS(request: Request) {
+  return palmOptionsResponse(request);
+}
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as {
@@ -9,7 +14,10 @@ export async function POST(request: Request) {
   } | null;
 
   if (!body || typeof body.templateRef !== "string") {
-    return Response.json({ error: "Invalid palm enrollment request" }, { status: 400 });
+    return Response.json(
+      { error: "Invalid palm enrollment request" },
+      { headers: palmCorsHeaders(request), status: 400 },
+    );
   }
 
   const result = await runPalmSdk("enroll", {
@@ -18,5 +26,8 @@ export async function POST(request: Request) {
     templateRef: body.templateRef.slice(0, 120),
   });
 
-  return Response.json(result, { status: result.ok ? 200 : 502 });
+  return Response.json(result, {
+    headers: palmCorsHeaders(request),
+    status: result.ok ? 200 : 502,
+  });
 }

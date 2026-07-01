@@ -270,6 +270,17 @@ function palmSdkScanHint(
       : "Matching the palm vein sample.";
 }
 
+function palmApiUrl(path: string) {
+  const configured = process.env.NEXT_PUBLIC_PALMPAY_PALM_API_URL?.trim().replace(/\/$/, "");
+  if (configured) return `${configured}${path}`;
+
+  if (typeof window !== "undefined" && window.location.hostname === "demo-experiment.vercel.app") {
+    return `http://localhost:7999${path}`;
+  }
+
+  return path;
+}
+
 function runPalmSdkEventScan(
   action: "enroll" | "verify",
   input: { participantId?: string; templateRef: string; transactionId?: string },
@@ -280,7 +291,9 @@ function runPalmSdkEventScan(
     if (input.participantId) params.set("participantId", input.participantId);
     if (input.transactionId) params.set("transactionId", input.transactionId);
 
-    const source = new EventSource(`/api/palm/${action}/stream?${params.toString()}`);
+    const source = new EventSource(
+      palmApiUrl(`/api/palm/${action}/stream?${params.toString()}`),
+    );
     let completed = false;
     let lastScan: PalmSdkClientResult | null = null;
     const parseEvent = (event: MessageEvent) => JSON.parse(event.data) as PalmSdkClientResult;
@@ -1947,7 +1960,7 @@ export function DemoApp() {
 
   const completePostSurvey = () => {
     if (session?.assigned_group === "PALM_VEIN" && session.template_ref) {
-      fetch("/api/palm/delete", {
+      fetch(palmApiUrl("/api/palm/delete"), {
         body: JSON.stringify({ templateRef: session.template_ref }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
