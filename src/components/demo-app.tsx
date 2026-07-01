@@ -63,6 +63,7 @@ import type {
 } from "@/lib/types";
 
 type StudyGroup = "QR_PIN" | "NFC_CARD" | "FACE_POS" | "PALM_VEIN";
+type ExportFormat = "csv" | "xlsx";
 type Cart = Record<string, number>;
 type StepKey =
   | "admin"
@@ -417,10 +418,10 @@ const uiText = {
   confirmCart: { vi: "Xác nhận giỏ hàng", en: "Confirm cart" },
   dataCsv: { vi: "CSV dữ liệu", en: "Data CSV" },
   exportData: { vi: "Xuất dữ liệu", en: "Export data" },
+  exportMethods: { vi: "Chọn phương thức để xuất", en: "Choose methods to export" },
   flowTitle: { vi: "Luồng thí nghiệm", en: "Experiment flow" },
   language: { vi: "Ngôn ngữ", en: "Language" },
   loading: { vi: "Đang tải", en: "Loading" },
-  logCsv: { vi: "CSV nhật ký", en: "Event log CSV" },
   methodExcel: { vi: "Excel theo phương thức", en: "Excel by method" },
   newSession: { vi: "Phiên mới", en: "New session" },
   participantFallback: { vi: "Người tham gia", en: "Participant" },
@@ -439,6 +440,7 @@ const uiText = {
   },
   previous: { vi: "Quay lại", en: "Back" },
   selected: { vi: "Đã chọn", en: "Selected" },
+  selectAll: { vi: "Chọn tất cả", en: "Select all" },
   startSession: { vi: "Bắt đầu phiên", en: "Start session" },
   surveyContinue: { vi: "Tiếp tục khảo sát", en: "Continue to survey" },
 } satisfies Record<string, LocalizedText>;
@@ -903,7 +905,7 @@ function storagePatch<T>(key: string, value: T) {
     case storageKeys.completedSessions:
       return { completedSessions: value };
     case storageKeys.currentSession:
-      return { currentSession: value };
+      return { activeSession: value };
     case storageKeys.participantCounter:
       return { participantCounter: value };
     default:
@@ -933,9 +935,6 @@ function writeJson<T>(key: string, value: T) {
 
 function removeJson(key: string) {
   window.localStorage.removeItem(key);
-  if (key === storageKeys.currentSession) {
-    persistExperimentState({ currentSession: null });
-  }
 }
 
 function normalizeStateSnapshot(value: unknown): ExperimentStateSnapshot {
@@ -983,11 +982,6 @@ function applyStateSnapshot(state: ExperimentStateSnapshot) {
   writeLocalJson(storageKeys.assignmentQueue, state.assignmentQueue);
   writeLocalJson(storageKeys.completedSessions, state.completedSessions);
   writeLocalJson(storageKeys.participantCounter, state.participantCounter);
-  if (state.currentSession) {
-    writeLocalJson(storageKeys.currentSession, state.currentSession);
-  } else {
-    window.localStorage.removeItem(storageKeys.currentSession);
-  }
 }
 
 async function loadExperimentState() {
@@ -1038,10 +1032,29 @@ function getNextAssignment(participantId: string, participantName?: string) {
   return assigned;
 }
 
-function makeParticipantId() {
+function makeLocalParticipantId() {
   const current = readJson<number>(storageKeys.participantCounter, 0) + 1;
   writeJson(storageKeys.participantCounter, current);
   return `P${String(current).padStart(4, "0")}`;
+}
+
+async function allocateParticipantId() {
+  try {
+    const response = await fetch("/api/experiment-state/participant", {
+      method: "POST",
+    });
+    if (!response.ok) {
+      throw new Error("Could not allocate participant id");
+    }
+    const data = (await response.json()) as { participantId?: unknown };
+    if (typeof data.participantId === "string" && data.participantId.trim()) {
+      return data.participantId;
+    }
+  } catch {
+    // Offline/local fallback keeps the POS usable if the shared API is unreachable.
+  }
+
+  return makeLocalParticipantId();
 }
 
 function normalizePersonalInfo(value?: Partial<ParticipantPersonalInfo> | null) {
@@ -1054,13 +1067,14 @@ function normalizePersonalInfo(value?: Partial<ParticipantPersonalInfo> | null) 
 
 function makeSession(
   participantName: string,
+  participantId: string,
   selectedGroup: StudyGroup | null = null,
 ): ExperimentSession {
   const trimmedName = participantName.trim() || "Khách thử nghiệm";
   const createdAt = nowIso();
 
   return {
-    participant_id: makeParticipantId(),
+    participant_id: participantId,
     participant_name: trimmedName,
     protocol_version: protocolVersion,
     assigned_group: selectedGroup,
@@ -1136,26 +1150,6 @@ function downloadBlob(filename: string, blob: Blob) {
   link.download = filename;
   link.click();
   URL.revokeObjectURL(url);
-}
-
-function downloadCsv(filename: string, rows: Array<Record<string, unknown>>) {
-  const headers = Array.from(
-    rows.reduce((set, row) => {
-      Object.keys(row).forEach((key) => set.add(key));
-      return set;
-    }, new Set<string>()),
-  );
-  const escape = (value: unknown) => {
-    if (value === null || value === undefined) return "";
-    const text =
-      typeof value === "object" ? JSON.stringify(value) : String(value);
-    return `"${text.replaceAll('"', '""')}"`;
-  };
-  const csv = [
-    headers.join(","),
-    ...rows.map((row) => headers.map((header) => escape(row[header])).join(",")),
-  ].join("\n");
-  downloadBlob(filename, new Blob([csv], { type: "text/csv;charset=utf-8" }));
 }
 
 function downloadLabeledCsv(
@@ -1636,12 +1630,14 @@ function downloadMethodWorkbook(
   filename: string,
   sessions: ExperimentSession[],
   locale = defaultLocale,
+  selectedGroups: StudyGroup[] = groupOrder,
 ) {
   const columns = methodWorkbookColumns(locale);
   const codebookSheetColumns = codebookColumns(locale);
   const codebookRows = buildSurveyCodebookRows();
+  const selected = new Set(selectedGroups);
   const sheets: XlsxSheet[] = [
-    ...groupOrder.map((group) => {
+    ...groupOrder.filter((group) => selected.has(group)).map((group) => {
       const rows = sessions
         .filter((session) => session.assigned_group === group)
         .map((session) => buildMethodWorkbookRow(session, locale));
@@ -1672,12 +1668,25 @@ function downloadMethodCsv(
   filename: string,
   sessions: ExperimentSession[],
   locale = defaultLocale,
+  selectedGroups: StudyGroup[] = groupOrder,
 ) {
   const columns = methodWorkbookColumns(locale);
   downloadLabeledCsv(
     filename,
     columns,
-    sessions.map((session) => buildMethodWorkbookRow(session, locale)),
+    filterSessionsByMethods(sessions, selectedGroups).map((session) =>
+      buildMethodWorkbookRow(session, locale),
+    ),
+  );
+}
+
+function filterSessionsByMethods(
+  sessions: ExperimentSession[],
+  selectedGroups: StudyGroup[],
+) {
+  const selected = new Set(selectedGroups);
+  return sessions.filter(
+    (session) => session.assigned_group && selected.has(session.assigned_group),
   );
 }
 
@@ -1713,16 +1722,15 @@ export function DemoApp() {
         setHydrated(true);
         return;
       }
+      const localSession = normalizeSession(
+        readJson<ExperimentSession | null>(storageKeys.currentSession, null),
+      );
       try {
         const state = await loadExperimentState();
         applyStateSnapshot(state);
-        setSession(state.currentSession);
+        setSession(localSession);
       } catch {
-        setSession(
-          normalizeSession(
-            readJson<ExperimentSession | null>(storageKeys.currentSession, null),
-          ),
-        );
+        setSession(localSession);
       }
       setHydrated(true);
     });
@@ -1796,8 +1804,12 @@ export function DemoApp() {
     }));
   };
 
-  const startNewSession = (participantName: string, selectedGroup: StudyGroup) => {
-    const next = makeSession(participantName, selectedGroup);
+  const startNewSession = async (
+    participantName: string,
+    selectedGroup: StudyGroup,
+  ) => {
+    const participantId = await allocateParticipantId();
+    const next = makeSession(participantName, participantId, selectedGroup);
     const history = readJson<AssignmentHistoryItem[]>(
       storageKeys.assignmentHistory,
       [],
@@ -2374,24 +2386,20 @@ export function DemoApp() {
             <DebriefScreen
               locale={locale}
               session={session}
-              onExport={() =>
+              onExport={(selectedGroups) =>
                 downloadMethodWorkbook(
                   "palmpay-method-sheets.xlsx",
                   allStoredSessions(session),
                   locale,
+                  selectedGroups,
                 )
               }
-              onExportCsv={() =>
+              onExportCsv={(selectedGroups) =>
                 downloadMethodCsv(
                   "palmpay-wide.csv",
                   allStoredSessions(session),
                   locale,
-                )
-              }
-              onExportEvents={() =>
-                downloadCsv(
-                  "palmpay-events.csv",
-                  allStoredSessions(session).flatMap((item) => item.events),
+                  selectedGroups,
                 )
               }
               onNew={resetCurrentSession}
@@ -2733,10 +2741,15 @@ function AdminHome({
   onLocaleChange,
 }: {
   locale: Locale;
-  onCreate: (participantName: string, selectedGroup: StudyGroup) => void;
+  onCreate: (
+    participantName: string,
+    selectedGroup: StudyGroup,
+  ) => Promise<void> | void;
   onLocaleChange: (locale: Locale) => void;
 }) {
   const [completed, setCompleted] = useState<ExperimentSession[]>([]);
+  const [creating, setCreating] = useState(false);
+  const [pendingExportFormat, setPendingExportFormat] = useState<ExportFormat | null>(null);
   const [participantName, setParticipantName] = useState("");
   const [selectedGroup, setSelectedGroup] = useState<StudyGroup>(groupOrder[0]);
 
@@ -2762,24 +2775,29 @@ function AdminHome({
   const exportActions = [
     {
       Icon: FileSpreadsheet,
+      format: "xlsx" as const,
       label: locale === "vi" ? "Xuất Excel" : "Export Excel",
-      onClick: () => downloadMethodWorkbook("palmpay-method-sheets.xlsx", completed, locale),
     },
     {
       Icon: Download,
+      format: "csv" as const,
       label: locale === "vi" ? "Xuất CSV" : "Export CSV",
-      onClick: () => downloadMethodCsv("palmpay-wide.csv", completed, locale),
-    },
-    {
-      Icon: ReceiptText,
-      label: locale === "vi" ? "Xuất nhật ký" : "Export log",
-      onClick: () =>
-        downloadCsv(
-          "palmpay-events.csv",
-          completed.flatMap((item) => item.events),
-        ),
     },
   ];
+  const handleExportConfirm = (selectedGroups: StudyGroup[]) => {
+    if (pendingExportFormat === "xlsx") {
+      downloadMethodWorkbook(
+        "palmpay-method-sheets.xlsx",
+        completed,
+        locale,
+        selectedGroups,
+      );
+    }
+    if (pendingExportFormat === "csv") {
+      downloadMethodCsv("palmpay-wide.csv", completed, locale, selectedGroups);
+    }
+    setPendingExportFormat(null);
+  };
 
   return (
     <main className="min-h-screen bg-[#fbf7f1] p-4 text-stone-950 sm:p-6">
@@ -2864,10 +2882,15 @@ function AdminHome({
           <aside className="space-y-5">
             <form
               className="rounded-lg border border-[#ead8bf] bg-white p-5 sm:p-6"
-              onSubmit={(event) => {
+              onSubmit={async (event) => {
                 event.preventDefault();
-                if (!trimmedName) return;
-                onCreate(trimmedName, selectedGroup);
+                if (!trimmedName || creating) return;
+                setCreating(true);
+                try {
+                  await onCreate(trimmedName, selectedGroup);
+                } finally {
+                  setCreating(false);
+                }
               }}
             >
               <h2 className="text-lg font-semibold">
@@ -2897,11 +2920,11 @@ function AdminHome({
               </div>
               <button
                 className={cn(primaryButtonClass, "mt-6 h-12 w-full text-base")}
-                disabled={!trimmedName}
+                disabled={!trimmedName || creating}
                 type="submit"
               >
                 <PlayCircle size={27} aria-hidden />
-                {t("startSession", locale)}
+                {creating ? t("loading", locale) : t("startSession", locale)}
               </button>
             </form>
 
@@ -2911,12 +2934,12 @@ function AdminHome({
                 <h2 className="text-lg font-semibold">Export data</h2>
               </div>
               <div className="mt-6 grid gap-3">
-                {exportActions.map(({ Icon, label, onClick }) => (
+                {exportActions.map(({ Icon, format, label }) => (
                   <button
                     className="inline-flex h-12 items-center gap-4 rounded-lg border border-[#ead8bf] bg-white px-4 text-left text-sm font-medium text-stone-800 transition hover:bg-[#fffaf3] disabled:text-stone-400"
                     disabled={disabledExport}
                     key={label}
-                    onClick={onClick}
+                    onClick={() => setPendingExportFormat(format)}
                     type="button"
                   >
                     <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#f7f1e9] text-[#6f3f24]">
@@ -2930,7 +2953,138 @@ function AdminHome({
           </aside>
         </div>
       </div>
+      {pendingExportFormat && (
+        <ExportMethodDialog
+          format={pendingExportFormat}
+          locale={locale}
+          onCancel={() => setPendingExportFormat(null)}
+          onConfirm={handleExportConfirm}
+          sessions={completed}
+        />
+      )}
     </main>
+  );
+}
+
+function ExportMethodDialog({
+  format,
+  locale = defaultLocale,
+  onCancel,
+  onConfirm,
+  sessions,
+}: {
+  format: ExportFormat;
+  locale?: Locale;
+  onCancel: () => void;
+  onConfirm: (selectedGroups: StudyGroup[]) => void;
+  sessions: ExperimentSession[];
+}) {
+  const [selectedGroups, setSelectedGroups] = useState<StudyGroup[]>(groupOrder);
+  const allSelected = selectedGroups.length === groupOrder.length;
+  const selectedCount = filterSessionsByMethods(sessions, selectedGroups).length;
+  const formatLabel = format === "xlsx" ? t("methodExcel", locale) : t("dataCsv", locale);
+
+  const toggleGroup = (group: StudyGroup) => {
+    setSelectedGroups((current) =>
+      current.includes(group)
+        ? current.filter((item) => item !== group)
+        : [...current, group],
+    );
+  };
+
+  return (
+    <div
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/45 p-4"
+      role="dialog"
+    >
+      <div className="max-h-[calc(100vh-2rem)] w-full max-w-[760px] overflow-y-auto rounded-lg border border-[#ead8bf] bg-white p-5 shadow-2xl sm:p-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-normal text-[#8a5736]">
+              {formatLabel}
+            </p>
+            <h2 className="mt-1 text-xl font-extrabold text-[#17120f]">
+              {t("exportMethods", locale)}
+            </h2>
+          </div>
+          <button
+            className="inline-flex h-10 items-center justify-center rounded-lg border border-[#ead8bf] bg-white px-4 text-sm font-semibold text-stone-700 transition hover:bg-[#fffaf3]"
+            onClick={() => setSelectedGroups(groupOrder)}
+            type="button"
+          >
+            {t("selectAll", locale)}
+          </button>
+        </div>
+
+        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+          {groupOrder.map((group) => {
+            const copy = groupCopyFor(group, locale);
+            const Icon = copy.icon;
+            const selected = selectedGroups.includes(group);
+            const count = sessions.filter((item) => item.assigned_group === group).length;
+            return (
+              <button
+                aria-pressed={selected}
+                className={cn(
+                  "relative flex min-h-[168px] flex-col items-center justify-center rounded-lg border p-4 text-center transition hover:border-[#8a4d2a] focus:outline-none focus:ring-2 focus:ring-[#b78352]",
+                  copy.color,
+                  selected && "border-[#8a4d2a] ring-1 ring-[#8a4d2a]",
+                )}
+                key={group}
+                onClick={() => toggleGroup(group)}
+                type="button"
+              >
+                {selected && (
+                  <span className="absolute right-4 top-4 inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#8a4d2a] text-white">
+                    <Check size={18} aria-hidden />
+                  </span>
+                )}
+                <Icon className="mb-4" size={32} aria-hidden />
+                <h3 className="text-base font-semibold">{copy.shortLabel}</h3>
+                <p className="mt-2 text-sm leading-5 opacity-75">{copy.device}</p>
+                <span className="mt-5 inline-flex min-w-32 items-center justify-center gap-2 rounded-full border border-current/20 bg-white/55 px-3 py-1.5 text-sm font-semibold">
+                  <User size={15} aria-hidden />
+                  {count} {locale === "vi" ? "bản ghi" : "records"}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm font-medium text-stone-600">
+            {allSelected
+              ? locale === "vi"
+                ? `Xuất tất cả ${selectedCount} bản ghi.`
+                : `Exporting all ${selectedCount} records.`
+              : locale === "vi"
+                ? `Xuất ${selectedCount} bản ghi từ ${selectedGroups.length} phương thức.`
+                : `Exporting ${selectedCount} records from ${selectedGroups.length} methods.`}
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <button
+              className="inline-flex h-11 items-center justify-center rounded-lg border border-[#ead8bf] bg-white px-5 text-sm font-semibold text-stone-700 transition hover:bg-[#fffaf3]"
+              onClick={onCancel}
+              type="button"
+            >
+              {locale === "vi" ? "Hủy" : "Cancel"}
+            </button>
+            <button
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-5 text-sm font-semibold text-white transition hover:bg-[#5a341f] disabled:bg-[#d6c0aa]"
+              disabled={selectedGroups.length === 0}
+              onClick={() => onConfirm(selectedGroups)}
+              type="button"
+            >
+              <Download size={17} aria-hidden />
+              {format === "xlsx"
+                ? locale === "vi" ? "Xuất Excel" : "Export Excel"
+                : locale === "vi" ? "Xuất CSV" : "Export CSV"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -6198,23 +6352,34 @@ function DebriefScreen({
   locale = defaultLocale,
   onExport,
   onExportCsv,
-  onExportEvents,
   onNew,
   session,
 }: {
   locale?: Locale;
-  onExport: () => void;
-  onExportCsv: () => void;
-  onExportEvents: () => void;
+  onExport: (selectedGroups: StudyGroup[]) => void;
+  onExportCsv: (selectedGroups: StudyGroup[]) => void;
   onNew: () => void;
   session: ExperimentSession;
 }) {
+  const [pendingExportFormat, setPendingExportFormat] = useState<ExportFormat | null>(null);
+  const exportSessions = useMemo(() => allStoredSessions(session), [session]);
+  const handleExportConfirm = (selectedGroups: StudyGroup[]) => {
+    if (pendingExportFormat === "xlsx") {
+      onExport(selectedGroups);
+    }
+    if (pendingExportFormat === "csv") {
+      onExportCsv(selectedGroups);
+    }
+    setPendingExportFormat(null);
+  };
+
   return (
-    <Panel
-      eyebrow={locale === "vi" ? "Phần 3 / 3" : "Part 3 / 3"}
-      icon={CheckCircle2}
-      title={locale === "vi" ? "PHẦN KẾT" : "CONCLUSION"}
-    >
+    <>
+      <Panel
+        eyebrow={locale === "vi" ? "Phần 3 / 3" : "Part 3 / 3"}
+        icon={CheckCircle2}
+        title={locale === "vi" ? "PHẦN KẾT" : "CONCLUSION"}
+      >
       <div className="rounded-lg border border-[#ead8bf] bg-white p-4 text-sm leading-6 text-stone-600">
         <p className="whitespace-pre-line">
           {locale === "vi"
@@ -6229,10 +6394,10 @@ function DebriefScreen({
           </p>
         )}
       </div>
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
         <button
           className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-[#ead8bf] bg-white px-4 text-sm font-semibold text-stone-700 transition hover:bg-[#fffaf3]"
-          onClick={onExport}
+          onClick={() => setPendingExportFormat("xlsx")}
           type="button"
         >
           <Download size={17} aria-hidden />
@@ -6240,19 +6405,11 @@ function DebriefScreen({
         </button>
         <button
           className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-[#ead8bf] bg-white px-4 text-sm font-semibold text-stone-700 transition hover:bg-[#fffaf3]"
-          onClick={onExportCsv}
+          onClick={() => setPendingExportFormat("csv")}
           type="button"
         >
           <Download size={17} aria-hidden />
           {t("dataCsv", locale)}
-        </button>
-        <button
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-[#ead8bf] bg-white px-4 text-sm font-semibold text-stone-700 transition hover:bg-[#fffaf3]"
-          onClick={onExportEvents}
-          type="button"
-        >
-          <ReceiptText size={17} aria-hidden />
-          {t("logCsv", locale)}
         </button>
         <button
           className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#6f3f24] px-4 text-sm font-semibold text-white transition hover:bg-[#5a341f]"
@@ -6263,7 +6420,17 @@ function DebriefScreen({
           {t("newSession", locale)}
         </button>
       </div>
-    </Panel>
+      </Panel>
+      {pendingExportFormat && (
+        <ExportMethodDialog
+          format={pendingExportFormat}
+          locale={locale}
+          onCancel={() => setPendingExportFormat(null)}
+          onConfirm={handleExportConfirm}
+          sessions={exportSessions}
+        />
+      )}
+    </>
   );
 }
 

@@ -8,7 +8,9 @@ export type ExperimentState = {
   participantCounter: number;
 };
 
-type ExperimentStatePatch = Partial<ExperimentState>;
+type ExperimentStatePatch = Partial<ExperimentState> & {
+  activeSession?: unknown | null;
+};
 
 const defaultState: ExperimentState = {
   assignmentHistory: [],
@@ -54,7 +56,7 @@ function normalizePatch(patch: ExperimentStatePatch) {
   ) as ExperimentStatePatch;
 }
 
-function normalizeCompletedSession(value: unknown) {
+function normalizeSessionRecord(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
 
   const session = value as StoredSession;
@@ -91,6 +93,7 @@ async function listCompletedSessionRecords() {
   if (appDb.kind === "postgres") {
     const result = await appDb.pool.query<SessionRow>(
       `SELECT session_json FROM experiment_sessions
+       WHERE session_status IN ('completed', 'technical_failure')
        ORDER BY completed_at DESC NULLS LAST, updated_at DESC`,
     );
     return result.rows.flatMap((row) => {
@@ -105,6 +108,7 @@ async function listCompletedSessionRecords() {
   const rows = appDb.sqlite
     .prepare(
       `SELECT session_json FROM experiment_sessions
+       WHERE session_status IN ('completed', 'technical_failure')
        ORDER BY completed_at DESC, updated_at DESC`,
     )
     .all() as SessionRow[];
@@ -118,12 +122,74 @@ async function listCompletedSessionRecords() {
   });
 }
 
+export async function upsertExperimentSessionRecord(value: unknown) {
+  await ensureAppTables();
+  const record = normalizeSessionRecord(value);
+  if (!record) return;
+
+  if (appDb.kind === "postgres") {
+    await appDb.pool.query(
+      `INSERT INTO experiment_sessions (
+        participant_id,
+        assigned_group,
+        session_status,
+        session_json,
+        completed_at,
+        updated_at
+      )
+      VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+      ON CONFLICT (participant_id)
+      DO UPDATE SET
+        assigned_group = EXCLUDED.assigned_group,
+        session_status = EXCLUDED.session_status,
+        session_json = EXCLUDED.session_json,
+        completed_at = EXCLUDED.completed_at,
+        updated_at = CURRENT_TIMESTAMP`,
+      [
+        record.participantId,
+        record.assignedGroup,
+        record.status,
+        JSON.stringify(record.session),
+        record.completedAt,
+      ],
+    );
+    return;
+  }
+
+  appDb.sqlite
+    .prepare(
+      `INSERT INTO experiment_sessions (
+        participant_id,
+        assigned_group,
+        session_status,
+        session_json,
+        completed_at,
+        updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(participant_id)
+      DO UPDATE SET
+        assigned_group = excluded.assigned_group,
+        session_status = excluded.session_status,
+        session_json = excluded.session_json,
+        completed_at = excluded.completed_at,
+        updated_at = CURRENT_TIMESTAMP`,
+    )
+    .run(
+      record.participantId,
+      record.assignedGroup,
+      record.status,
+      JSON.stringify(record.session),
+      record.completedAt,
+    );
+}
+
 async function syncCompletedSessionRecords(value: unknown) {
   if (!Array.isArray(value)) return;
 
   await ensureAppTables();
   const records = value.flatMap((item) => {
-    const normalized = normalizeCompletedSession(item);
+    const normalized = normalizeSessionRecord(item);
     return normalized ? [normalized] : [];
   });
 
@@ -203,6 +269,59 @@ async function syncCompletedSessionRecords(value: unknown) {
   writeMany(records);
 }
 
+export async function allocateParticipantId() {
+  await ensureAppTables();
+
+  if (appDb.kind === "postgres") {
+    const result = await appDb.pool.query<{ value_json: string }>(
+      `WITH inserted AS (
+        INSERT INTO experiment_state (key, value_json, updated_at)
+        VALUES ('participantCounter', '0', CURRENT_TIMESTAMP)
+        ON CONFLICT (key) DO NOTHING
+      ),
+      updated AS (
+        UPDATE experiment_state
+        SET value_json = (
+          CASE
+            WHEN value_json ~ '^[0-9]+$' THEN value_json::integer
+            ELSE 0
+          END + 1
+        )::text,
+        updated_at = CURRENT_TIMESTAMP
+        WHERE key = 'participantCounter'
+        RETURNING value_json
+      )
+      SELECT value_json FROM updated`,
+    );
+    const counter = Number.parseInt(result.rows[0]?.value_json ?? "0", 10);
+    return `P${String(counter).padStart(4, "0")}`;
+  }
+
+  const sqlite = appDb.sqlite;
+  const next = sqlite.transaction(() => {
+    sqlite
+      .prepare(
+        `INSERT OR IGNORE INTO experiment_state (key, value_json, updated_at)
+         VALUES ('participantCounter', '0', CURRENT_TIMESTAMP)`,
+      )
+      .run();
+    sqlite
+      .prepare(
+        `UPDATE experiment_state
+         SET value_json = CAST(CAST(value_json AS INTEGER) + 1 AS TEXT),
+         updated_at = CURRENT_TIMESTAMP
+         WHERE key = 'participantCounter'`,
+      )
+      .run();
+    const row = sqlite
+      .prepare("SELECT value_json FROM experiment_state WHERE key = ?")
+      .get("participantCounter") as { value_json: string } | undefined;
+    return Number.parseInt(row?.value_json ?? "0", 10);
+  })();
+
+  return `P${String(next).padStart(4, "0")}`;
+}
+
 export async function getExperimentState(): Promise<ExperimentState> {
   await ensureAppTables();
   let state: ExperimentState;
@@ -242,6 +361,10 @@ export async function updateExperimentState(patch: ExperimentStatePatch) {
   const entries = Object.entries(normalizedPatch) as Array<
     [keyof ExperimentState, ExperimentState[keyof ExperimentState]]
   >;
+
+  if (patch.activeSession) {
+    await upsertExperimentSessionRecord(patch.activeSession);
+  }
 
   if (entries.length === 0) {
     return getExperimentState();
