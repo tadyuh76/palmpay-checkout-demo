@@ -1212,6 +1212,274 @@ type ExportColumn = {
   label: string;
 };
 
+const XLSX_MIME_TYPE =
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+const CRC32_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let index = 0; index < table.length; index += 1) {
+    let value = index;
+    for (let bit = 0; bit < 8; bit += 1) {
+      value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+    }
+    table[index] = value >>> 0;
+  }
+  return table;
+})();
+
+type XlsxSheet = {
+  name: string;
+  rows: unknown[][];
+};
+
+function escapeXml(value: unknown) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function sanitizeSheetName(name: string, index: number) {
+  const cleaned = name.replace(/[\[\]:*?/\\]/g, " ").trim();
+  return (cleaned || `Sheet${index + 1}`).slice(0, 31);
+}
+
+function columnName(index: number) {
+  let value = index + 1;
+  let name = "";
+  while (value > 0) {
+    const remainder = (value - 1) % 26;
+    name = String.fromCharCode(65 + remainder) + name;
+    value = Math.floor((value - 1) / 26);
+  }
+  return name;
+}
+
+function worksheetXml(rows: unknown[][]) {
+  const maxColumns = Math.max(1, ...rows.map((row) => row.length));
+  const dimension = `A1:${columnName(maxColumns - 1)}${Math.max(rows.length, 1)}`;
+  const sheetData = rows
+    .map((row, rowIndex) => {
+      const rowNumber = rowIndex + 1;
+      const cells = row
+        .map((value, columnIndex) => {
+          const cellRef = `${columnName(columnIndex)}${rowNumber}`;
+          if (typeof value === "number" && Number.isFinite(value)) {
+            return `<c r="${cellRef}"><v>${value}</v></c>`;
+          }
+
+          const text =
+            value === null || value === undefined
+              ? ""
+              : typeof value === "object"
+                ? JSON.stringify(value)
+                : String(value);
+          return `<c r="${cellRef}" t="inlineStr"><is><t>${escapeXml(text)}</t></is></c>`;
+        })
+        .join("");
+      return `<row r="${rowNumber}">${cells}</row>`;
+    })
+    .join("");
+
+  return [
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+    '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">',
+    `<dimension ref="${dimension}"/>`,
+    `<sheetData>${sheetData}</sheetData>`,
+    "</worksheet>",
+  ].join("");
+}
+
+function crc32(bytes: Uint8Array) {
+  let crc = 0xffffffff;
+  bytes.forEach((byte) => {
+    crc = (crc >>> 8) ^ CRC32_TABLE[(crc ^ byte) & 0xff];
+  });
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function pushUint16(bytes: number[], value: number) {
+  bytes.push(value & 0xff, (value >>> 8) & 0xff);
+}
+
+function pushUint32(bytes: number[], value: number) {
+  bytes.push(
+    value & 0xff,
+    (value >>> 8) & 0xff,
+    (value >>> 16) & 0xff,
+    (value >>> 24) & 0xff,
+  );
+}
+
+function zipTimestamp() {
+  const now = new Date();
+  const year = Math.max(1980, now.getFullYear());
+  return {
+    date: ((year - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate(),
+    time:
+      (now.getHours() << 11) |
+      (now.getMinutes() << 5) |
+      Math.floor(now.getSeconds() / 2),
+  };
+}
+
+function bytesFromNumbers(bytes: number[]) {
+  return new Uint8Array(bytes);
+}
+
+function createZipBlob(files: Array<{ path: string; content: string }>) {
+  const encoder = new TextEncoder();
+  const timestamp = zipTimestamp();
+  const chunks: Uint8Array[] = [];
+  const centralDirectory: Uint8Array[] = [];
+  let offset = 0;
+
+  files.forEach((file) => {
+    const nameBytes = encoder.encode(file.path);
+    const contentBytes = encoder.encode(file.content);
+    const checksum = crc32(contentBytes);
+    const localHeader: number[] = [];
+
+    pushUint32(localHeader, 0x04034b50);
+    pushUint16(localHeader, 20);
+    pushUint16(localHeader, 0x0800);
+    pushUint16(localHeader, 0);
+    pushUint16(localHeader, timestamp.time);
+    pushUint16(localHeader, timestamp.date);
+    pushUint32(localHeader, checksum);
+    pushUint32(localHeader, contentBytes.length);
+    pushUint32(localHeader, contentBytes.length);
+    pushUint16(localHeader, nameBytes.length);
+    pushUint16(localHeader, 0);
+
+    const localHeaderBytes = bytesFromNumbers(localHeader);
+    chunks.push(localHeaderBytes, nameBytes, contentBytes);
+
+    const centralHeader: number[] = [];
+    pushUint32(centralHeader, 0x02014b50);
+    pushUint16(centralHeader, 20);
+    pushUint16(centralHeader, 20);
+    pushUint16(centralHeader, 0x0800);
+    pushUint16(centralHeader, 0);
+    pushUint16(centralHeader, timestamp.time);
+    pushUint16(centralHeader, timestamp.date);
+    pushUint32(centralHeader, checksum);
+    pushUint32(centralHeader, contentBytes.length);
+    pushUint32(centralHeader, contentBytes.length);
+    pushUint16(centralHeader, nameBytes.length);
+    pushUint16(centralHeader, 0);
+    pushUint16(centralHeader, 0);
+    pushUint16(centralHeader, 0);
+    pushUint16(centralHeader, 0);
+    pushUint32(centralHeader, 0);
+    pushUint32(centralHeader, offset);
+    centralDirectory.push(bytesFromNumbers(centralHeader), nameBytes);
+
+    offset += localHeaderBytes.length + nameBytes.length + contentBytes.length;
+  });
+
+  const centralDirectoryOffset = offset;
+  const centralDirectorySize = centralDirectory.reduce(
+    (size, chunk) => size + chunk.length,
+    0,
+  );
+  chunks.push(...centralDirectory);
+
+  const endRecord: number[] = [];
+  pushUint32(endRecord, 0x06054b50);
+  pushUint16(endRecord, 0);
+  pushUint16(endRecord, 0);
+  pushUint16(endRecord, files.length);
+  pushUint16(endRecord, files.length);
+  pushUint32(endRecord, centralDirectorySize);
+  pushUint32(endRecord, centralDirectoryOffset);
+  pushUint16(endRecord, 0);
+  chunks.push(bytesFromNumbers(endRecord));
+
+  const output = new Uint8Array(
+    chunks.reduce((size, chunk) => size + chunk.length, 0),
+  );
+  let position = 0;
+  chunks.forEach((chunk) => {
+    output.set(chunk, position);
+    position += chunk.length;
+  });
+
+  return new Blob([output.buffer as ArrayBuffer], { type: XLSX_MIME_TYPE });
+}
+
+function createXlsxBlob(sheets: XlsxSheet[]) {
+  const safeSheets = sheets.map((sheet, index) => ({
+    ...sheet,
+    name: sanitizeSheetName(sheet.name, index),
+  }));
+  const sheetOverrides = safeSheets
+    .map(
+      (_, index) =>
+        `<Override PartName="/xl/worksheets/sheet${index + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`,
+    )
+    .join("");
+  const workbookSheets = safeSheets
+    .map(
+      (sheet, index) =>
+        `<sheet name="${escapeXml(sheet.name)}" sheetId="${index + 1}" r:id="rId${index + 1}"/>`,
+    )
+    .join("");
+  const workbookRelationships = safeSheets
+    .map(
+      (_, index) =>
+        `<Relationship Id="rId${index + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${index + 1}.xml"/>`,
+    )
+    .join("");
+
+  return createZipBlob([
+    {
+      path: "[Content_Types].xml",
+      content: [
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">',
+        '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>',
+        '<Default Extension="xml" ContentType="application/xml"/>',
+        '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>',
+        sheetOverrides,
+        "</Types>",
+      ].join(""),
+    },
+    {
+      path: "_rels/.rels",
+      content: [
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">',
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>',
+        "</Relationships>",
+      ].join(""),
+    },
+    {
+      path: "xl/workbook.xml",
+      content: [
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+        '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">',
+        `<sheets>${workbookSheets}</sheets>`,
+        "</workbook>",
+      ].join(""),
+    },
+    {
+      path: "xl/_rels/workbook.xml.rels",
+      content: [
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">',
+        workbookRelationships,
+        "</Relationships>",
+      ].join(""),
+    },
+    ...safeSheets.map((sheet, index) => ({
+      path: `xl/worksheets/sheet${index + 1}.xml`,
+      content: worksheetXml(sheet.rows),
+    })),
+  ]);
+}
+
 function baseMethodWorkbookColumns(locale = defaultLocale): ExportColumn[] {
   return [
     { key: "timestamp", label: locale === "vi" ? "Dấu thời gian" : "Timestamp" },
@@ -1364,87 +1632,40 @@ function buildMethodWorkbookRow(session: ExperimentSession, locale = defaultLoca
   return row;
 }
 
-function escapeXml(value: unknown) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
-}
-
-function xmlCell(value: unknown) {
-  if (value === null || value === undefined || value === "") {
-    return "<Cell><Data ss:Type=\"String\"></Data></Cell>";
-  }
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return `<Cell><Data ss:Type="Number">${value}</Data></Cell>`;
-  }
-  return `<Cell><Data ss:Type="String">${escapeXml(value)}</Data></Cell>`;
-}
-
-function xmlRow(values: unknown[]) {
-  return `<Row>${values.map(xmlCell).join("")}</Row>`;
-}
-
 function downloadMethodWorkbook(
   filename: string,
   sessions: ExperimentSession[],
   locale = defaultLocale,
 ) {
   const columns = methodWorkbookColumns(locale);
-  const headerValues = columns.map((column) => column.label);
-  const responseSheets = groupOrder
-    .map((group) => {
+  const codebookSheetColumns = codebookColumns(locale);
+  const codebookRows = buildSurveyCodebookRows();
+  const sheets: XlsxSheet[] = [
+    ...groupOrder.map((group) => {
       const rows = sessions
         .filter((session) => session.assigned_group === group)
         .map((session) => buildMethodWorkbookRow(session, locale));
-      const tableRows = [
-        xmlRow(headerValues),
-        ...rows.map((row) =>
-          xmlRow(columns.map((column) => row[column.key])),
-        ),
-      ].join("");
 
-      return [
-        `<Worksheet ss:Name="${escapeXml(group)}">`,
-        "<Table>",
-        tableRows,
-        "</Table>",
-        "</Worksheet>",
-      ].join("");
-    })
-    .join("");
-  const codebookRows = buildSurveyCodebookRows();
-  const codebookSheet = [
-    '<Worksheet ss:Name="Codebook">',
-    "<Table>",
-    xmlRow(codebookColumns(locale).map((column) => column.label)),
-    ...codebookRows.map((row) =>
-      xmlRow(codebookColumns(locale).map((column) => row[column.key])),
-    ),
-    "</Table>",
-    "</Worksheet>",
-  ].join("");
-
-  const workbook = [
-    '<?xml version="1.0"?>',
-    '<?mso-application progid="Excel.Sheet"?>',
-    '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"',
-    ' xmlns:o="urn:schemas-microsoft-com:office:office"',
-    ' xmlns:x="urn:schemas-microsoft-com:office:excel"',
-    ' xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"',
-    ' xmlns:html="http://www.w3.org/TR/REC-html40">',
-    responseSheets,
-    codebookSheet,
-    "</Workbook>",
-  ].join("");
-
-  downloadBlob(
-    filename,
-    new Blob([workbook], {
-      type: "application/vnd.ms-excel;charset=utf-8",
+      return {
+        name: group,
+        rows: [
+          columns.map((column) => column.label),
+          ...rows.map((row) => columns.map((column) => row[column.key])),
+        ],
+      };
     }),
-  );
+    {
+      name: "Codebook",
+      rows: [
+        codebookSheetColumns.map((column) => column.label),
+        ...codebookRows.map((row) =>
+          codebookSheetColumns.map((column) => row[column.key]),
+        ),
+      ],
+    },
+  ];
+
+  downloadBlob(filename, createXlsxBlob(sheets));
 }
 
 function downloadMethodCsv(
@@ -2155,7 +2376,7 @@ export function DemoApp() {
               session={session}
               onExport={() =>
                 downloadMethodWorkbook(
-                  "palmpay-method-sheets.xls",
+                  "palmpay-method-sheets.xlsx",
                   allStoredSessions(session),
                   locale,
                 )
@@ -2542,7 +2763,7 @@ function AdminHome({
     {
       Icon: FileSpreadsheet,
       label: locale === "vi" ? "Xuất Excel" : "Export Excel",
-      onClick: () => downloadMethodWorkbook("palmpay-method-sheets.xls", completed, locale),
+      onClick: () => downloadMethodWorkbook("palmpay-method-sheets.xlsx", completed, locale),
     },
     {
       Icon: Download,
