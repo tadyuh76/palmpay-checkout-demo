@@ -20,6 +20,8 @@ git clone https://github.com/tadyuh76/palmpay-checkout-demo.git && cd palmpay-ch
 
 The script installs app dependencies if needed, starts the NFC bridge in a second terminal, and starts the local app at `http://localhost:7999`. The palm scanner runs through the app API; set `PALMPAY_PALM_SDK_DIR` only if the SDK DLLs are outside the default local SDK folder.
 
+Localhost and the deployed demo both write to the configured `DATABASE_URL`. Set the same hosted Postgres connection string in `.env.local` and in Vercel project environment variables before running an experiment. The app refuses to fall back to SQLite unless `PALMPAY_ALLOW_SQLITE_FALLBACK=true` is set for a disposable local-only test.
+
 ## Experiment Groups
 
 - `QR_PIN`: DemoBank QR payment with sender name and a four-digit test PIN. The POS QR opens a mobile mock transfer page and the POS reacts when that page confirms payment.
@@ -118,7 +120,7 @@ Do not encode a public payment-success URL that directly marks the order paid. I
 
 ## Palm Vein Scanner
 
-The `PALM_VEIN` condition uses the bundled Windows palm vein SDK directly from the Next.js API layer. The app calls `scripts/palm-sdk-worker.py`, which loads `SonixCamera.dll` and `XRCommonVeinAlgAPI.dll` from `data/palm-python-sdk/PythonProject1920`, enrolls three palm samples during setup, saves the feature template under `data/palm-templates`, then verifies that template during payment.
+The `PALM_VEIN` condition uses the bundled Windows palm vein SDK directly from the Next.js API layer. The app calls `scripts/palm-sdk-worker.py`, which loads `SonixCamera.dll` and `XRCommonVeinAlgAPI.dll` from `data/palm-python-sdk/PythonProject1920`, enrolls three palm samples during setup, stores the active feature template in the shared database, restores a temporary SDK working copy before verification, then verifies that template during payment.
 
 By default the repo includes the required Windows SDK runtime files. If needed, override the SDK or template path with:
 
@@ -129,7 +131,7 @@ PALMPAY_PALM_SCAN_TIMEOUT_MS=45000
 PALMPAY_PALM_PYTHON=python
 ```
 
-The palm scanner must appear in Windows as the SDK camera device, typically `USB Camera` with VID/PID `0C45:636B`. Palm templates are deleted through `/api/palm/delete` when the biometric session reaches the debrief step.
+The palm scanner must appear in Windows as the SDK camera device, typically `USB Camera` with VID/PID `0C45:636B`. `PALMPAY_PALM_TEMPLATE_DIR` is only an SDK working directory; the database is the source of truth. Palm template bytes are wiped through `/api/palm/delete` when the biometric session reaches the debrief step.
 
 ## Stack
 
@@ -156,4 +158,4 @@ git pull && start-palmpay-local.cmd
 
 ## Data
 
-The prototype records participant id, assigned group, setup and checkout timing, selected cart items, transaction total, retries/errors, survey answers, biometric deletion timestamp, and event logs. Export `palmpay-wide.csv` and `palmpay-events.csv` from the final debrief screen or admin screen.
+The prototype records participant id, assigned group, setup and checkout timing, selected cart items, transaction total, retries/errors, survey answers, biometric deletion timestamp, event logs, QR transfers, face-auth QR transfer templates, NFC taps, active NFC reader sessions, and active PalmPay palm-vein templates in the shared database configured by `DATABASE_URL`. Export `palmpay-wide.csv` and `palmpay-events.csv` from the final debrief screen or admin screen.

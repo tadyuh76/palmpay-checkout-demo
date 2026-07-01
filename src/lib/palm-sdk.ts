@@ -1,6 +1,11 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import {
+  getPalmTemplate,
+  markPalmTemplateDeleted,
+  upsertPalmTemplate,
+} from "@/lib/palm-template-store";
 
 export type PalmSdkAction = "enroll" | "verify";
 
@@ -227,13 +232,55 @@ function sanitizeTemplateRef(templateRef: string) {
   return sanitized || "template";
 }
 
-export function deletePalmTemplate(templateRef: string) {
-  const filePath = path.join(palmTemplatesDir(), `${sanitizeTemplateRef(templateRef)}.bin`);
+function palmTemplatePath(templateRef: string) {
+  return path.join(palmTemplatesDir(), `${sanitizeTemplateRef(templateRef)}.bin`);
+}
+
+async function restorePalmTemplateFromDb(templateRef: string) {
+  const template = await getPalmTemplate(templateRef);
+  if (!template) return false;
+
+  const filePath = palmTemplatePath(templateRef);
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, template.data);
+  return true;
+}
+
+async function storePalmTemplateInDb(input: {
+  participantId?: string;
+  result: PalmSdkResult;
+  templateRef: string;
+  transactionId?: string;
+}) {
+  const filePath = palmTemplatePath(input.templateRef);
+  if (!fs.existsSync(filePath)) return false;
+
+  await upsertPalmTemplate({
+    data: fs.readFileSync(filePath),
+    metadata: {
+      deviceName: input.result.deviceName,
+      featureBytes: input.result.featureBytes,
+      framesSeen: input.result.framesSeen,
+      sampleCount: input.result.sampleCount,
+      sdkVersion: input.result.sdkVersion,
+    },
+    participantId: input.participantId,
+    templateRef: input.templateRef,
+    transactionId: input.transactionId,
+  });
+
+  return true;
+}
+
+export async function deletePalmTemplate(templateRef: string) {
+  const filePath = palmTemplatePath(templateRef);
+  const deletedFromDb = await markPalmTemplateDeleted(templateRef);
+  let deletedFromDisk = false;
   if (fs.existsSync(filePath)) {
     fs.unlinkSync(filePath);
-    return true;
+    deletedFromDisk = true;
   }
-  return false;
+  return deletedFromDb || deletedFromDisk;
 }
 
 function palmSdkWorkerConfig(
@@ -329,11 +376,43 @@ export function spawnPalmSdkWorker(
   };
 }
 
+export async function preparePalmSdkWorker(
+  action: PalmSdkAction,
+  input: RunPalmSdkInput,
+  extraArgs: string[] = [],
+) {
+  if (action === "verify" && input.templateRef.trim()) {
+    await restorePalmTemplateFromDb(input.templateRef.trim());
+  }
+
+  return spawnPalmSdkWorker(action, input, extraArgs);
+}
+
+export async function persistPalmSdkResult(
+  action: PalmSdkAction,
+  input: RunPalmSdkInput,
+  result: PalmSdkResult,
+) {
+  if (action !== "enroll" || !result.ok) return result;
+
+  const templateRef = result.templateRef || input.templateRef.trim();
+  if (!templateRef) return result;
+
+  await storePalmTemplateInDb({
+    participantId: input.participantId,
+    result,
+    templateRef,
+    transactionId: input.transactionId,
+  });
+
+  return result;
+}
+
 export async function runPalmSdk(
   action: PalmSdkAction,
   input: RunPalmSdkInput,
 ): Promise<PalmSdkResult> {
-  const worker = spawnPalmSdkWorker(action, input);
+  const worker = await preparePalmSdkWorker(action, input);
   if (worker.error) return worker.error;
 
   return new Promise((resolve) => {
@@ -397,7 +476,17 @@ export async function runPalmSdk(
 
       try {
         const parsed = JSON.parse(jsonLine) as PalmSdkResult;
-        resolve(parsed);
+        void persistPalmSdkResult(action, input, parsed)
+          .then(resolve)
+          .catch((error) =>
+            resolve({
+              ok: false,
+              action,
+              error: "palm_template_store_failed",
+              message: error instanceof Error ? error.message : String(error),
+              templateRef,
+            }),
+          );
       } catch (error) {
         resolve({
           ok: false,

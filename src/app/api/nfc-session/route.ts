@@ -20,7 +20,7 @@ export async function GET(request: Request) {
     return Response.json({ error: "Unauthorized NFC bridge" }, { status: 401 });
   }
 
-  return Response.json({ session: getActiveNfcSession() });
+  return Response.json({ session: await getActiveNfcSession() });
 }
 
 export async function POST(request: Request) {
@@ -38,7 +38,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "Invalid NFC session" }, { status: 400 });
   }
 
-  const session = setActiveNfcSession({
+  const session = await setActiveNfcSession({
     acceptedCardRef: body.acceptedCardRef.trim().slice(0, 80),
     amount: typeof body.amount === "number" ? body.amount : null,
     transactionId: body.transactionId.trim().slice(0, 80),
@@ -52,9 +52,9 @@ export async function DELETE(request: Request) {
     transactionId?: unknown;
   } | null;
 
-  clearActiveNfcSession(
+  await clearActiveNfcSession(
     typeof body?.transactionId === "string" ? body.transactionId : undefined,
   );
 
-  return Response.json({ session: getActiveNfcSession() });
+  return Response.json({ session: await getActiveNfcSession() });
 }

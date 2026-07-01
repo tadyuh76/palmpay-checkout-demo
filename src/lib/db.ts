@@ -20,6 +20,14 @@ const globalForDb = globalThis as unknown as {
 };
 
 const databaseUrl = process.env.DATABASE_URL;
+const allowSqliteFallback =
+  process.env.PALMPAY_ALLOW_SQLITE_FALLBACK === "true";
+
+if (!databaseUrl && !allowSqliteFallback) {
+  throw new Error(
+    "DATABASE_URL is required so every PalmPay process writes to the shared database. Set PALMPAY_ALLOW_SQLITE_FALLBACK=true only for disposable local tests.",
+  );
+}
 
 function resolveDbPath() {
   const configuredPath = process.env.PALMPAY_DB_PATH;
@@ -217,6 +225,38 @@ async function ensurePostgresTables() {
 
     CREATE INDEX IF NOT EXISTS idx_qr_transfers_status_created_at
       ON qr_transfers(status, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS nfc_taps (
+      transaction_id TEXT PRIMARY KEY,
+      card_ref TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_nfc_taps_created_at
+      ON nfc_taps(created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS active_nfc_sessions (
+      singleton_key TEXT PRIMARY KEY CHECK (singleton_key = 'active'),
+      transaction_id TEXT NOT NULL,
+      accepted_card_ref TEXT NOT NULL,
+      amount NUMERIC,
+      created_at TIMESTAMPTZ NOT NULL,
+      expires_at TIMESTAMPTZ NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS palm_templates (
+      template_ref TEXT PRIMARY KEY,
+      participant_id TEXT,
+      transaction_id TEXT,
+      template_data BYTEA NOT NULL,
+      metadata_json TEXT NOT NULL DEFAULT '{}',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      deleted_at TIMESTAMPTZ
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_palm_templates_participant_id
+      ON palm_templates(participant_id);
   `);
 }
 
@@ -294,6 +334,38 @@ function ensureSqliteTables() {
 
     CREATE INDEX IF NOT EXISTS idx_qr_transfers_status_created_at
       ON qr_transfers(status, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS nfc_taps (
+      transaction_id TEXT PRIMARY KEY,
+      card_ref TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_nfc_taps_created_at
+      ON nfc_taps(created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS active_nfc_sessions (
+      singleton_key TEXT PRIMARY KEY CHECK (singleton_key = 'active'),
+      transaction_id TEXT NOT NULL,
+      accepted_card_ref TEXT NOT NULL,
+      amount REAL,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS palm_templates (
+      template_ref TEXT PRIMARY KEY,
+      participant_id TEXT,
+      transaction_id TEXT,
+      template_data BLOB NOT NULL,
+      metadata_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      deleted_at TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_palm_templates_participant_id
+      ON palm_templates(participant_id);
   `);
 }
 

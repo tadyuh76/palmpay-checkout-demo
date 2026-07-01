@@ -21,7 +21,7 @@ export async function POST(request: Request) {
 
   return Response.json(
     {
-      deleted: deletePalmTemplate(body.templateRef.slice(0, 120)),
+      deleted: await deletePalmTemplate(body.templateRef.slice(0, 120)),
     },
     { headers: palmCorsHeaders(request) },
   );

@@ -1,20 +1,26 @@
-import { spawnPalmSdkWorker, type PalmSdkAction, type PalmSdkResult } from "@/lib/palm-sdk";
+import {
+  preparePalmSdkWorker,
+  persistPalmSdkResult,
+  type PalmSdkAction,
+  type PalmSdkResult,
+} from "@/lib/palm-sdk";
 import { palmCorsHeaders } from "@/lib/palm-api-cors";
 
 function sseMessage(event: string, data: unknown) {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
 }
 
-export function palmSdkStreamResponse(action: PalmSdkAction, request: Request) {
+export async function palmSdkStreamResponse(action: PalmSdkAction, request: Request) {
   const url = new URL(request.url);
   const templateRef = url.searchParams.get("templateRef")?.slice(0, 120) ?? "";
   const participantId = url.searchParams.get("participantId")?.slice(0, 80) ?? undefined;
   const transactionId = url.searchParams.get("transactionId")?.slice(0, 80) ?? undefined;
+  const input = { participantId, templateRef, transactionId };
 
   const encoder = new TextEncoder();
-  const worker = spawnPalmSdkWorker(
+  const worker = await preparePalmSdkWorker(
     action,
-    { participantId, templateRef, transactionId },
+    input,
     ["--stream-events"],
   );
 
@@ -81,7 +87,21 @@ export function palmSdkStreamResponse(action: PalmSdkAction, request: Request) {
             const parsed = JSON.parse(trimmed) as { streamType?: string };
             const event = parsed.streamType || "message";
             if (event === "done") {
-              finish(parsed);
+              void persistPalmSdkResult(
+                action,
+                input,
+                parsed as PalmSdkResult,
+              )
+                .then((result) => finish(result))
+                .catch((error) =>
+                  finish({
+                    ok: false,
+                    action,
+                    error: "palm_template_store_failed",
+                    message: error instanceof Error ? error.message : String(error),
+                    templateRef: worker.templateRef,
+                  } satisfies PalmSdkResult),
+                );
               return;
             }
             send(event, parsed);

@@ -7,6 +7,6 @@ export function OPTIONS(request: Request) {
   return palmOptionsResponse(request);
 }
 
-export function GET(request: Request) {
+export async function GET(request: Request) {
   return palmSdkStreamResponse("verify", request);
 }

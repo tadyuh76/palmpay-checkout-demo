@@ -23,7 +23,7 @@ export async function GET(request: Request) {
     return Response.json({ error: "Missing transactionId" }, { status: 400 });
   }
 
-  return Response.json({ tap: getNfcTap(transactionId) });
+  return Response.json({ tap: await getNfcTap(transactionId) });
 }
 
 export async function POST(request: Request) {
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
     cardRef?: unknown;
     transactionId?: unknown;
   } | null;
-  const activeSession = getActiveNfcSession();
+  const activeSession = await getActiveNfcSession();
   const transactionId =
     typeof body?.transactionId === "string" && body.transactionId.trim()
       ? body.transactionId.trim().slice(0, 80)
@@ -49,7 +49,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "Invalid NFC tap" }, { status: 400 });
   }
 
-  const tap = recordNfcTap({
+  const tap = await recordNfcTap({
     cardRef: body.cardRef.trim().slice(0, 80),
     transactionId,
   });
@@ -58,7 +58,7 @@ export async function POST(request: Request) {
     activeSession?.transactionId === transactionId &&
     activeSession.acceptedCardRef === tap.cardRef
   ) {
-    clearActiveNfcSession(transactionId);
+    await clearActiveNfcSession(transactionId);
   }
 
   return Response.json({ tap }, { status: 201 });
