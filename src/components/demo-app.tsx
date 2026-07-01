@@ -2515,21 +2515,25 @@ function AdminHome({
   onCreate: (participantName: string, selectedGroup: StudyGroup) => void;
   onLocaleChange: (locale: Locale) => void;
 }) {
-  const [history, setHistory] = useState<AssignmentHistoryItem[]>([]);
   const [completed, setCompleted] = useState<ExperimentSession[]>([]);
   const [participantName, setParticipantName] = useState("");
   const [selectedGroup, setSelectedGroup] = useState<StudyGroup>(groupOrder[0]);
 
   useEffect(() => {
-    window.queueMicrotask(() => {
-      setHistory(readJson<AssignmentHistoryItem[]>(storageKeys.assignmentHistory, []));
-      setCompleted(readJson<ExperimentSession[]>(storageKeys.completedSessions, []));
+    window.queueMicrotask(async () => {
+      try {
+        const state = await loadExperimentState();
+        applyStateSnapshot(state);
+        setCompleted(state.completedSessions);
+      } catch {
+        setCompleted(readJson<ExperimentSession[]>(storageKeys.completedSessions, []));
+      }
     });
   }, []);
 
   const counts = groupOrder.map((group) => ({
     group,
-    count: history.filter((item) => item.assigned_group === group).length,
+    count: completed.filter((item) => item.assigned_group === group).length,
   }));
   const trimmedName = participantName.trim();
   const chooseGroup = (group: StudyGroup) => setSelectedGroup(group);
@@ -2627,7 +2631,7 @@ function AdminHome({
                       <p className="mt-2 text-sm leading-5 opacity-75">{copy.device}</p>
                       <span className="mt-5 inline-flex min-w-32 items-center justify-center gap-2 rounded-full border border-current/20 bg-white/55 px-3 py-1.5 text-sm font-semibold">
                         <User size={15} aria-hidden />
-                        {count} {locale === "vi" ? "người" : "participants"}
+                        {count} {locale === "vi" ? "bản ghi" : "records"}
                       </span>
                     </button>
                   );

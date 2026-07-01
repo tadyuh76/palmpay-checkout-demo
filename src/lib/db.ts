@@ -205,6 +205,21 @@ async function ensurePostgresTables() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
 
+    CREATE TABLE IF NOT EXISTS experiment_sessions (
+      participant_id TEXT PRIMARY KEY,
+      assigned_group TEXT NOT NULL,
+      session_status TEXT NOT NULL,
+      session_json TEXT NOT NULL,
+      completed_at TIMESTAMPTZ,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_experiment_sessions_assigned_group
+      ON experiment_sessions(assigned_group);
+
+    CREATE INDEX IF NOT EXISTS idx_experiment_sessions_completed_at
+      ON experiment_sessions(completed_at DESC);
+
     CREATE TABLE IF NOT EXISTS qr_transfers (
       id TEXT PRIMARY KEY,
       transaction_id TEXT NOT NULL UNIQUE,
@@ -313,6 +328,21 @@ function ensureSqliteTables() {
       value_json TEXT NOT NULL,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS experiment_sessions (
+      participant_id TEXT PRIMARY KEY,
+      assigned_group TEXT NOT NULL,
+      session_status TEXT NOT NULL,
+      session_json TEXT NOT NULL,
+      completed_at TEXT,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_experiment_sessions_assigned_group
+      ON experiment_sessions(assigned_group);
+
+    CREATE INDEX IF NOT EXISTS idx_experiment_sessions_completed_at
+      ON experiment_sessions(completed_at DESC);
 
     CREATE TABLE IF NOT EXISTS qr_transfers (
       id TEXT PRIMARY KEY,

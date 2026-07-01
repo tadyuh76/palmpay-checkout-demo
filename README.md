@@ -158,4 +158,4 @@ git pull && start-palmpay-local.cmd
 
 ## Data
 
-The prototype records participant id, assigned group, setup and checkout timing, selected cart items, transaction total, retries/errors, survey answers, biometric deletion timestamp, event logs, QR transfers, face-auth QR transfer templates, NFC taps, active NFC reader sessions, and active PalmPay palm-vein templates in the shared database configured by `DATABASE_URL`. Export `palmpay-wide.csv` and `palmpay-events.csv` from the final debrief screen or admin screen.
+The prototype records participant id, assigned group, setup and checkout timing, selected cart items, transaction total, retries/errors, survey answers, biometric deletion timestamp, event logs, completed experiment-session records, QR transfers, face-auth QR transfer templates, NFC taps, active NFC reader sessions, and active PalmPay palm-vein templates in the shared database configured by `DATABASE_URL`. The admin method counters read completed experiment-session records from the database. Export `palmpay-wide.csv` and `palmpay-events.csv` from the final debrief screen or admin screen.
