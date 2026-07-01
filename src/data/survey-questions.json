@@ -259,10 +259,10 @@
         "vi": "Cảm nhận về sự dễ dàng",
         "en": "Perceived Ease"
       },
-      "source_text": "ATT1: Nếu bạn vẫn còn tập trung trả lời bảng hỏi, vui lòng chọn số 6 cho câu này.",
+      "source_text": "ATT1: Nếu bạn vẫn còn tập trung trả lời bảng hỏi, vui lòng chọn số 5 cho câu này.",
       "text": {
-        "vi": "Nếu bạn vẫn còn tập trung trả lời bảng hỏi, vui lòng chọn số 6 cho câu này.",
-        "en": "If you are still paying attention while answering the questionnaire, please select number 6 for this item."
+        "vi": "Nếu bạn vẫn còn tập trung trả lời bảng hỏi, vui lòng chọn số 5 cho câu này.",
+        "en": "If you are still paying attention while answering the questionnaire, please select number 5 for this item."
       },
       "scale_min": 1,
       "scale_max": 7,

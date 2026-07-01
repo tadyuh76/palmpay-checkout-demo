@@ -3764,7 +3764,7 @@ function SurveyScreen({
             key={section.construct}
           >
             <div className="mb-4">
-              <h2 className="text-base font-semibold text-stone-950">
+              <h2 className="text-center text-base font-bold text-stone-950">
                 {section.label}
               </h2>
               {section.intro && (
@@ -3789,7 +3789,7 @@ function SurveyScreen({
                   >
                     <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="text-sm font-semibold leading-6 text-stone-950">
+                        <p className="text-sm font-bold leading-6 text-stone-950">
                           {text}
                         </p>
                       </div>
