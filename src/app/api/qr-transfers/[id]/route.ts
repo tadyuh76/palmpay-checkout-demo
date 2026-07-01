@@ -12,7 +12,7 @@ type Params = {
 
 export async function GET(_request: Request, { params }: Params) {
   const { id } = await params;
-  const transfer = getQrTransfer(id);
+  const transfer = await getQrTransfer(id);
 
   if (!transfer) {
     return Response.json({ error: "Not found" }, { status: 404 });
@@ -31,7 +31,7 @@ function parseFaceDescriptor(value: unknown) {
 
 export async function POST(request: Request, { params }: Params) {
   const { id } = await params;
-  const transfer = getQrTransfer(id);
+  const transfer = await getQrTransfer(id);
   if (!transfer) {
     return Response.json({ error: "Not found" }, { status: 404 });
   }
@@ -58,7 +58,7 @@ export async function POST(request: Request, { params }: Params) {
     return Response.json({ error: "Invalid face scan" }, { status: 400 });
   }
 
-  const result = confirmQrTransfer(id, {
+  const result = await confirmQrTransfer(id, {
     faceDescriptor: faceDescriptor ?? undefined,
     pin: typeof body.pin === "string" ? body.pin : undefined,
   });

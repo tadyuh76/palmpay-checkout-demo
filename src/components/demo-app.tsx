@@ -2273,7 +2273,7 @@ function QrMobilePayment({
             </div>
           )}
 
-          {error && transfer?.status !== "paid" && (
+          {error && transfer && transfer.status !== "paid" && (
             <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
               {error}
             </p>

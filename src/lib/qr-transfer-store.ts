@@ -1,4 +1,5 @@
 import { getProduct } from "@/lib/catalog";
+import { appDb, ensureAppTables } from "@/lib/db";
 import type { CartLine } from "@/lib/types";
 
 export type QrTransferStatus = "pending" | "paid";
@@ -24,15 +25,104 @@ export type QrTransfer = {
   paidAt: string | null;
 };
 
-const globalForQrTransfers = globalThis as unknown as {
-  palmpayQrTransfers?: Map<string, QrTransfer>;
+type QrTransferRow = {
+  amount: number | string;
+  auth_method: string;
+  authorization_code: string | null;
+  created_at: Date | string;
+  face_descriptor_json: string | null;
+  id: string;
+  items_json: string;
+  match_distance: number | string | null;
+  paid_at: Date | string | null;
+  pin: string | null;
+  product_summary: string;
+  receiver_name: string;
+  sender_name: string;
+  status: string;
+  transaction_id: string;
 };
 
-function transfers() {
-  if (!globalForQrTransfers.palmpayQrTransfers) {
-    globalForQrTransfers.palmpayQrTransfers = new Map();
+function parseJson(value: string | null, fallback: unknown) {
+  if (!value) return fallback;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
   }
-  return globalForQrTransfers.palmpayQrTransfers;
+}
+
+function parseCartLines(value: string) {
+  const items = parseJson(value, []);
+  if (!Array.isArray(items)) return [];
+
+  return items.flatMap((item): CartLine[] => {
+    if (!item || typeof item !== "object") return [];
+
+    const productId = Reflect.get(item, "productId");
+    const quantity = Reflect.get(item, "quantity");
+
+    if (typeof productId !== "string" || typeof quantity !== "number") {
+      return [];
+    }
+
+    return [{ productId, quantity }];
+  });
+}
+
+function parseNumberArray(value: string | null) {
+  const numbers = parseJson(value, []);
+  if (!Array.isArray(numbers)) return null;
+
+  const descriptor = numbers.filter(
+    (item): item is number => typeof item === "number" && Number.isFinite(item),
+  );
+
+  return descriptor.length ? descriptor : null;
+}
+
+function serializeDate(value: Date | string | null) {
+  if (!value) return null;
+  return value instanceof Date ? value.toISOString() : value;
+}
+
+function rowToQrTransfer(row: QrTransferRow): QrTransfer {
+  return {
+    amount: Number(row.amount),
+    authMethod: row.auth_method === "face" ? "face" : "pin",
+    authorizationCode: row.authorization_code,
+    createdAt: serializeDate(row.created_at) ?? new Date().toISOString(),
+    faceDescriptor: parseNumberArray(row.face_descriptor_json),
+    id: row.id,
+    items: parseCartLines(row.items_json),
+    matchDistance:
+      row.match_distance === null ? null : Number(row.match_distance),
+    paidAt: serializeDate(row.paid_at),
+    pin: row.pin,
+    productSummary: row.product_summary,
+    receiverName: row.receiver_name,
+    senderName: row.sender_name,
+    status: row.status === "paid" ? "paid" : "pending",
+    transactionId: row.transaction_id,
+  };
+}
+
+async function findQrTransferByTransactionId(transactionId: string) {
+  await ensureAppTables();
+
+  if (appDb.kind === "postgres") {
+    const result = await appDb.pool.query<QrTransferRow>(
+      "SELECT * FROM qr_transfers WHERE transaction_id = $1",
+      [transactionId],
+    );
+    return result.rows[0] ? rowToQrTransfer(result.rows[0]) : null;
+  }
+
+  const row = appDb.sqlite
+    .prepare("SELECT * FROM qr_transfers WHERE transaction_id = ?")
+    .get(transactionId) as QrTransferRow | undefined;
+
+  return row ? rowToQrTransfer(row) : null;
 }
 
 export function summarizeItems(items: CartLine[]) {
@@ -44,7 +134,7 @@ export function summarizeItems(items: CartLine[]) {
     .join("; ");
 }
 
-export function createQrTransfer(input: {
+export async function createQrTransfer(input: {
   amount: number;
   authMethod?: QrTransferAuthMethod;
   faceDescriptor?: number[] | null;
@@ -54,9 +144,7 @@ export function createQrTransfer(input: {
   senderName: string;
   transactionId: string;
 }) {
-  const existing = [...transfers().values()].find(
-    (transfer) => transfer.transactionId === input.transactionId,
-  );
+  const existing = await findQrTransferByTransactionId(input.transactionId);
   if (existing) return existing;
 
   const authMethod = input.authMethod ?? "pin";
@@ -78,12 +166,100 @@ export function createQrTransfer(input: {
     paidAt: null,
   };
 
-  transfers().set(transfer.id, transfer);
-  return transfer;
+  const values = [
+    transfer.id,
+    transfer.transactionId,
+    transfer.senderName,
+    transfer.receiverName,
+    transfer.amount,
+    transfer.productSummary,
+    JSON.stringify(transfer.items),
+    transfer.authMethod,
+    transfer.pin,
+    transfer.faceDescriptor ? JSON.stringify(transfer.faceDescriptor) : null,
+    transfer.matchDistance,
+    transfer.status,
+    transfer.authorizationCode,
+    transfer.createdAt,
+    transfer.paidAt,
+  ];
+
+  if (appDb.kind === "postgres") {
+    const result = await appDb.pool.query<QrTransferRow>(
+      `INSERT INTO qr_transfers (
+        id,
+        transaction_id,
+        sender_name,
+        receiver_name,
+        amount,
+        product_summary,
+        items_json,
+        auth_method,
+        pin,
+        face_descriptor_json,
+        match_distance,
+        status,
+        authorization_code,
+        created_at,
+        paid_at
+      )
+      VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
+      )
+      ON CONFLICT (transaction_id) DO NOTHING
+      RETURNING *`,
+      values,
+    );
+
+    if (result.rows[0]) {
+      return rowToQrTransfer(result.rows[0]);
+    }
+
+    return (await findQrTransferByTransactionId(input.transactionId)) ?? transfer;
+  }
+
+  appDb.sqlite
+    .prepare(
+      `INSERT OR IGNORE INTO qr_transfers (
+        id,
+        transaction_id,
+        sender_name,
+        receiver_name,
+        amount,
+        product_summary,
+        items_json,
+        auth_method,
+        pin,
+        face_descriptor_json,
+        match_distance,
+        status,
+        authorization_code,
+        created_at,
+        paid_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(...values);
+
+  return (await findQrTransferByTransactionId(input.transactionId)) ?? transfer;
 }
 
-export function getQrTransfer(id: string) {
-  return transfers().get(id) ?? null;
+export async function getQrTransfer(id: string) {
+  await ensureAppTables();
+
+  if (appDb.kind === "postgres") {
+    const result = await appDb.pool.query<QrTransferRow>(
+      "SELECT * FROM qr_transfers WHERE id = $1",
+      [id],
+    );
+    return result.rows[0] ? rowToQrTransfer(result.rows[0]) : null;
+  }
+
+  const row = appDb.sqlite
+    .prepare("SELECT * FROM qr_transfers WHERE id = ?")
+    .get(id) as QrTransferRow | undefined;
+
+  return row ? rowToQrTransfer(row) : null;
 }
 
 function euclideanDistance(left: number[], right: number[]) {
@@ -95,11 +271,11 @@ function euclideanDistance(left: number[], right: number[]) {
   return Math.sqrt(squared);
 }
 
-export function confirmQrTransfer(
+export async function confirmQrTransfer(
   id: string,
   credentials: { faceDescriptor?: number[]; pin?: string },
 ) {
-  const transfer = getQrTransfer(id);
+  const transfer = await getQrTransfer(id);
   if (!transfer) {
     return { error: "not_found" as const, transfer: null };
   }
@@ -150,7 +326,43 @@ export function confirmQrTransfer(
     paidAt: transfer.paidAt ?? new Date().toISOString(),
   };
 
-  transfers().set(id, paidTransfer);
+  if (appDb.kind === "postgres") {
+    await appDb.pool.query(
+      `UPDATE qr_transfers
+       SET
+        face_descriptor_json = NULL,
+        match_distance = $2,
+        status = 'paid',
+        authorization_code = $3,
+        paid_at = $4
+       WHERE id = $1`,
+      [
+        id,
+        paidTransfer.matchDistance,
+        paidTransfer.authorizationCode,
+        paidTransfer.paidAt,
+      ],
+    );
+  } else {
+    appDb.sqlite
+      .prepare(
+        `UPDATE qr_transfers
+         SET
+          face_descriptor_json = NULL,
+          match_distance = ?,
+          status = 'paid',
+          authorization_code = ?,
+          paid_at = ?
+         WHERE id = ?`,
+      )
+      .run(
+        paidTransfer.matchDistance,
+        paidTransfer.authorizationCode,
+        paidTransfer.paidAt,
+        id,
+      );
+  }
+
   return {
     error: null,
     matchDistance,

@@ -196,6 +196,27 @@ async function ensurePostgresTables() {
       value_json TEXT NOT NULL,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS qr_transfers (
+      id TEXT PRIMARY KEY,
+      transaction_id TEXT NOT NULL UNIQUE,
+      sender_name TEXT NOT NULL,
+      receiver_name TEXT NOT NULL,
+      amount NUMERIC NOT NULL,
+      product_summary TEXT NOT NULL,
+      items_json TEXT NOT NULL,
+      auth_method TEXT NOT NULL CHECK (auth_method IN ('pin', 'face')),
+      pin TEXT,
+      face_descriptor_json TEXT,
+      match_distance DOUBLE PRECISION,
+      status TEXT NOT NULL CHECK (status IN ('pending', 'paid')),
+      authorization_code TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      paid_at TIMESTAMPTZ
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_qr_transfers_status_created_at
+      ON qr_transfers(status, created_at DESC);
   `);
 }
 
@@ -252,6 +273,27 @@ function ensureSqliteTables() {
       value_json TEXT NOT NULL,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS qr_transfers (
+      id TEXT PRIMARY KEY,
+      transaction_id TEXT NOT NULL UNIQUE,
+      sender_name TEXT NOT NULL,
+      receiver_name TEXT NOT NULL,
+      amount REAL NOT NULL,
+      product_summary TEXT NOT NULL,
+      items_json TEXT NOT NULL,
+      auth_method TEXT NOT NULL CHECK (auth_method IN ('pin', 'face')),
+      pin TEXT,
+      face_descriptor_json TEXT,
+      match_distance REAL,
+      status TEXT NOT NULL CHECK (status IN ('pending', 'paid')),
+      authorization_code TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      paid_at TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_qr_transfers_status_created_at
+      ON qr_transfers(status, created_at DESC);
   `);
 }
 
